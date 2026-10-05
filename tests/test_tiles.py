@@ -140,3 +140,25 @@ def test_r0_tile_is_as_photographed_and_r180_is_its_exact_half_turn(tmp_path):
         assert total / (1000 * 800 * 3) < 3
         assert close(r180.getpixel((10, 10)), YELLOW)
         assert close(r180.getpixel((990, 790)), RED)
+
+
+def test_tiles_carry_no_exif_and_an_exif_rotated_photo_gives_upright_tiles(tmp_path):
+    # Stored 1000x800 with orientation 6 (rotate 90 clockwise to view):
+    # the upright photo is 800x1000, and the stored top-left (red) ends up top-right.
+    stored = Image.open(make_corner_photo(tmp_path / "plain.jpg"))
+    exif = Image.Exif()
+    exif[0x0112] = 6
+    photo = tmp_path / "shelf-1.jpg"
+    stored.save(photo, "JPEG", quality=95, exif=exif)
+    out = tmp_path / "out"
+
+    manifest = cut_tiles(photo, out)
+
+    assert (manifest["width"], manifest["height"]) == (800, 1000)
+    with Image.open(out / "tiles" / "r1c1-r0.jpg") as tile:
+        tile.load()
+        assert tile.size == (800, 1000)
+        assert len(tile.getexif()) == 0
+        assert "exif" not in tile.info
+        assert close(tile.getpixel((790, 10)), RED)
+        assert close(tile.getpixel((10, 10)), BLUE)
