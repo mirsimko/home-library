@@ -2,9 +2,10 @@ import json
 from datetime import datetime, timedelta, timezone
 from types import SimpleNamespace
 
+import pytest
 from PIL import Image
 
-from home_library.reader import render_prompt, run_read
+from home_library.reader import ReadError, render_prompt, run_read
 from home_library.tiles import cut_tiles
 
 SIX_TILE_FILES = (
@@ -164,3 +165,19 @@ def test_usage_is_null_when_the_stream_has_no_turn_completed(tmp_path):
 
     info = json.loads((work / "reads" / "a-sol" / "run.json").read_text(encoding="utf-8"))
     assert info["usage"] is None
+
+
+def test_a_codex_read_that_ran_a_command_is_rejected_and_leaves_no_read_json(tmp_path):
+    work, _ = cut_small_photo(tmp_path)
+    command = {"id": "item_1", "type": "command_execution", "command": "ls", "status": "in_progress"}
+    done = {**command, "status": "completed", "exit_code": 0}
+    extra = [{"type": "item.started", "item": command}, {"type": "item.completed", "item": done}]
+    run = FakeRun(stdout=codex_stream(extra=extra))
+
+    with pytest.raises(ReadError, match="used tools"):
+        run_read(work, "a-sol", "codex-exec", run=run)
+
+    read_dir = work / "reads" / "a-sol"
+    assert not (read_dir / "read.json").exists()
+    assert (read_dir / "raw.txt").read_text(encoding="utf-8") == ANSWER
+    assert json.loads((read_dir / "run.json").read_text(encoding="utf-8"))["tool_calls"] == ["command_execution"]
