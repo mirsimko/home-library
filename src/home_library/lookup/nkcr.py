@@ -4,12 +4,14 @@ The `run` argument of by_isbn and search is a callable run(commands: str) -> str
 script to yaz-client and returns what it printed.
 """
 import re
+import subprocess
 
-from home_library.lookup.errors import SourceError
+from home_library.lookup.errors import SourceError, Unavailable
 from home_library.lookup.marc import candidate_from_marc
 
 DATABASE = "aleph.nkp.cz:9991/NKC-UTF"
 MAX_RECORDS = 10
+TIMEOUT_SECONDS = 60
 
 
 def _quote(text):
@@ -67,3 +69,22 @@ def search(title, author, run):
         query = "@and %s @attr 1=1003 %s" % (query, _quote(author))
     output = run(_script(query))
     return [candidate_from_marc("nkcr", record) for record in _parse(output)]
+
+
+def run_yaz_client(commands):
+    """The real runner: feed a command script to yaz-client and return what it printed."""
+    try:
+        done = subprocess.run(
+            ["yaz-client"],
+            input=commands,
+            capture_output=True,
+            text=True,
+            encoding="utf-8",
+            errors="replace",
+            timeout=TIMEOUT_SECONDS,
+        )
+    except FileNotFoundError as error:
+        raise Unavailable("the yaz-client program is not installed") from error
+    except subprocess.TimeoutExpired as error:
+        raise SourceError("yaz-client did not finish in %d s" % TIMEOUT_SECONDS) from error
+    return done.stdout
