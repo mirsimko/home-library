@@ -120,6 +120,9 @@ def run_read(photo_dir, read_id, backend, *, run=subprocess.run, clock=time.mono
     except subprocess.TimeoutExpired:
         result = SimpleNamespace(returncode=None, stdout="")
         failure = f"{command[0]} timed out after {timeout} seconds"
+    except FileNotFoundError:
+        result = SimpleNamespace(returncode=None, stdout="")
+        failure = f"{command[0]} is not installed"
     seconds = clock() - began
     if backend == "codex-exec":
         events = _events(result.stdout)
