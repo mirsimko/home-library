@@ -132,8 +132,11 @@ def run_read(photo_dir, read_id, backend, *, run=subprocess.run, clock=time.mono
     try:
         result = run(command, input=stdin, capture_output=True, text=True,
                      encoding="utf-8", cwd=tiles_dir, timeout=timeout)
-    except subprocess.TimeoutExpired:
-        result = SimpleNamespace(returncode=None, stdout="")
+    except subprocess.TimeoutExpired as expired:
+        partial = expired.stdout or ""
+        if isinstance(partial, bytes):
+            partial = partial.decode("utf-8", errors="replace")
+        result = SimpleNamespace(returncode=None, stdout=partial)
         failure = f"{command[0]} timed out after {timeout} seconds"
     except FileNotFoundError:
         result = SimpleNamespace(returncode=None, stdout="")
