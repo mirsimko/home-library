@@ -43,3 +43,26 @@ def test_nkcr_by_isbn_sends_an_isbn_search_to_the_catalogue_database(fake_yaz, f
         "show 1+10",
         "quit",
     ]
+
+
+def test_nkcr_search_sends_title_and_author_and_returns_every_record(fake_yaz, fixture_bytes):
+    run = fake_yaz(fixture_bytes("nkcr_search_krtek_miler.txt").decode("utf-8"))
+
+    candidates = nkcr.search("Krtek a zajíček", "Miler", run)
+
+    assert run.lines()[2] == 'find @and @attr 1=4 "Krtek a zajíček" @attr 1=1003 "Miler"'
+    assert [c["id"] for c in candidates] == [
+        "nkcr:nkc20233578648", "nkcr:nkc20162777681", "nkcr:zpk20142614070",
+    ]
+    assert candidates[1]["age_note"] == "Pro děti od dvou let"
+    assert candidates[1]["publisher"] == "Knižní klub"
+    assert candidates[1]["audience"] == "preschool"
+    assert candidates[1]["year"] == "2016"
+
+
+def test_nkcr_search_without_an_author_searches_the_title_alone(fake_yaz, fixture_bytes):
+    run = fake_yaz(fixture_bytes("nkcr_empty.txt").decode("utf-8"))
+
+    nkcr.search("Krtek a zajíček", None, run)
+
+    assert run.lines()[2] == 'find @attr 1=4 "Krtek a zajíček"'
