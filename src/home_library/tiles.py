@@ -3,7 +3,7 @@ import hashlib
 import json
 from pathlib import Path
 
-from PIL import Image
+from PIL import Image, ImageOps
 
 
 def _starts(size, tile, min_overlap):
@@ -33,7 +33,7 @@ def cut_tiles(photo, out_dir, *, quality=88, **layout_options):
     tiles_dir = out_dir / "tiles"
     tiles_dir.mkdir(parents=True, exist_ok=True)
     with Image.open(photo) as opened:
-        image = opened.convert("RGB")
+        image = ImageOps.exif_transpose(opened).convert("RGB")
     width, height = image.size
     layout = plan_layout(width, height, **layout_options)
     tiles = []
