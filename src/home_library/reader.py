@@ -111,6 +111,7 @@ def run_read(photo_dir, read_id, backend, *, run=subprocess.run, clock=time.mono
     files = [tile["file"] for tile in manifest["tiles"]]
     present = {entry.name for entry in tiles_dir.iterdir()}
     extra, missing = sorted(present - set(files)), sorted(set(files) - present)
+    missing = sorted({*missing, *(name for name in files if name in present and not (tiles_dir / name).is_file())})
     if extra:
         raise ReadError(f"{tiles_dir} holds files the manifest does not list: {', '.join(extra)}")
     if missing:
