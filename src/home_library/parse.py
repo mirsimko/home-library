@@ -63,7 +63,11 @@ def _scan_entries(raw: str, start: int):
         position += 1
         try:
             value, end = _DECODER.raw_decode(raw, pos)
-            books.append(_normalise(value, position))
+            if isinstance(value, dict):
+                books.append(_normalise(value, position))
+            else:
+                errors.append({"position": position, "offset": pos, "reason": "Entry is not an object",
+                               "raw": raw[pos:end]})
             pos = end
         except ValueError as exc:
             nxt = _next_decodable_object(raw, pos + 1)
