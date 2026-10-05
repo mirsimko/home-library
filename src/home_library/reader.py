@@ -78,4 +78,5 @@ def run_read(photo_dir, read_id, backend, *, run=subprocess.run, clock=time.mono
     (read_dir / "raw.txt").write_text(answer, encoding="utf-8")
     read = parse_read(answer)
     read["read_id"] = read_id
+    (read_dir / "read.json").write_text(json.dumps(read, indent=2, ensure_ascii=False) + "\n", encoding="utf-8")
     return read
