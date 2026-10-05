@@ -167,13 +167,14 @@ def test_tiles_carry_no_exif_and_an_exif_rotated_photo_gives_upright_tiles(tmp_p
 def test_a_second_run_with_another_layout_leaves_only_the_new_tiles(tmp_path):
     photo = make_photo(tmp_path / "shelf-1.jpg", (4080, 3072))
     out = tmp_path / "out"
-    cut_tiles(photo, out)
+    cut_tiles(photo, out)  # three columns, so r1c3 and r2c3 exist now
     (out / "tiles" / "notes.txt").write_text("stray")
 
-    manifest = cut_tiles(photo, out, tile_width=2100, min_overlap_x=300)
+    # tile 3000 wide: 1080 px of travel, step at most 2700 -> 2 columns
+    manifest = cut_tiles(photo, out, tile_width=3000)
 
-    # 4080 wide, tile 2100, step at most 1800 -> 2 columns; rows as before -> 2
-    expected = sorted(f["file"] for f in manifest["tiles"])
-    assert expected == sorted(
+    assert manifest["layout"]["columns"] == [0, 1080]
+    expected = sorted(
         f"r{r}c{c}-r{rot}.jpg" for r in (1, 2) for c in (1, 2) for rot in (0, 180))
+    assert sorted(t["file"] for t in manifest["tiles"]) == expected
     assert sorted(p.name for p in (out / "tiles").iterdir()) == expected
