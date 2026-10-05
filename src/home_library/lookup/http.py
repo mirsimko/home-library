@@ -76,10 +76,13 @@ class Fetcher:
             return self._cache_path(url).read_bytes()
         host = urlparse(url).hostname
         with self._lock_for(host):
+            # Another thread may have fetched this URL while we waited for the host.
+            if self.cache_dir is not None and self._cache_path(url).exists():
+                return self._cache_path(url).read_bytes()
             body = self._get(url, host, retry=True)
-        if self.cache_dir is not None:
-            self.cache_dir.mkdir(parents=True, exist_ok=True)
-            partial = self._cache_path(url).with_suffix(".part")
-            partial.write_bytes(body)
-            os.replace(partial, self._cache_path(url))
+            if self.cache_dir is not None:
+                self.cache_dir.mkdir(parents=True, exist_ok=True)
+                partial = self._cache_path(url).with_suffix(".part")
+                partial.write_bytes(body)
+                os.replace(partial, self._cache_path(url))
         return body
