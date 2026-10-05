@@ -69,3 +69,28 @@ def test_an_invalid_isbn_is_not_used(fixture_bytes):
     result = find_candidates("だるまさんが", "ja", isbn="9784893094316", fetch=fetch, run_yaz=no_yaz)
 
     assert [q["step"] for q in result["queries"]] == ["title"]
+
+
+def test_with_an_author_the_ladder_goes_from_title_and_author_to_the_title_alone(fixture_bytes):
+    fetch = Router(
+        fixture_bytes,
+        **{"ndlsearch.ndl.go.jp": {"creator": "ndl_empty.xml", None: "ndl_search_daruma.xml"}},
+    )
+
+    result = find_candidates("だるまさんが", "ja", author="かがくいひろし", fetch=fetch, run_yaz=no_yaz)
+
+    assert result["queries"] == [
+        {"source": "ndl", "step": "title+author", "status": "no_match", "count": 0},
+        {"source": "ndl", "step": "title", "status": "ok", "count": 3},
+    ]
+    assert fetch.params(0)["creator"] == "かがくいひろし"
+    assert "creator" not in fetch.params(1)
+
+
+def test_the_ladder_stops_at_the_first_step_that_returns_candidates(fixture_bytes):
+    fetch = Router(fixture_bytes, **{"ndlsearch.ndl.go.jp": "ndl_search_daruma.xml"})
+
+    result = find_candidates("だるまさんが", "ja", author="かがくいひろし", fetch=fetch, run_yaz=no_yaz)
+
+    assert [q["step"] for q in result["queries"]] == ["title+author"]
+    assert len(fetch.urls) == 1
