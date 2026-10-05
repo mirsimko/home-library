@@ -1,5 +1,7 @@
 """The stages run on one photo's work directory (see docs/pipeline.md, "Work directory")."""
+import hashlib
 import json
+import shutil
 import subprocess
 from pathlib import Path
 
@@ -66,18 +68,36 @@ def export_photo(photo_dir, *, location=""):
     return records
 
 
-def run_photo(photo, work_root=DEFAULT_WORK_ROOT, *, readers=READERS, location="",
+def _already_cut(photo, photo_dir):
+    manifest = photo_dir / "tiles.json"
+    return manifest.exists() and _load(manifest)["sha256"] == hashlib.sha256(Path(photo).read_bytes()).hexdigest()
+
+
+def run_photo(photo, work_root=DEFAULT_WORK_ROOT, *, readers=READERS, location="", force=False,
               run=subprocess.run, fetch=None, run_yaz=run_yaz_client):
-    """Every stage for one photo, the two reads one after the other. Returns a short summary."""
+    """Every stage for one photo, the two reads one after the other. Returns a short summary.
+
+    A read that is already stored is not repeated, so a run that failed half way can simply be started again.
+    A changed photo, or force, starts from nothing.
+    """
     photo_dir = photo_dir_of(work_root, photo)
-    cut_tiles(photo, photo_dir)
+    picks = photo_dir / "lookup" / "picks.json"
+    if force or not _already_cut(photo, photo_dir):
+        shutil.rmtree(photo_dir / "reads", ignore_errors=True)  # reads of other tiles must not be reused
+        picks.unlink(missing_ok=True)
+        cut_tiles(photo, photo_dir)
     for read_id, backend in readers:
-        run_read(photo_dir, read_id, backend, run=run)
+        if not (photo_dir / "reads" / read_id / "read.json").exists():
+            run_read(photo_dir, read_id, backend, run=run)
+            picks.unlink(missing_ok=True)  # a pick made for other readings is stale
     merged = merge_photo(photo_dir, [read_id for read_id, _ in readers])
     lookup_photo(photo_dir, fetch=fetch, run_yaz=run_yaz)
-    run_pick(photo_dir, run=run)
+    if not picks.exists():
+        run_pick(photo_dir, run=run)
     export_photo(photo_dir, location=location)
     statuses = [item["status"] for item in merged["items"]]
     return {"photo": merged["file"], "directory": str(photo_dir),
             "accepted": statuses.count("accepted"), "review": statuses.count("review"),
-            "unreadable": sum(1 for entry in merged["unreadable"] if entry["read_id"] == readers[0][0])}
+            "unreadable": sum(1 for entry in merged["unreadable"] if entry["read_id"] == readers[0][0]),
+            "seconds": {read_id: float(_load(photo_dir / "reads" / read_id / "run.json")["seconds"])
+                        for read_id, _ in readers}}
