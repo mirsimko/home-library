@@ -13,19 +13,22 @@ def _year(text):
     return match.group(0) if match else ""
 
 
+def _names(items):
+    return [item.get("name") for item in items or [] if isinstance(item, dict)]
+
+
 def _from_edition(record, isbn):
-    key = record.get("key", "").rsplit("/", 1)[-1]
-    publishers = record.get("publishers") or []
+    key = (record.get("key") or "").rsplit("/", 1)[-1]
     return new_candidate(
         "openlibrary",
         key,
-        url=record.get("url", ""),
-        title=record.get("title", ""),
-        authors=[a.get("name", "") for a in record.get("authors", [])],
-        publisher=publishers[0].get("name", "") if publishers else "",
+        url=record.get("url"),
+        title=record.get("title"),
+        authors=_names(record.get("authors")),
+        publisher=(_names(record.get("publishers")) or [None])[0],
         year=_year(record.get("publish_date")),
         isbn=isbn,
-        subjects=[s.get("name", "") for s in record.get("subjects", [])][:MAX_SUBJECTS],
+        subjects=_names(record.get("subjects"))[:MAX_SUBJECTS],
     )
 
 
@@ -36,15 +39,15 @@ def by_isbn(isbn, fetch):
 
 
 def _from_work(doc):
-    key = doc.get("key", "").rsplit("/", 1)[-1]
+    key = (doc.get("key") or "").rsplit("/", 1)[-1]
     return new_candidate(
         "openlibrary",
         key,
         url="https://openlibrary.org/works/" + key,
-        title=doc.get("title", ""),
-        authors=doc.get("author_name", []),
-        year=str(doc.get("first_publish_year", "")),
-        subjects=doc.get("subject", [])[:MAX_SUBJECTS],
+        title=doc.get("title"),
+        authors=doc.get("author_name"),
+        year=doc.get("first_publish_year"),
+        subjects=(doc.get("subject") or [])[:MAX_SUBJECTS],
     )
 
 

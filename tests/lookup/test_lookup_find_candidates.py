@@ -210,21 +210,26 @@ def test_a_missing_yaz_client_is_recorded_as_unavailable_and_does_not_raise():
     }
 
 
-def test_a_failed_request_is_recorded_as_an_error_and_the_next_step_still_runs(fixture_bytes):
-    answers = [FetchError("connection refused"), fixture_bytes("ndl_search_daruma.xml")]
+def test_a_failed_request_is_recorded_as_an_error_and_ends_that_sources_ladder_but_not_the_next_source(
+    fixture_bytes,
+):
+    urls = []
 
     def fetch(url):
-        answer = answers.pop(0)
-        if isinstance(answer, Exception):
-            raise answer
-        return answer
+        urls.append(url)
+        if "ndlsearch" in url:
+            raise FetchError("HTTP 500")
+        return fixture_bytes("openbd_9784001111118.json")
 
-    result = find_candidates("だるまさんが", "ja", author="かがくいひろし", fetch=fetch, run_yaz=no_yaz)
+    result = find_candidates(
+        "だるまさんが", "ja", author="かがくいひろし", isbn="9784001111118", fetch=fetch, run_yaz=no_yaz
+    )
 
     assert result["queries"] == [
-        {"source": "ndl", "step": "title+author", "status": "error", "count": 0},
-        {"source": "ndl", "step": "title", "status": "ok", "count": 3},
+        {"source": "ndl", "step": "isbn", "status": "error", "count": 0},
+        {"source": "openbd", "step": "isbn", "status": "ok", "count": 1},
     ]
+    assert len([u for u in urls if "ndlsearch" in u]) == 1
 
 
 def test_an_answer_that_cannot_be_read_is_an_error_and_never_raises():
@@ -253,3 +258,119 @@ def test_a_record_that_a_source_returns_twice_is_kept_once(fixture_bytes):
     ids = [c["id"] for c in result["candidates"]]
     assert ids == ["ndl:000009209109", "ndl:025053389", "ndl:000011170599"]
     assert result["queries"][0]["count"] == 3
+
+
+def test_a_step_that_ran_before_is_answered_from_the_cache_and_recorded_as_if_it_had_run(fixture_bytes, tmp_path):
+    fetch = Router(fixture_bytes, **{"ndlsearch.ndl.go.jp": "ndl_search_daruma.xml"})
+    first = find_candidates("だるまさんが", "ja", fetch=fetch, run_yaz=no_yaz, cache_dir=tmp_path / "cache")
+
+    second = find_candidates("だるまさんが", "ja", fetch=no_http, run_yaz=no_yaz, cache_dir=tmp_path / "cache")
+
+    assert second == first
+    assert second["queries"] == [{"source": "ndl", "step": "title", "status": "ok", "count": 3}]
+    assert [c["id"] for c in second["candidates"]] == [
+        "ndl:000009209109", "ndl:025053389", "ndl:000011170599",
+    ]
+
+
+def test_an_empty_answer_is_cached_too_because_no_match_is_an_answer(fixture_bytes, tmp_path):
+    fetch = Router(fixture_bytes, **{"ndlsearch.ndl.go.jp": "ndl_empty.xml"})
+    find_candidates("Zelený drak", "ja", fetch=fetch, run_yaz=no_yaz, cache_dir=tmp_path)
+
+    second = find_candidates("Zelený drak", "ja", fetch=no_http, run_yaz=no_yaz, cache_dir=tmp_path)
+
+    assert second["queries"] == [{"source": "ndl", "step": "title", "status": "no_match", "count": 0}]
+
+
+def test_a_step_that_failed_is_not_cached(fixture_bytes, tmp_path):
+    def broken(url):
+        raise FetchError("HTTP 500")
+
+    find_candidates("だるまさんが", "ja", fetch=broken, run_yaz=no_yaz, cache_dir=tmp_path)
+    fetch = Router(fixture_bytes, **{"ndlsearch.ndl.go.jp": "ndl_search_daruma.xml"})
+
+    second = find_candidates("だるまさんが", "ja", fetch=fetch, run_yaz=no_yaz, cache_dir=tmp_path)
+
+    assert second["queries"] == [{"source": "ndl", "step": "title", "status": "ok", "count": 3}]
+    assert len(fetch.urls) == 1
+
+
+def test_a_step_is_cached_by_its_query_values(fixture_bytes, tmp_path):
+    fetch = Router(fixture_bytes, **{"ndlsearch.ndl.go.jp": "ndl_search_daruma.xml"})
+    find_candidates("だるまさんが", "ja", fetch=fetch, run_yaz=no_yaz, cache_dir=tmp_path)
+
+    find_candidates("あかいふうせん", "ja", fetch=fetch, run_yaz=no_yaz, cache_dir=tmp_path)
+    find_candidates("だるまさんが", "ja", author="山田花子", fetch=fetch, run_yaz=no_yaz, cache_dir=tmp_path)
+
+    assert [fetch.params(i).get("title") for i in range(3)] == ["だるまさんが", "あかいふうせん", "だるまさんが"]
+    assert "creator" in fetch.params(2)
+
+
+def test_nkcr_answers_are_cached_too(fake_yaz, fixture_bytes, tmp_path):
+    run_yaz = fake_yaz(fixture_bytes("nkcr_isbn_9788024297217.txt").decode("utf-8"))
+    first = find_candidates(
+        "Krtek a zajíček", "cs", isbn="9788024297217", fetch=no_http, run_yaz=run_yaz, cache_dir=tmp_path
+    )
+
+    second = find_candidates(
+        "Krtek a zajíček", "cs", isbn="9788024297217", fetch=no_http, run_yaz=no_yaz, cache_dir=tmp_path
+    )
+
+    assert second == first
+    assert len(run_yaz.scripts) == 1
+
+
+def test_the_cache_directory_is_created_on_the_first_write_and_leaves_only_finished_files(fixture_bytes, tmp_path):
+    cache = tmp_path / "lookup" / "cache"
+    fetch = Router(fixture_bytes, **{"ndlsearch.ndl.go.jp": "ndl_search_daruma.xml"})
+
+    find_candidates("だるまさんが", "ja", fetch=fetch, run_yaz=no_yaz, cache_dir=cache)
+
+    names = [path.name for path in cache.iterdir()]
+    assert len(names) == 1
+    assert names[0].endswith(".json")
+
+
+def test_a_skipped_source_is_not_called_and_is_recorded_as_unavailable(fixture_bytes):
+    fetch = Router(fixture_bytes, **{"api.openbd.jp": "openbd_9784001111118.json"})
+
+    result = find_candidates(
+        "あかいふうせん", "ja", author="山田花子", isbn="9784001111118", fetch=fetch, run_yaz=no_yaz, skip={"ndl"}
+    )
+
+    assert result["queries"] == [
+        {"source": "ndl", "step": "skipped", "status": "unavailable", "count": 0},
+        {"source": "openbd", "step": "isbn", "status": "ok", "count": 1},
+    ]
+    assert [c["id"] for c in result["candidates"]] == ["openbd:9784001111118"]
+    assert [urlparse(u).hostname for u in fetch.urls] == ["api.openbd.jp"]
+
+
+def test_a_skipped_nkcr_does_not_run_yaz_client():
+    result = find_candidates("Zelený drak", "cs", fetch=no_http, run_yaz=no_yaz, skip=["nkcr"])
+
+    assert result == {
+        "queries": [{"source": "nkcr", "step": "skipped", "status": "unavailable", "count": 0}],
+        "candidates": [],
+    }
+
+
+@pytest.mark.parametrize("language, source", [("JA", "ndl"), (" cs ", "nkcr"), ("En\n", "openlibrary")])
+def test_the_language_is_matched_ignoring_case_and_surrounding_whitespace(language, source):
+    def fetch(url):
+        raise FetchError("HTTP 500")
+
+    def run_yaz(commands):
+        raise FetchError("failed")
+
+    result = find_candidates("Zelený drak", language, fetch=fetch, run_yaz=run_yaz)
+
+    assert result["queries"][0]["source"] == source
+
+
+def test_a_language_that_is_not_ja_cs_or_en_still_gets_no_source_after_cleaning():
+    assert find_candidates("Zelený drak", " ZH ", fetch=no_http, run_yaz=no_yaz) == {"queries": [], "candidates": []}
+
+
+def test_a_missing_language_gets_no_source_and_does_not_raise():
+    assert find_candidates("Zelený drak", None, fetch=no_http, run_yaz=no_yaz) == {"queries": [], "candidates": []}

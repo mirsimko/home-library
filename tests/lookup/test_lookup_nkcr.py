@@ -161,10 +161,10 @@ def test_run_yaz_client_reports_a_missing_program_as_unavailable(monkeypatch):
         nkcr.run_yaz_client("quit\n")
 
 
-def test_run_yaz_client_reports_a_timeout_as_a_source_error(monkeypatch):
+def test_run_yaz_client_reports_a_timeout_as_unavailable(monkeypatch):
     monkeypatch.setattr(subprocess, "run", FakeSubprocess(error=subprocess.TimeoutExpired("yaz-client", 60)))
 
-    with pytest.raises(SourceError):
+    with pytest.raises(Unavailable):
         nkcr.run_yaz_client("quit\n")
 
 
