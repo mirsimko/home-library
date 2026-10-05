@@ -1,0 +1,29 @@
+"""Stage 6: pick the catalogue candidate that is the book."""
+from pathlib import Path
+
+_FIELDS = ("title", "title_reading", "authors", "publisher", "year", "series", "isbn")
+
+
+def _candidate_lines(cand: dict) -> list:
+    lines = [f"  Candidate {cand['id']}"]
+    for field in _FIELDS:
+        value = cand.get(field)
+        if isinstance(value, list):
+            value = "; ".join(value)
+        if value:
+            lines.append(f"    {field}: {value}")
+    return lines
+
+
+def build_prompt(merged: dict, candidates: dict) -> str:
+    parts = [(Path(__file__).parent / "prompts" / "pick.txt").read_text(encoding="utf-8")]
+    for book in candidates["books"]:
+        if not book["candidates"]:
+            continue
+        lines = [f"Book {book['item']}", f"  Title as read: {book['title']}", f"  Language: {book['language']}"]
+        for reading in merged["items"][book["item"]]["readings"]:
+            lines.append(f"  Other text on the book ({reading['read_id']}): {reading['other_text']}")
+        for cand in book["candidates"]:
+            lines.extend(_candidate_lines(cand))
+        parts.append("\n".join(lines) + "\n")
+    return "\n".join(parts)

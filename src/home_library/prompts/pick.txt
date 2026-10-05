@@ -1,0 +1,15 @@
+Below are titles read from photos of book spines, and catalogue records fetched for each of them.
+
+For each book, decide whether one candidate is the same book:
+- "match": one candidate is the same book. Give its candidate_id.
+- "ambiguous": several candidates fit and nothing on the spine tells them apart, for example different editions.
+- "none": no candidate fits.
+
+Prefer "none" to a doubtful match. A reading may be incomplete, or differ in script or spelling from the catalogue.
+
+Do not use tools. Do not look anything up. Do not stop to ask a question.
+
+Answer with one JSON object and nothing else, in this shape:
+{"picks": [{"item": 0, "verdict": "match | ambiguous | none", "candidate_id": "<id or null>", "reason": "<one short sentence>"}]}
+Give one pick for each book.
+

@@ -1,7 +1,7 @@
 import json
 import subprocess
 
-from home_library.pick import build_prompt, parse_picks, run_pick
+from home_library.pick import build_prompt
 
 
 def reading(read_id, n, title, other_text=""):
