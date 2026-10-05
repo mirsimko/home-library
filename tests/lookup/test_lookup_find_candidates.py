@@ -94,3 +94,42 @@ def test_the_ladder_stops_at_the_first_step_that_returns_candidates(fixture_byte
 
     assert [q["step"] for q in result["queries"]] == ["title+author"]
     assert len(fetch.urls) == 1
+
+
+def no_http(url):
+    raise AssertionError("no HTTP request expected for this language")
+
+
+def test_english_goes_to_open_library_and_then_the_library_of_congress(fixture_bytes):
+    fetch = Router(
+        fixture_bytes,
+        **{"openlibrary.org": "openlibrary_search_wild_things.json", "lx2.loc.gov": "loc_isbn_9780123456786.xml"},
+    )
+
+    result = find_candidates(
+        "Where the Wild Things Are", "en", author="Sendak", fetch=fetch, run_yaz=no_yaz
+    )
+
+    assert result["queries"] == [
+        {"source": "openlibrary", "step": "title+author", "status": "ok", "count": 2},
+        {"source": "loc", "step": "title+author", "status": "ok", "count": 1},
+    ]
+    assert [c["id"] for c in result["candidates"]] == [
+        "openlibrary:OL2568879W", "openlibrary:OL2568793W", "loc:2099001234",
+    ]
+
+
+def test_czech_goes_to_nkcr_through_yaz_client_and_uses_no_http(fake_yaz, fixture_bytes):
+    run_yaz = fake_yaz(fixture_bytes("nkcr_isbn_9788024297217.txt").decode("utf-8"))
+
+    result = find_candidates("Krtek a zajíček", "cs", isbn="9788024297217", fetch=no_http, run_yaz=run_yaz)
+
+    assert result["queries"] == [{"source": "nkcr", "step": "isbn", "status": "ok", "count": 1}]
+    assert result["candidates"][0]["id"] == "nkcr:nkc20233578648"
+
+
+def test_any_other_language_has_no_source_and_makes_no_request():
+    for language in ("zh", "unknown", ""):
+        result = find_candidates("Zelený drak", language, fetch=no_http, run_yaz=no_yaz)
+
+        assert result == {"queries": [], "candidates": []}
