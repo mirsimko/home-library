@@ -6,7 +6,7 @@ from types import SimpleNamespace
 import pytest
 from PIL import Image
 
-from home_library.reader import ReadError, render_prompt, run_read
+from home_library.reader import BACKENDS, ReadError, render_prompt, run_read
 from home_library.tiles import cut_tiles
 
 SIX_TILE_FILES = (
@@ -313,3 +313,18 @@ def test_a_failed_run_removes_the_read_json_of_an_earlier_run_of_the_same_read(t
         run_read(work, "b-spark", "pi", run=FakeRun(stdout="", returncode=1))
 
     assert not (read_dir_of(work, "b-spark") / "read.json").exists()
+
+
+def test_an_unknown_backend_is_refused_before_anything_runs(tmp_path):
+    work, _ = cut_small_photo(tmp_path)
+    run = FakeRun(stdout=ANSWER)
+
+    with pytest.raises(ReadError, match="unknown backend 'gemini'"):
+        run_read(work, "x-gemini", "gemini", run=run)
+
+    assert run.calls == []
+    assert not (work / "reads").exists()
+
+
+def test_the_backends_have_their_default_models():
+    assert BACKENDS == {"codex-exec": "gpt-6.1-sol", "pi": "opencode-go/muse-spark-1.3-contributor"}
