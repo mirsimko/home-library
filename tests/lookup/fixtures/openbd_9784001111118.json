@@ -1,0 +1,30 @@
+[
+  {
+    "onix": {
+      "DescriptiveDetail": {
+        "TitleDetail": {
+          "TitleElement": {"TitleText": {"content": "あかいふうせん", "collationkey": "アカイ フウセン"}}
+        },
+        "Contributor": [
+          {"PersonName": {"content": "山田 花子", "collationkey": "ヤマダ, ハナコ"}}
+        ]
+      },
+      "CollateralDetail": {
+        "TextContent": [
+          {"TextType": "03", "ContentAudience": "00", "Text": "空へのぼっていくあかいふうせんのおはなし。"}
+        ]
+      }
+    },
+    "hanmoto": {},
+    "summary": {
+      "isbn": "9784001111118",
+      "title": "あかいふうせん",
+      "volume": "",
+      "series": "ふうせんえほん",
+      "publisher": "たんぽぽ書房",
+      "pubdate": "202004",
+      "cover": "",
+      "author": "山田,花子"
+    }
+  }
+]

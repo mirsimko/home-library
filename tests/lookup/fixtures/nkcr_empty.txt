@@ -1,0 +1,13 @@
+Z> Connecting...OK.
+Sent initrequest.
+Connection accepted by v3 target.
+Z> Z> Sent searchRequest.
+Received SearchResponse.
+Search was a success.
+Number of hits: 0, setno 1
+records returned: 0
+Z> Sent presentRequest (1+10).
+Diagnostic message(s) from database:
+    [13] Present request out of range -- v2 addinfo '1'
+nextResultSetPosition = 2
+Z> See you later, alligator.
