@@ -4,7 +4,7 @@ from pathlib import Path
 
 import pytest
 
-from home_library.pick import build_prompt, parse_picks, run_pick
+from home_library.pick import build_prompt, parse_picks, run_pick, stored_picks
 
 
 def reading(read_id, n, title, other_text=""):
@@ -172,7 +172,7 @@ def test_run_pick_calls_no_model_when_no_book_has_candidates(tmp_path):
     fake = FakeCodex()
     result = run_pick(photo, run=fake)
     assert fake.calls == []
-    assert result == {"file": "shelf-1.jpg", "picks": []}
+    assert (result["file"], result["picks"], result["failed"]) == ("shelf-1.jpg", [], False)
     assert json.loads((photo / "lookup" / "picks.json").read_text(encoding="utf-8")) == result
 
 
@@ -312,3 +312,55 @@ def test_parse_picks_accepts_an_echoed_title_that_differs_only_in_case_and_spaci
     raw = answer({"book": 1, "title": "zelený  DRAK", "verdict": "match", "candidate_id": "nkcr:cnb001",
                   "reason": "Same."})
     assert parse_picks(raw, candidates)["picks"][0]["verdict"] == "match"
+
+
+# --- a stored pick is only good for the readings and candidates it was made for ---
+
+GOOD_REPLY = None
+
+
+def good_reply():
+    return answer({"book": 1, "title": "Zelený drak", "verdict": "match", "candidate_id": "nkcr:cnb001",
+                   "reason": "Same title."},
+                  {"book": 2, "title": "あかいふうせん", "verdict": "none", "candidate_id": None, "reason": "No."})
+
+
+def test_a_stored_pick_is_found_again_for_the_same_readings_and_candidates(tmp_path):
+    photo = photo_dir_with_lookup(tmp_path)
+    merged, candidates = merged_and_candidates()
+    made = run_pick(photo, run=FakeCodex(reply=good_reply()))
+    assert made["failed"] is False
+    assert stored_picks(photo, merged, candidates) == made
+
+
+def test_a_stored_pick_is_not_used_for_other_candidates_or_other_readings(tmp_path):
+    photo = photo_dir_with_lookup(tmp_path)
+    run_pick(photo, run=FakeCodex(reply=good_reply()))
+
+    merged, candidates = merged_and_candidates()
+    candidates["books"][0]["candidates"].append(cand("nkcr:cnb003", "Zelený drak se vrací"))
+    assert stored_picks(photo, merged, candidates) is None
+
+    merged, candidates = merged_and_candidates()
+    merged["items"][0]["readings"][0]["other_text"] = "Jana Nová"  # a read was made again
+    assert stored_picks(photo, merged, candidates) is None
+
+    merged, candidates = merged_and_candidates()
+    candidates["books"][0]["title"] = "Zelený drak 2"
+    assert stored_picks(photo, merged, candidates) is None
+
+
+def test_no_stored_pick_is_found_when_the_file_is_missing_or_damaged(tmp_path):
+    photo = photo_dir_with_lookup(tmp_path)
+    merged, candidates = merged_and_candidates()
+    assert stored_picks(photo, merged, candidates) is None
+    (photo / "lookup" / "picks.json").write_text('{"file": "shelf-1.jpg", "pic', encoding="utf-8")
+    assert stored_picks(photo, merged, candidates) is None
+
+
+def test_a_pick_step_that_failed_is_stored_as_failed(tmp_path):
+    photo = photo_dir_with_lookup(tmp_path)
+    merged, candidates = merged_and_candidates()
+    made = run_pick(photo, run=FakeCodex(returncode=2))
+    assert made["failed"] is True
+    assert stored_picks(photo, merged, candidates) == made  # its reasons still reach the records
