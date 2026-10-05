@@ -8,6 +8,7 @@ from pathlib import Path
 from types import SimpleNamespace
 
 from home_library.parse import parse_read
+from home_library.workspace import refuse_inside_checkout
 
 
 class ReadError(Exception):
@@ -97,10 +98,13 @@ def run_read(photo_dir, read_id, backend, *, run=subprocess.run, clock=time.mono
              now=lambda: datetime.now().astimezone(), timeout=600):
     """Run one read of the photo in photo_dir and return the stored read.
 
-    Raises ReadError for an unknown backend, a tiles directory that does not match the manifest, and any failed
+    Raises ReadError for a work directory inside a git checkout, an unknown backend, a tiles directory that does not match the manifest, and any failed
     run. A failed run leaves raw.txt and run.json, never read.json.
     """
-    photo_dir = Path(photo_dir).resolve()
+    try:
+        photo_dir = refuse_inside_checkout(photo_dir)
+    except ValueError as error:
+        raise ReadError(str(error)) from error
     read_dir = photo_dir / "reads" / read_id
     (read_dir / "read.json").unlink(missing_ok=True)
     (read_dir / "events.jsonl").unlink(missing_ok=True)
