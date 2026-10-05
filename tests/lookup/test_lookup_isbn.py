@@ -7,3 +7,9 @@ def test_isbn13_with_hyphens_is_normalized_to_digits():
 
 def test_isbn13_with_a_wrong_check_digit_is_rejected():
     assert normalize_isbn("9784893094316") is None
+
+
+def test_isbn10_is_validated_and_keeps_a_final_x():
+    assert normalize_isbn("4-8340-0082-6") == "4834000826"
+    assert normalize_isbn("80-11-01711-x") == "801101711X"
+    assert normalize_isbn("4834000827") is None
