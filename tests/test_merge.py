@@ -303,3 +303,14 @@ def test_the_merge_lists_the_reads_that_were_incomplete_in_the_order_of_the_two_
     assert first["incomplete"] == ["a-sol"]
     assert second["incomplete"] == ["b-spark"]
     assert both["incomplete"] == ["a-sol", "b-spark"]
+
+
+def test_a_number_one_read_glues_to_the_title_still_gives_one_split_pair():
+    # Seen on a real shelf: one model wrote the issue number into the title, the other into other_text.
+    a = book(1, "Zvířata", other_text="202 Edice Lupa")
+    b = book(1, "Zvířata202", other_text="Edice Lupa")
+
+    merged = merge_reads(read("a-sol", [a]), read("b-spark", [b]))
+
+    assert [(i["reason"], [r["title"] for r in i["readings"]]) for i in merged["items"]] == [
+        ("split", ["Zvířata", "Zvířata202"])]
