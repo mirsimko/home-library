@@ -175,3 +175,14 @@ def test_run_pick_runs_codex_once_in_the_lookup_directory_with_the_prompt_on_std
     assert kwargs["cwd"] == lookup
     assert kwargs["input"] == build_prompt(merged, candidates)
     assert kwargs["timeout"] == 42
+
+
+def test_run_pick_writes_picks_json_from_the_answer_file(tmp_path):
+    photo = photo_dir_with_lookup(tmp_path)
+    reply = answer({"item": 0, "verdict": "match", "candidate_id": "nkcr:cnb001", "reason": "Same title."},
+                   {"item": 2, "verdict": "none", "candidate_id": None, "reason": "Different book."})
+    result = run_pick(photo, run=FakeCodex(reply=reply))
+    assert [p["verdict"] for p in result["picks"]] == ["match", "none"]
+    text = (photo / "lookup" / "picks.json").read_text(encoding="utf-8")
+    assert text.endswith("}\n") and '\n  "picks": [' in text
+    assert json.loads(text) == result
