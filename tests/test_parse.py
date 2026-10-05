@@ -263,3 +263,16 @@ def test_an_empty_list_and_a_list_cut_off_after_a_comma_have_no_empty_element():
     cut = parse_read('{"books":[{"title":"A"},')
     assert cut["errors"] == []
     assert cut["complete"] is False
+
+
+def test_deeply_nested_titles_never_make_parse_read_raise_and_every_entry_is_accounted_for():
+    # On Python 3.10 and 3.11 json.dumps hits the recursion limit on nesting that the decoder still accepts; where
+    # that window lies depends on how deep the caller already is, so every depth near the limit is tried.
+    for depth in range(900, 1000, 4):
+        nested = "[" * depth + "]" * depth
+        read = parse_read('{"books":[{"title":' + nested + '},{"title":"B"}]}')
+        assert len(read["books"]) + len(read["errors"]) == 2, depth
+        assert (read["books"][-1]["title"], read["books"][-1]["n"]) == ("B", 2), depth
+        assert read["complete"] is (read["errors"] == []), depth
+        for error in read["errors"]:
+            assert (error["position"], error["raw"]) == (1, '{"title":' + nested + "}"), depth
