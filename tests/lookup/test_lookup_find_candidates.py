@@ -1,5 +1,7 @@
 from urllib.parse import parse_qs, urlparse
 
+import pytest
+
 from home_library.lookup import find_candidates
 
 
@@ -133,3 +135,28 @@ def test_any_other_language_has_no_source_and_makes_no_request():
         result = find_candidates("Zelený drak", language, fetch=no_http, run_yaz=no_yaz)
 
         assert result == {"queries": [], "candidates": []}
+
+
+@pytest.mark.parametrize(
+    "title, short_title",
+    [
+        ("The Very Hungry Caterpillar", "The Very Hungry"),  # more than three words: the first three
+        ("あかいふうせんのたび", "あかいふう"),  # no spaces, 10 characters: the first half
+        ("あかいふうせ", "あかい"),  # no spaces, exactly 6 characters: the first half
+        ("Zelený drak", None),  # two words
+        ("The Blue Kite", None),  # exactly three words
+        ("あかいふう", None),  # no spaces, 5 characters
+    ],
+)
+def test_the_short_title_step_follows_the_word_and_character_rule(fixture_bytes, title, short_title):
+    fetch = Router(fixture_bytes, **{"ndlsearch.ndl.go.jp": "ndl_empty.xml"})
+
+    result = find_candidates(title, "ja", fetch=fetch, run_yaz=no_yaz)
+
+    if short_title is None:
+        assert [q["step"] for q in result["queries"]] == ["title"]
+    else:
+        assert [q["step"] for q in result["queries"]] == ["title", "short-title"]
+        assert fetch.params(0)["title"] == title
+        assert fetch.params(1)["title"] == short_title
+        assert result["queries"][1] == {"source": "ndl", "step": "short-title", "status": "no_match", "count": 0}
