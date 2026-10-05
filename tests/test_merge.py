@@ -1,6 +1,4 @@
-import pytest
-
-from home_library.merge import match_key, merge_reads
+from home_library.merge import match_key
 
 
 def test_match_key_ignores_width_case_spaces_and_punctuation():
