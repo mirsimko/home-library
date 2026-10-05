@@ -377,3 +377,20 @@ def test_pi_rerun_of_a_codex_read_leaves_no_event_stream(tmp_path):
     run_read(work, "a-sol", "pi", run=FakeRun(stdout=ANSWER))
 
     assert not (read_dir_of(work, "a-sol") / "events.jsonl").exists()
+
+
+@pytest.mark.parametrize("replacement", ["directory", "broken-link"])
+def test_a_listed_tile_that_is_not_a_file_is_refused_before_anything_runs(tmp_path, replacement):
+    work, _ = cut_small_photo(tmp_path)
+    tile = work / "tiles" / "r1c2-r0.jpg"
+    tile.unlink()
+    if replacement == "directory":
+        tile.mkdir()
+    else:
+        tile.symlink_to(tmp_path / "nowhere.jpg")
+    run = FakeRun(stdout=ANSWER)
+
+    with pytest.raises(ReadError, match="r1c2-r0.jpg"):
+        run_read(work, "b-spark", "pi", run=run)
+
+    assert run.calls == []
