@@ -76,3 +76,13 @@ def test_parse_picks_finds_the_object_in_a_fence_with_prose_around_it():
     picks = parse_picks(raw, candidates)["picks"]
     assert [(p["item"], p["verdict"], p["candidate_id"]) for p in picks] == [
         (0, "match", "nkcr:cnb001"), (2, "none", None)]
+
+
+def test_parse_picks_rejects_a_match_naming_another_books_candidate():
+    _, candidates = merged_and_candidates()
+    raw = answer({"item": 0, "verdict": "match", "candidate_id": "ndl:000111", "reason": "Looks right."},
+                 {"item": 2, "verdict": "match", "candidate_id": "ndl:000111", "reason": "Same title."})
+    first, second = parse_picks(raw, candidates)["picks"]
+    assert first["verdict"] == "none" and first["candidate_id"] is None
+    assert "rejected" in first["reason"] and "ndl:000111" in first["reason"]
+    assert second["verdict"] == "match"
