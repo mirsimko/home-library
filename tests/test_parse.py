@@ -196,3 +196,11 @@ def test_invalid_escape_in_the_file_name_does_not_lose_the_books():
     assert read["file"] == ""
     assert [b["title"] for b in read["books"]] == ["A"]
     assert read["complete"] is False
+
+
+def test_escaped_key_and_nested_metadata_do_not_hide_the_real_books_list():
+    escaped = parse_read('{"file":"s.jpg","bo\\u006fks":[{"title":"A"}]}')
+    assert [b["title"] for b in escaped["books"]] == ["A"]
+    nested = parse_read('{"metadata":{"books":[{"title":"Fake"}]},"books":[{"title":"Real"}]}')
+    assert [b["title"] for b in nested["books"]] == ["Real"]
+    assert nested["complete"] is True
