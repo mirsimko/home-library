@@ -62,7 +62,7 @@ def merge_reads(read_a: dict, read_b: dict) -> dict:
     for read_id, read in ((id_a, read_a), (id_b, read_b)):
         titled_books = []
         for entry in read["books"]:
-            if match_key(entry["title"]) == "":
+            if entry["title"].strip() == "":
                 unreadable.append(_reading(read_id, entry))
             else:
                 titled_books.append(entry)
@@ -72,8 +72,8 @@ def merge_reads(read_a: dict, read_b: dict) -> dict:
     keys_b = {j: match_key(e["title"]) for j, e in enumerate(books_b)}
     pairs = _pair_equal_keys({i: k for i, k in keys_a.items() if _eligible(books_a[i])},
                              {j: k for j, k in keys_b.items() if _eligible(books_b[j])})
-    left_a = {i: k for i, k in keys_a.items() if i not in pairs}
-    left_b = {j: k for j, k in keys_b.items() if j not in pairs.values()}
+    left_a = {i: k for i, k in keys_a.items() if i not in pairs and k}
+    left_b = {j: k for j, k in keys_b.items() if j not in pairs.values() and k}
     near = _pair_similar(left_a, left_b)
     items = []
     for i, entry in enumerate(books_a):
