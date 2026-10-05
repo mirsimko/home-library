@@ -1,5 +1,6 @@
 import json
 import subprocess
+from pathlib import Path
 
 from home_library.pick import build_prompt, parse_picks, run_pick
 
@@ -145,7 +146,7 @@ class FakeCodex:
         if self.error:
             raise self.error
         if self.reply is not None:
-            args[args.index("-o") + 1:][0] and open(args[args.index("-o") + 1], "w", encoding="utf-8").write(self.reply)
+            Path(args[args.index("-o") + 1]).write_text(self.reply, encoding="utf-8")
         return subprocess.CompletedProcess(args, self.returncode, "", "boom")
 
 
@@ -159,3 +160,18 @@ def test_run_pick_calls_no_model_when_no_book_has_candidates(tmp_path):
     assert fake.calls == []
     assert result == {"file": "shelf-1.jpg", "picks": []}
     assert json.loads((photo / "lookup" / "picks.json").read_text(encoding="utf-8")) == result
+
+
+def test_run_pick_runs_codex_once_in_the_lookup_directory_with_the_prompt_on_stdin(tmp_path):
+    photo = photo_dir_with_lookup(tmp_path)
+    merged, candidates = merged_and_candidates()
+    lookup = str(photo / "lookup")
+    fake = FakeCodex(reply=answer({"item": 0, "verdict": "none", "candidate_id": None, "reason": "-"}))
+    run_pick(photo, run=fake, timeout=42)
+    (args, kwargs), = fake.calls
+    assert args == ["codex", "exec", "--ignore-user-config", "-m", "gpt-6.1-sol",
+                    "-c", 'model_reasoning_effort="low"', "-s", "read-only", "--skip-git-repo-check",
+                    "--ephemeral", "-C", lookup, "-o", lookup + "/picks.raw.txt", "-"]
+    assert kwargs["cwd"] == lookup
+    assert kwargs["input"] == build_prompt(merged, candidates)
+    assert kwargs["timeout"] == 42
