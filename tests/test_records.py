@@ -225,3 +225,18 @@ def test_records_json_is_a_list_of_typed_objects_with_every_column(tmp_path):
     assert loaded[0]["needs_review"] is True
     assert loaded[0]["candidate_count"] == 0 and isinstance(loaded[0]["candidate_count"], int)
     assert loaded[0]["title"] == "Zelený drak"
+
+
+def test_an_age_note_with_an_unrelated_second_number_gives_no_upper_age():
+    notes = {"Pro děti od 3 let, 2. vydání": ("3", ""), "Pro děti 5-8 let": ("5", "8"),
+             "Ages 6 – 9": ("6", "9"), "Pro děti od 3 let": ("3", ""), "Pro všechny": ("", "")}
+    for note, expected in notes.items():
+        candidates = candidates_of(cand("nkcr:cnb001", "Zelený drak", age_note=note))
+        (record,) = build_records(merged_of([agreed()]), candidates, picks_of("match", "nkcr:cnb001"))
+        assert (record["age_from"], record["age_to"]) == expected, note
+
+
+def test_an_unreadable_record_keeps_the_language_of_the_read():
+    unreadable = [reading("a-sol", 9, "", language="ja", readable="no")]
+    records = build_records(merged_of([agreed()], unreadable))
+    assert records[1]["language"] == "ja"
