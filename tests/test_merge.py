@@ -224,3 +224,44 @@ def test_match_key_ignores_trademark_and_copyright_signs():
 def test_reads_that_differ_only_by_a_trademark_sign_agree():
     item = only_item("Blue Kite™ Stories", "Blue Kite Stories")
     assert (item["status"], item["reason"], item["exact"]) == ("accepted", "agreed", False)
+
+
+def test_reads_that_divide_the_same_words_differently_form_one_split_pair_for_review():
+    a = book(1, "Okno do světa Zvířata", other_text="Edice Lupa 1")
+    b = book(1, "Zvířata", other_text="Edice Lupa Okno do světa 1")
+
+    merged = merge_reads(read("a-sol", [a]), read("b-spark", [b]))
+
+    assert merged["items"] == [{
+        "status": "review", "reason": "split", "title": "Okno do světa Zvířata", "language": "cs",
+        "exact": False, "readings": [reading("a-sol", a), reading("b-spark", b)]}]
+
+
+def test_a_split_pair_needs_every_title_word_of_each_read_in_the_other():
+    a = book(1, "Okno do světa Zvířata")
+    b = book(1, "Dinosauři", other_text="Okno do světa")  # "Zvířata" is nowhere in the second read
+
+    merged = merge_reads(read("a-sol", [a]), read("b-spark", [b]))
+
+    assert [(i["reason"], len(i["readings"])) for i in merged["items"]] == [("solo", 1), ("solo", 1)]
+
+
+def test_split_pairs_keep_each_volume_of_a_series_with_its_own_reading():
+    a = [book(1, "Okno do světa Zvířata"), book(2, "Okno do světa Dinosauři")]
+    b = [book(1, "Dinosauři", other_text="Okno do světa"), book(2, "Zvířata", other_text="Okno do světa")]
+
+    merged = merge_reads(read("a-sol", a), read("b-spark", b))
+
+    assert [(i["reason"], [r["title"] for r in i["readings"]]) for i in merged["items"]] == [
+        ("split", ["Okno do světa Zvířata", "Zvířata"]),
+        ("split", ["Okno do světa Dinosauři", "Dinosauři"]),
+    ]
+
+
+def test_a_split_pair_with_a_partly_read_title_is_reported_as_partial():
+    a = book(1, "Okno do světa Zvířata")
+    b = book(1, "Zvířata", other_text="Okno do světa", readable="partial")
+
+    merged = merge_reads(read("a-sol", [a]), read("b-spark", [b]))
+
+    assert [(i["reason"], len(i["readings"])) for i in merged["items"]] == [("partial", 2)]
