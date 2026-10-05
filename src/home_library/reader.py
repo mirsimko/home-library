@@ -146,10 +146,11 @@ def run_read(photo_dir, read_id, backend, *, run=subprocess.run, clock=time.mono
              now=lambda: datetime.now().astimezone(), timeout=600):
     """Run one read of the photo in photo_dir and return the stored read.
 
-    Raises ReadError for a read id that is not a plain name, a work directory inside a git checkout, an unknown backend, a tiles directory that
-    does not match the manifest, and any failed run: a non-zero exit, a timeout, no answer, an answer with no
-    books list, a codex event stream that is incomplete or unreadable, or a use of tools. Any attempt, failed or refused, first removes the read.json
-    and events.jsonl of an earlier run of the same read. A failed run leaves raw.txt and run.json, never read.json.
+    Raises ReadError for a read id that is not a plain name, a work directory inside a git checkout, an unknown
+    backend, a tiles directory that does not match the manifest, and any failed run: a non-zero exit, a timeout,
+    no answer, an answer with no books list, a codex event stream that is incomplete or unreadable, or a use of
+    tools. Any attempt, failed or refused, first removes the read.json and events.jsonl of an earlier run of the
+    same read. A failed run leaves raw.txt and run.json, never read.json.
     """
     if not _READ_ID.fullmatch(read_id):
         raise ReadError(f"read id {read_id!r} is not a plain name (letters, digits, dot, underscore, dash)")
