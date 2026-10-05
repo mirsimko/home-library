@@ -3,44 +3,54 @@ import json
 import re
 
 _DECODER = json.JSONDecoder()
-_BOOKS = re.compile(r'"books"\s*:\s*\[')
-_FILE = re.compile(r'"file"\s*:\s*("(?:[^"\\]|\\.)*")')
-
-
-def _whole_object(raw: str):
-    start = raw.find("{")
-    end = raw.rfind("}")
-    if start < 0 or end < start:
-        return None
-    try:
-        return json.loads(raw[start : end + 1])
-    except ValueError:
-        return None
-
-
-def _file_name(raw: str):
-    found = _FILE.search(raw)
-    if not found:
-        return "", True
-    try:
-        return json.loads(found.group(1)), True
-    except ValueError:
-        return "", False
-
-
-def _next_decodable_object(raw: str, after: int) -> int:
-    """Offset of the next '{' after `after` that starts an object that decodes, or -1."""
-    pos = raw.find("{", after)
-    while pos >= 0:
-        try:
-            _DECODER.raw_decode(raw, pos)
-            return pos
-        except ValueError:
-            pos = raw.find("{", pos + 1)
-    return -1
-
-
+_OUTER_OBJECT = re.compile(r'\{\s*"')
 _FIELDS = ["n", "where", "visible", "title", "other_text", "language", "readable", "confidence", "inferred"]
+_WHITESPACE = " \t\r\n"
+
+
+def _decode(raw: str, start: int):
+    """Decode one JSON value at `start`. Returns (value, end, None) or (None, start, reason)."""
+    try:
+        value, end = _DECODER.raw_decode(raw, start)
+        return value, end, None
+    except (ValueError, RecursionError) as exc:
+        return None, start, getattr(exc, "msg", None) or str(exc) or type(exc).__name__
+
+
+def _skip_space(raw: str, pos: int) -> int:
+    while pos < len(raw) and raw[pos] in _WHITESPACE:
+        pos += 1
+    return pos
+
+
+def _skip_value(raw: str, pos: int, stops: str):
+    """End of the value at `pos`, found by tracking strings, escapes and nesting.
+
+    Stops at a depth-0 character in `stops`. A raw newline inside a string ends the value there, because JSON
+    forbids one inside a string; that keeps one missing quote from swallowing the lines below it.
+    Returns (end, stop_char or "").
+    """
+    depth = 0
+    in_string = False
+    while pos < len(raw):
+        ch = raw[pos]
+        if in_string:
+            if ch == "\\":
+                pos += 1
+            elif ch == '"':
+                in_string = False
+            elif ch == "\n":
+                return pos, ""
+        elif ch == '"':
+            in_string = True
+        elif depth == 0 and ch in stops:
+            return pos, ch
+        elif ch in "{[":
+            depth += 1
+        elif ch in "}]" and depth > 0:
+            depth -= 1
+        pos += 1
+    return len(raw), ""
 
 
 def _text(value) -> str:
@@ -58,42 +68,74 @@ def _normalise(entry: dict, position: int) -> dict:
     return book
 
 
-def _scan_entries(raw: str, start: int):
+def _scan_entries(raw: str, pos: int):
+    """Entries of the list whose '[' just ended at `pos`. Returns (books, errors, end, closed)."""
     books, errors = [], []
-    pos = start
     position = 0
-    closed = False
     while True:
-        while pos < len(raw) and raw[pos] in " \t\r\n,":
-            pos += 1
+        pos = _skip_space(raw, pos)
+        while pos < len(raw) and raw[pos] == ",":
+            pos = _skip_space(raw, pos + 1)
         if pos >= len(raw):
-            break
+            return books, errors, pos, False
         if raw[pos] == "]":
-            closed = True
-            break
+            return books, errors, pos + 1, True
         position += 1
-        try:
-            value, end = _DECODER.raw_decode(raw, pos)
-            if isinstance(value, dict):
-                books.append(_normalise(value, position))
-            else:
-                errors.append({"position": position, "offset": pos, "reason": "Entry is not an object",
-                               "raw": raw[pos:end]})
-            pos = end
-        except ValueError as exc:
-            nxt = _next_decodable_object(raw, pos + 1)
-            end = nxt if nxt >= 0 else len(raw)
-            errors.append({"position": position, "offset": pos, "reason": exc.msg,
-                           "raw": raw[pos:end].rstrip(" \t\r\n,")})
-            pos = end
-    return books, errors, closed
+        end, _ = _skip_value(raw, pos, ",]")
+        span = raw[pos:end].rstrip(_WHITESPACE + ",")
+        value, used, reason = _decode(span, 0)
+        if reason is None and used < len(span):
+            reason = "Extra data"
+        if reason is None and not isinstance(value, dict):
+            reason = "Entry is not an object"
+        if reason is None:
+            books.append(_normalise(value, position))
+        else:
+            errors.append({"position": position, "offset": pos, "reason": reason, "raw": span})
+        pos = end
+
+
+def _no_books(raw: str, file_name: str) -> dict:
+    error = {"position": 0, "offset": 0, "reason": 'No "books" list found', "raw": raw}
+    return {"file": file_name, "books": [], "errors": [error], "complete": False}
 
 
 def parse_read(raw: str) -> dict:
-    found = _BOOKS.search(raw)
-    if found is None:
-        error = {"position": 0, "offset": 0, "reason": 'No "books" list found', "raw": raw}
-        return {"file": _file_name(raw)[0], "books": [], "errors": [error], "complete": False}
-    books, errors, closed = _scan_entries(raw, found.end())
-    file_name, file_ok = _file_name(raw)
-    return {"file": file_name, "books": books, "errors": errors, "complete": closed and not errors and file_ok}
+    """Read the outer object member by member; decode `books` entry by entry. Never raises, never repairs."""
+    start = _OUTER_OBJECT.search(raw)
+    if start is None:
+        return _no_books(raw, "")
+    pos = start.start() + 1
+    file_name, books, errors, closed = "", None, [], False
+    complete = True
+    while True:
+        pos = _skip_space(raw, pos)
+        while pos < len(raw) and raw[pos] == ",":
+            pos = _skip_space(raw, pos + 1)
+        if pos >= len(raw):
+            complete = False
+            break
+        if raw[pos] == "}":
+            closed = True
+            break
+        key, pos, reason = _decode(raw, pos)
+        pos = _skip_space(raw, pos)
+        if reason is not None or not isinstance(key, str) or raw[pos:pos + 1] != ":":
+            complete = False
+            break
+        pos = _skip_space(raw, pos + 1)
+        if key == "books" and books is None and raw[pos:pos + 1] == "[":
+            books, errors, pos, list_closed = _scan_entries(raw, pos + 1)
+            complete = complete and list_closed
+            continue
+        end, _ = _skip_value(raw, pos, ",}")
+        if key == "file":
+            value, _, reason = _decode(raw[pos:end].rstrip(_WHITESPACE), 0)
+            if reason is None and isinstance(value, str):
+                file_name = value
+            else:
+                complete = False
+        pos = end
+    if books is None:
+        return _no_books(raw, file_name)
+    return {"file": file_name, "books": books, "errors": errors, "complete": complete and closed and not errors}
