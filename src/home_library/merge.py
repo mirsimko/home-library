@@ -59,10 +59,15 @@ def _pair_similar(keys_a: dict, keys_b: dict) -> dict:
     return pairs
 
 
+def _word_keys(text: str) -> list:
+    return [key for key in map(match_key, text.split()) if key]
+
+
 def _words_found(entry: dict, other: dict) -> bool:
-    words = [key for key in map(match_key, entry["title"].split()) if key]
-    everything = match_key(other["title"] + " " + other["other_text"])
-    return bool(words) and all(word in everything for word in words)
+    """Whether every word of the entry's title is, as a whole word, in the other entry's title or other text."""
+    words = _word_keys(entry["title"])
+    available = set(_word_keys(other["title"] + " " + other["other_text"]))
+    return bool(words) and all(word in available for word in words)
 
 
 def _pair_same_words(books_a: dict, books_b: dict) -> dict:
@@ -79,6 +84,8 @@ def _pair_same_words(books_a: dict, books_b: dict) -> dict:
 
 def merge_reads(read_a: dict, read_b: dict) -> dict:
     id_a, id_b = read_a["read_id"], read_b["read_id"]
+    if id_a == id_b:
+        raise ValueError(f"cannot merge read {id_a!r} with itself: one read agreeing with itself is not two reads")
     file_a, file_b = read_a["file"], read_b["file"]
     if file_a and file_b and file_a != file_b:
         raise ValueError(f"reads are of different photos: {file_a!r} and {file_b!r}")
@@ -126,4 +133,5 @@ def merge_reads(read_a: dict, read_b: dict) -> dict:
     parse_errors = [{"read_id": read_id, **error}
                     for read_id, read in ((id_a, read_a), (id_b, read_b)) for error in read["errors"]]
     return {"file": file_a or file_b, "reads": [id_a, id_b], "items": items,
-            "unreadable": unreadable, "parse_errors": parse_errors}
+            "unreadable": unreadable, "parse_errors": parse_errors,
+            "incomplete": [read_id for read_id, read in ((id_a, read_a), (id_b, read_b)) if not read["complete"]]}

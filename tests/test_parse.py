@@ -224,3 +224,55 @@ def test_numbers_and_nesting_that_the_json_decoder_refuses_become_errors_not_exc
     assert [b["title"] for b in read["books"]] == ["A", "C"]
     assert [e["position"] for e in read["errors"]] == [2]
     assert read["complete"] is False
+
+
+def test_an_empty_element_between_two_entries_is_reported_and_counts_towards_the_position():
+    raw = '{"books":[{"title":"The Blue Kite"},,{"title":"Zelený drak"}]}'
+    read = parse_read(raw)
+    assert [b["title"] for b in read["books"]] == ["The Blue Kite", "Zelený drak"]
+    assert [b["n"] for b in read["books"]] == [1, 3]
+    assert read["errors"] == [{"position": 2, "offset": 36, "reason": "Empty entry", "raw": ""}]
+    assert read["complete"] is False
+
+
+def test_a_comma_straight_after_the_opening_bracket_is_an_empty_first_element():
+    read = parse_read('{"books":[,{"title":"A"}]}')
+    assert [(b["title"], b["n"]) for b in read["books"]] == [("A", 2)]
+    assert read["errors"] == [{"position": 1, "offset": 10, "reason": "Empty entry", "raw": ""}]
+    assert read["complete"] is False
+
+
+def test_a_single_trailing_comma_before_the_closing_bracket_is_an_empty_last_element():
+    read = parse_read('{"books":[{"title":"A"},]}')
+    assert [b["title"] for b in read["books"]] == ["A"]
+    assert read["errors"] == [{"position": 2, "offset": 24, "reason": "Empty entry", "raw": ""}]
+    assert read["complete"] is False
+
+
+def test_every_empty_element_is_reported_and_spaces_between_the_commas_do_not_hide_one():
+    read = parse_read('{"books":[{"title":"A"}, ,\n,{"title":"B"}]}')
+    assert [(b["title"], b["n"]) for b in read["books"]] == [("A", 1), ("B", 4)]
+    assert [(e["position"], e["raw"]) for e in read["errors"]] == [(2, ""), (3, "")]
+    assert read["complete"] is False
+
+
+def test_an_empty_list_and_a_list_cut_off_after_a_comma_have_no_empty_element():
+    for raw in ('{"books":[]}', '{"books":[ ]}'):
+        read = parse_read(raw)
+        assert (read["books"], read["errors"], read["complete"]) == ([], [], True)
+    cut = parse_read('{"books":[{"title":"A"},')
+    assert cut["errors"] == []
+    assert cut["complete"] is False
+
+
+def test_deeply_nested_titles_never_make_parse_read_raise_and_every_entry_is_accounted_for():
+    # On Python 3.10 and 3.11 json.dumps hits the recursion limit on nesting that the decoder still accepts; where
+    # that window lies depends on how deep the caller already is, so every depth near the limit is tried.
+    for depth in range(900, 1000, 4):
+        nested = "[" * depth + "]" * depth
+        read = parse_read('{"books":[{"title":' + nested + '},{"title":"B"}]}')
+        assert len(read["books"]) + len(read["errors"]) == 2, depth
+        assert (read["books"][-1]["title"], read["books"][-1]["n"]) == ("B", 2), depth
+        assert read["complete"] is (read["errors"] == []), depth
+        for error in read["errors"]:
+            assert (error["position"], error["raw"]) == (1, '{"title":' + nested + "}"), depth

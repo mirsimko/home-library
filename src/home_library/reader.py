@@ -1,5 +1,7 @@
 """Stage 2: one model session over the tiles of one photo (see docs/pipeline.md)."""
+import hashlib
 import json
+import re
 import subprocess
 import time
 from datetime import datetime
@@ -14,6 +16,8 @@ from home_library.workspace import refuse_inside_checkout
 class ReadError(Exception):
     """A read failed; raw.txt and run.json, where there were any, are left for inspection."""
 
+
+_READ_ID = re.compile(r"[A-Za-z0-9][A-Za-z0-9._-]*")
 
 BACKENDS = {"codex-exec": "gpt-6.1-sol", "pi": "opencode-go/muse-spark-1.3-contributor"}
 
@@ -67,7 +71,8 @@ def _tool_calls(events):
     for event in events:
         item = event.get("item")
         if isinstance(item, dict) and item.get("type") not in ("agent_message", "reasoning"):
-            seen.setdefault(item.get("id"), item.get("type"))
+            kind = item.get("type")
+            seen.setdefault(item.get("id"), kind if isinstance(kind, str) else "unknown")
     return list(seen.values())
 
 
@@ -83,15 +88,33 @@ def _write_json(path, value):
 
 
 def _events(stdout):
-    events = []
+    """The JSON objects of the stream, and how many non-blank lines were not one."""
+    events, unreadable = [], 0
     for line in stdout.splitlines():
+        if not line.strip():
+            continue
         try:
             event = json.loads(line)
-        except ValueError:
-            continue
+        except (ValueError, RecursionError):
+            event = None
         if isinstance(event, dict):
             events.append(event)
-    return events
+        else:
+            unreadable += 1
+    return events, unreadable
+
+
+def _stream_problem(events, unreadable):
+    """Why the stream cannot vouch that the model used no tools, or None."""
+    types = {event.get("type") for event in events}
+    if unreadable:
+        return f"{unreadable} line(s) of the event stream are not a JSON object, so tool use cannot be ruled out"
+    for kind in ("turn.failed", "error"):
+        if kind in types:
+            return f"the event stream holds a {kind!r} event"
+    if "turn.completed" not in types:
+        return "the event stream has no turn.completed event, so it is incomplete"
+    return None
 
 
 def _check_tiles(tiles_dir, files):
@@ -123,10 +146,14 @@ def run_read(photo_dir, read_id, backend, *, run=subprocess.run, clock=time.mono
              now=lambda: datetime.now().astimezone(), timeout=600):
     """Run one read of the photo in photo_dir and return the stored read.
 
-    Raises ReadError for a work directory inside a git checkout, an unknown backend, a tiles directory that
-    does not match the manifest, and any failed run. Any attempt, failed or refused, first removes the read.json
-    and events.jsonl of an earlier run of the same read. A failed run leaves raw.txt and run.json, never read.json.
+    Raises ReadError for a read id that is not a plain name, a work directory inside a git checkout, an unknown
+    backend, a tiles directory that does not match the manifest, and any failed run: a non-zero exit, a timeout,
+    no answer, an answer with no books list, a codex event stream that is incomplete or unreadable, or a use of
+    tools. Any attempt, failed or refused, first removes the read.json and events.jsonl of an earlier run of the
+    same read. A failed run leaves raw.txt and run.json, never read.json.
     """
+    if not _READ_ID.fullmatch(read_id):
+        raise ReadError(f"read id {read_id!r} is not a plain name (letters, digits, dot, underscore, dash)")
     try:
         photo_dir = refuse_inside_checkout(photo_dir)
     except ValueError as error:
@@ -136,7 +163,8 @@ def run_read(photo_dir, read_id, backend, *, run=subprocess.run, clock=time.mono
     (read_dir / "events.jsonl").unlink(missing_ok=True)
     if backend not in BACKENDS:
         raise ReadError(f"unknown backend {backend!r}; choose one of {', '.join(BACKENDS)}")
-    manifest = json.loads((photo_dir / "tiles.json").read_text(encoding="utf-8"))
+    manifest_bytes = (photo_dir / "tiles.json").read_bytes()
+    manifest = json.loads(manifest_bytes)
     tiles_dir = photo_dir / "tiles"
     files = [tile["file"] for tile in manifest["tiles"]]
     _check_tiles(tiles_dir, files)
@@ -155,11 +183,11 @@ def run_read(photo_dir, read_id, backend, *, run=subprocess.run, clock=time.mono
     result, failure = _execute(command, stdin, tiles_dir, run, timeout)
     seconds = clock() - began
     if backend == "codex-exec":
-        events = _events(result.stdout)
+        events, unreadable = _events(result.stdout)
         answer, tool_calls, usage = _answer(events), _tool_calls(events), _usage(events)
         (read_dir / "events.jsonl").write_text(result.stdout, encoding="utf-8")
     else:
-        answer, tool_calls, usage = result.stdout, [], None
+        answer, tool_calls, usage, unreadable = result.stdout, [], None, 0
     (read_dir / "raw.txt").write_text(answer, encoding="utf-8")
     _write_json(read_dir / "run.json", {
         "read_id": read_id, "backend": backend, "model": BACKENDS[backend], "command": logged,
@@ -170,12 +198,17 @@ def run_read(photo_dir, read_id, backend, *, run=subprocess.run, clock=time.mono
         failure = f"{command[0]} exited with return code {result.returncode}: {said}"
     if failure is None and not answer.strip():
         failure = f"empty answer from {command[0]}"
+    if failure is None and backend == "codex-exec":
+        failure = _stream_problem(events, unreadable)
     if failure is None and tool_calls:
         failure = f"the read used tools ({', '.join(tool_calls)}) and is not blind"
     if failure is not None:
         raise ReadError(failure)
     read = parse_read(answer)
+    if any(error["position"] == 0 for error in read["errors"]):  # position 0: there is no books list at all
+        raise ReadError(f"the answer from {command[0]} has no books list")
     read["read_id"] = read_id
     read["file"] = manifest["photo"]  # the model only echoes the name; the manifest knows it
+    read["photo_sha256"] = hashlib.sha256(manifest_bytes).hexdigest()
     _write_json(read_dir / "read.json", read)
     return read

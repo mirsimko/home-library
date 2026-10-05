@@ -265,3 +265,41 @@ def test_a_split_pair_with_a_partly_read_title_is_reported_as_partial():
     merged = merge_reads(read("a-sol", [a]), read("b-spark", [b]))
 
     assert [(i["reason"], len(i["readings"])) for i in merged["items"]] == [("partial", 2)]
+
+
+def test_a_read_cannot_be_merged_with_itself():
+    same = read("a-sol", [book(1, "Zelený drak")])
+
+    with pytest.raises(ValueError, match="a-sol"):
+        merge_reads(same, read("a-sol", [book(1, "Zelený drak")]))
+
+
+def test_a_title_word_found_only_inside_a_longer_word_does_not_pair_the_entries():
+    a = book(1, "Cat", other_text="Wildcat Press", language="en")
+    b = book(1, "Wildcat", language="en")
+
+    merged = merge_reads(read("a-sol", [a]), read("b-spark", [b]))
+
+    assert [(i["reason"], len(i["readings"])) for i in merged["items"]] == [("solo", 1), ("solo", 1)]
+
+
+def test_a_title_word_found_only_across_a_word_boundary_does_not_pair_the_entries():
+    # "Series 12" and "Series 1" with other text "2" are near titles (0.93) and pair as such; longer titles do not.
+    a = book(1, "Okno do světa 12")
+    b = book(1, "Okno 1", other_text="2 do světa")
+
+    merged = merge_reads(read("a-sol", [a]), read("b-spark", [b]))
+
+    assert [(i["reason"], len(i["readings"])) for i in merged["items"]] == [("solo", 1), ("solo", 1)]
+
+
+def test_the_merge_lists_the_reads_that_were_incomplete_in_the_order_of_the_two_reads():
+    complete = merge_reads(read("a-sol", []), read("b-spark", []))
+    first = merge_reads(read("a-sol", [], complete=False), read("b-spark", []))
+    second = merge_reads(read("a-sol", []), read("b-spark", [], complete=False))
+    both = merge_reads(read("a-sol", [], complete=False), read("b-spark", [], complete=False))
+
+    assert complete["incomplete"] == []
+    assert first["incomplete"] == ["a-sol"]
+    assert second["incomplete"] == ["b-spark"]
+    assert both["incomplete"] == ["a-sol", "b-spark"]

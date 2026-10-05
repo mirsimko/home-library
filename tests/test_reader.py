@@ -1,3 +1,4 @@
+import hashlib
 import json
 import shutil
 import subprocess
@@ -93,7 +94,7 @@ def test_codex_answer_comes_from_the_last_agent_message_and_the_stream_is_kept(t
     work, _ = cut_small_photo(tmp_path)
     early = {"type": "item.completed", "item": {"id": "item_1", "type": "agent_message", "text": "Looking now."}}
     reasoning = {"type": "item.completed", "item": {"id": "item_0", "type": "reasoning", "text": "hmm"}}
-    stdout = "not json at all\n" + codex_stream(extra=[reasoning, early])
+    stdout = "\n" + codex_stream(extra=[reasoning, early]) + "  \n"  # blank lines are not events
     run = FakeRun(stdout=stdout)
 
     run_read(work, "a-sol", "codex-exec", run=run)
@@ -159,15 +160,20 @@ def test_run_json_records_how_the_codex_read_was_run(tmp_path):
     }
 
 
-def test_usage_is_null_when_the_stream_has_no_turn_completed(tmp_path):
+def test_a_codex_stream_without_turn_completed_fails_the_read_and_leaves_usage_null(tmp_path):
     work, _ = cut_small_photo(tmp_path)
     message = {"type": "item.completed", "item": {"id": "item_0", "type": "agent_message", "text": ANSWER}}
-    run = FakeRun(stdout=json.dumps(message) + "\n")
+    stdout = json.dumps(message) + "\n"
+    run = FakeRun(stdout=stdout)
 
-    run_read(work, "a-sol", "codex-exec", run=run)
+    with pytest.raises(ReadError, match="turn.completed"):
+        run_read(work, "a-sol", "codex-exec", run=run)
 
-    info = json.loads((work / "reads" / "a-sol" / "run.json").read_text(encoding="utf-8"))
-    assert info["usage"] is None
+    read_dir = read_dir_of(work, "a-sol")
+    assert not (read_dir / "read.json").exists()
+    assert (read_dir / "raw.txt").read_text(encoding="utf-8") == ANSWER
+    assert (read_dir / "events.jsonl").read_text(encoding="utf-8") == stdout
+    assert json.loads((read_dir / "run.json").read_text(encoding="utf-8"))["usage"] is None
 
 
 def test_a_codex_read_that_ran_a_command_is_rejected_and_leaves_no_read_json(tmp_path):
@@ -527,3 +533,112 @@ def test_a_read_is_stored_under_the_photos_own_name_whatever_the_model_wrote(tmp
     read = run_read(work, "b-spark", "pi", run=FakeRun(stdout=wrong_name))
 
     assert read["file"] == manifest["photo"] != "another-photo.jpg"
+
+
+@pytest.mark.parametrize("read_id", ["ELSEWHERE", "../escape", "a/b", "a..b/c", "..", ".hidden", "-x", "", "a b"])
+def test_a_read_id_that_is_not_a_plain_name_is_refused_before_anything_is_written(tmp_path, read_id):
+    work, _ = cut_small_photo(tmp_path)
+    if read_id == "ELSEWHERE":
+        read_id = str(tmp_path / "place")  # an absolute path replaces the reads directory when joined
+    run_read(work, "a-sol", "pi", run=FakeRun(stdout=ANSWER))
+    run = FakeRun(stdout=ANSWER)
+
+    with pytest.raises(ReadError, match="read id"):
+        run_read(work, read_id, "pi", run=run)
+
+    assert run.calls == []
+    assert (read_dir_of(work, "a-sol") / "read.json").exists()
+    assert sorted(path.name for path in (work / "reads").iterdir()) == ["a-sol"]
+    assert not (tmp_path / "place").exists()
+    assert not (work / "escape").exists()
+
+
+def test_a_read_id_with_dots_and_dashes_inside_a_plain_name_is_accepted(tmp_path):
+    work, _ = cut_small_photo(tmp_path)
+
+    read = run_read(work, "b-spark_2.v1", "pi", run=FakeRun(stdout=ANSWER))
+
+    assert read["read_id"] == "b-spark_2.v1"
+
+
+def test_read_json_records_the_hash_of_the_tiles_manifest_the_read_was_made_from(tmp_path):
+    work, _ = cut_small_photo(tmp_path)
+    manifest_bytes = (work / "tiles.json").read_bytes()
+
+    read = run_read(work, "b-spark", "pi", run=FakeRun(stdout=ANSWER))
+
+    expected = hashlib.sha256(manifest_bytes).hexdigest()
+    assert len(expected) == 64
+    assert read["photo_sha256"] == expected
+    stored = json.loads((read_dir_of(work, "b-spark") / "read.json").read_text(encoding="utf-8"))
+    assert stored["photo_sha256"] == expected
+
+
+@pytest.mark.parametrize("answer", [
+    "Error: 429 rate limit exceeded, try again later.",
+    '{"file": "shelf-1.jpg", "result": []}',
+])
+def test_an_answer_with_no_books_list_is_a_failed_read_that_keeps_raw_and_run_json(tmp_path, answer):
+    work, _ = cut_small_photo(tmp_path)
+    run = FakeRun(stdout=answer)
+
+    with pytest.raises(ReadError, match="no books list"):
+        run_read(work, "b-spark", "pi", run=run)
+
+    read_dir = read_dir_of(work, "b-spark")
+    assert not (read_dir / "read.json").exists()
+    assert (read_dir / "raw.txt").read_text(encoding="utf-8") == answer
+    assert json.loads((read_dir / "run.json").read_text(encoding="utf-8"))["returncode"] == 0
+
+
+def test_an_answer_with_an_empty_books_list_is_a_valid_read_of_an_empty_shelf(tmp_path):
+    work, _ = cut_small_photo(tmp_path)
+
+    read = run_read(work, "b-spark", "pi", run=FakeRun(stdout='{"file": "shelf-1.jpg", "books": []}'))
+
+    assert read["books"] == []
+    assert read["complete"] is True
+    assert (read_dir_of(work, "b-spark") / "read.json").exists()
+
+
+@pytest.mark.parametrize("line", ["not json at all", '{"type": "item.started", "item": {"id": "item_1", "ty', "[1, 2]", "42"])
+def test_a_line_of_the_codex_stream_that_is_not_a_json_object_fails_the_read(tmp_path, line):
+    work, _ = cut_small_photo(tmp_path)
+    stdout = codex_stream().replace("\n", "\n" + line + "\n", 1)
+    run = FakeRun(stdout=stdout)
+
+    with pytest.raises(ReadError, match="not a JSON object"):
+        run_read(work, "a-sol", "codex-exec", run=run)
+
+    read_dir = read_dir_of(work, "a-sol")
+    assert not (read_dir / "read.json").exists()
+    assert (read_dir / "raw.txt").read_text(encoding="utf-8") == ANSWER
+    assert (read_dir / "events.jsonl").read_text(encoding="utf-8") == stdout
+    assert (read_dir / "run.json").exists()
+
+
+@pytest.mark.parametrize("kind", ["turn.failed", "error"])
+def test_a_codex_stream_with_a_failure_event_fails_the_read_even_after_an_answer(tmp_path, kind):
+    work, _ = cut_small_photo(tmp_path)
+    run = FakeRun(stdout=codex_stream(extra=[{"type": kind, "message": "boom"}]))
+
+    with pytest.raises(ReadError, match=f"'{kind}' event"):
+        run_read(work, "a-sol", "codex-exec", run=run)
+
+    read_dir = read_dir_of(work, "a-sol")
+    assert not (read_dir / "read.json").exists()
+    assert (read_dir / "raw.txt").read_text(encoding="utf-8") == ANSWER
+    assert (read_dir / "events.jsonl").exists()
+    assert (read_dir / "run.json").exists()
+
+
+def test_an_item_without_a_type_counts_as_a_tool_call_named_unknown(tmp_path):
+    work, _ = cut_small_photo(tmp_path)
+    run = FakeRun(stdout=codex_stream(extra=[{"type": "item.started", "item": {"id": "item_1"}}]))
+
+    with pytest.raises(ReadError, match=r"used tools \(unknown\)"):
+        run_read(work, "a-sol", "codex-exec", run=run)
+
+    info = json.loads((read_dir_of(work, "a-sol") / "run.json").read_text(encoding="utf-8"))
+    assert info["tool_calls"] == ["unknown"]
+    assert not (read_dir_of(work, "a-sol") / "read.json").exists()
