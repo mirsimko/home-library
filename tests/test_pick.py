@@ -114,3 +114,14 @@ def test_parse_picks_drops_candidate_id_unless_the_verdict_is_match():
     raw = answer({"item": 0, "verdict": "ambiguous", "candidate_id": "nkcr:cnb001", "reason": "Editions."},
                  {"item": 2, "verdict": "none", "candidate_id": "ndl:000111", "reason": "No."})
     assert [p["candidate_id"] for p in parse_picks(raw, candidates)["picks"]] == [None, None]
+
+
+def test_parse_picks_gives_none_for_every_book_when_the_answer_cannot_be_read():
+    _, candidates = merged_and_candidates()
+    for raw in ["I cannot do this.", "", '{"picks": "none"}', '{"picks": [{"item": 0, "verdi', "[1, 2]",
+                '{"picks": [{"item": [1], "verdict": "match"}]}']:
+        result = parse_picks(raw, candidates)
+        assert result["file"] == "shelf-1.jpg"
+        assert [(p["item"], p["verdict"], p["candidate_id"]) for p in result["picks"]] == [
+            (0, "none", None), (2, "none", None)]
+        assert all(isinstance(p["reason"], str) and p["reason"] for p in result["picks"])
