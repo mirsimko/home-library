@@ -167,8 +167,8 @@ def test_notes_give_the_reason_of_an_ambiguous_match_and_the_audience_of_a_match
     candidates = candidates_of(cand("nkcr:cnb001", "Zelený drak", audience="Děti", age_note="Pro děti od 3 let"))
     (matched,) = build_records(merged_of([agreed()]), candidates, picks_of("match", "nkcr:cnb001"))
     assert matched["notes"] == "Catalogue audience: Děti. Catalogue age note: Pro děti od 3 let."
-    unmatched = build_records(merged_of([agreed()]), candidates, picks_of("none"))
-    assert unmatched[0]["notes"] == ""
+    unmatched = build_records(merged_of([agreed()]), candidates, picks_of("none", reason="Another publisher."))
+    assert unmatched[0]["notes"] == "No catalogue match: Another publisher."
 
 
 def test_location_is_passed_through_to_every_record():
@@ -273,3 +273,73 @@ def test_write_records_refuses_a_directory_inside_a_git_checkout_and_writes_noth
 
 def test_columns_are_the_contracts_columns_in_order():
     assert COLUMNS == CONTRACT_COLUMNS
+
+
+# --- nothing is lost silently: what went wrong on the way reaches the sheet ---
+
+def test_an_entry_that_could_not_be_parsed_becomes_a_row_with_its_raw_text():
+    merged = merged_of([agreed()])
+    merged["parse_errors"] = [{"read_id": "a-sol", "position": 3, "offset": 812,
+                               "reason": "Expecting ',' delimiter", "raw": '{"n": 3, "title": "Modrý pes" "where"'}]
+    _, lost = build_records(merged, location="Hall")
+    assert list(lost) == CONTRACT_COLUMNS
+    assert (lost["title"], lost["read_status"], lost["read_ids"], lost["photo"], lost["location"]) == (
+        "", "unparsed", "a-sol", "shelf-1.jpg", "Hall")
+    assert lost["other_text"] == '{"n": 3, "title": "Modrý pes" "where"'
+    assert lost["notes"] == ("One entry of a-sol's answer could not be read as data (Expecting ',' delimiter). "
+                             "Its text is in other_text.")
+
+
+def test_a_read_that_was_cut_off_becomes_a_row_saying_books_may_be_missing():
+    merged = merged_of([agreed()])
+    merged["incomplete"] = ["b-spark"]
+    _, warning = build_records(merged)
+    assert (warning["title"], warning["read_status"], warning["read_ids"]) == ("", "incomplete", "b-spark")
+    assert warning["notes"] == ("The answer of b-spark was cut off or damaged. Books may be missing from this "
+                                "photo; run that read again.")
+
+
+def test_a_read_whose_only_damage_is_listed_entry_by_entry_gets_no_second_warning():
+    merged = merged_of([agreed()])
+    merged["incomplete"] = ["a-sol"]
+    merged["parse_errors"] = [{"read_id": "a-sol", "position": 3, "offset": 812, "reason": "Extra data", "raw": "x"}]
+    assert [r["read_status"] for r in build_records(merged)] == ["agreed", "unparsed"]
+
+
+def queries_of(*queries, candidates=()):
+    return {"file": "shelf-1.jpg", "books": [
+        {"item": 0, "title": "Zelený drak", "language": "cs", "queries": list(queries),
+         "candidates": list(candidates)}]}
+
+
+def test_notes_say_when_a_catalogue_could_not_be_asked():
+    failed = queries_of({"source": "nkcr", "step": "title", "status": "unavailable", "count": 0},
+                        {"source": "loc", "step": "title", "status": "error", "count": 0},
+                        {"source": "ndl", "step": "title", "status": "no_match", "count": 0})
+    (record,) = build_records(merged_of([agreed()]), failed)
+    assert record["notes"] == "Catalogue look-up failed: nkcr unavailable, loc error."
+
+
+def test_notes_say_when_no_catalogue_covers_the_language():
+    (record,) = build_records(merged_of([agreed()]), queries_of())
+    assert record["notes"] == "Not looked up: no catalogue for the language cs."
+    (not_run,) = build_records(merged_of([agreed()]))  # no look-up stage at all is not a failure
+    assert not_run["notes"] == ""
+
+
+def test_an_unreadable_entry_keeps_the_models_guess():
+    unreadable = [reading("a-sol", 9, "", readable="no", inferred="probably Zelený drak")]
+    (record,) = build_records(merged_of([], unreadable))
+    assert record["notes"] == ("Could not be read from the shelf photo; needs a cover photo. "
+                               "Guess: probably Zelený drak.")
+
+
+def test_only_a_number_of_years_counts_as_an_age():
+    notes = {"Pro děti 1. stupně ZŠ": ("", ""), "Pro 2.-5. ročník": ("", ""), "Grades K-3": ("", ""),
+             "Lexile 520L": ("", ""), "Vydáno 2019, pro čtenáře od 9 let": ("9", ""),
+             "1. vydání 2015-2016, od 5 let": ("5", ""), "Pro děti od 3 do 6 let": ("3", "6"),
+             "Ages 4-8": ("4", "8"), "Ages 4 and up": ("4", ""), "Pro děti 5–8 let": ("5", "8")}
+    for note, expected in notes.items():
+        candidates = candidates_of(cand("nkcr:cnb001", "Zelený drak", age_note=note))
+        (record,) = build_records(merged_of([agreed()]), candidates, picks_of("match", "nkcr:cnb001"))
+        assert (record["age_from"], record["age_to"]) == expected, note
