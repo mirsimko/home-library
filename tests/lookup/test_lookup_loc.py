@@ -55,3 +55,10 @@ def test_loc_search_escapes_quotes_so_a_title_cannot_change_the_query(fake_fetch
     loc.search('Say "Hi" or bath.author=x', None, fetch)
 
     assert fetch.query()["query"] == 'bath.title="Say \\"Hi\\" or bath.author=x"'
+
+
+def test_loc_with_no_hits_gives_an_empty_list(fake_fetch, fixture_bytes):
+    fetch = fake_fetch(fixture_bytes("loc_empty.xml"))
+
+    assert loc.by_isbn("9780123456786", fetch) == []
+    assert loc.search("Zelený drak", None, fetch) == []
