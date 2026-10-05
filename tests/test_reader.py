@@ -268,3 +268,13 @@ def test_an_empty_answer_is_an_error_that_keeps_raw_and_run_json(tmp_path):
     assert not (read_dir / "read.json").exists()
     assert (read_dir / "raw.txt").read_text(encoding="utf-8") == "  \n"
     assert json.loads((read_dir / "run.json").read_text(encoding="utf-8"))["returncode"] == 0
+
+
+def test_a_codex_stream_without_an_answer_is_an_error(tmp_path):
+    work, _ = cut_small_photo(tmp_path)
+    run = FakeRun(stdout='{"type": "turn.started"}\n')
+
+    with pytest.raises(ReadError, match="empty answer"):
+        run_read(work, "a-sol", "codex-exec", run=run)
+
+    assert not (read_dir_of(work, "a-sol") / "read.json").exists()
