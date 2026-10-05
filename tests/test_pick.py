@@ -43,15 +43,27 @@ def merged_and_candidates():
     return merged, candidates
 
 
-def test_prompt_lists_book_reading_and_candidates_and_skips_books_without_candidates():
+def test_prompt_lists_each_book_with_its_reading_and_candidates_and_skips_books_without_candidates():
     merged, candidates = merged_and_candidates()
     prompt = build_prompt(merged, candidates)
-    assert "Zelený drak" in prompt
-    assert "Marta Novotná" in prompt and "Albatros" in prompt
-    assert "nkcr:cnb001" in prompt and "nkcr:cnb002" in prompt
-    assert "9788000000001" in prompt and "Malá knihovna" in prompt
-    assert "ndl:000111" in prompt and "アカイ フウセン" in prompt
     assert "The Blue Kite" not in prompt
+    head, rest = prompt.split("Book 0\n", 1)
+    book0, book2 = rest.split("Book 2\n", 1)
+    assert "Book 1" not in prompt
+    assert "Title as read: Zelený drak" in book0 and "Language: cs" in book0
+    assert "Marta Novotná" in book0 and "Albatros" in book0
+    first, second = book0.split("Candidate nkcr:cnb002")
+    for text in ["Candidate nkcr:cnb001", "authors: Novotná, Marta", "publisher: Albatros", "year: 2001",
+                 "isbn: 9788000000001", "series: Malá knihovna"]:
+        assert text in first
+    assert "title: Zelený drak a jiné pohádky" in second
+    for field in ["authors:", "publisher:", "year:", "isbn:", "series:", "title_reading:"]:
+        assert field not in second
+    assert "Title as read: あかいふうせん" in book2 and "Language: ja" in book2
+    assert "Candidate ndl:000111" in book2 and "title_reading: アカイ フウセン" in book2
+    assert "Albatros" not in book2 and "nkcr" not in book2
+    for field in ["authors:", "publisher:", "year:", "isbn:", "series:"]:
+        assert field not in book2
 
 
 def answer(*picks):
