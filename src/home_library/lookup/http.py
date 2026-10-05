@@ -7,7 +7,7 @@ import urllib.request
 from pathlib import Path
 from urllib.parse import urlparse
 
-from home_library.lookup.errors import RateLimited
+from home_library.lookup.errors import FetchError, RateLimited
 
 USER_AGENT = "home-library/0.1 (+https://github.com/mirsimko/home-library)"
 TIMEOUT_SECONDS = 30
@@ -34,19 +34,29 @@ class Fetcher:
             if wait > 0:
                 self.sleep(wait)
 
+    def _pause_then_retry(self, url, host, retry, error, failure):
+        if not retry:
+            raise failure from error
+        self.last_request[host] = self.clock()
+        self.sleep(RETRY_PAUSE.get(host, DEFAULT_RETRY_PAUSE))
+        return self._get(url, host, retry=False)
+
     def _get(self, url, host, retry):
         self._wait_for_turn(host)
         request = urllib.request.Request(url, headers={"User-Agent": USER_AGENT})
         try:
             return self.opener(request, TIMEOUT_SECONDS).read()
         except urllib.error.HTTPError as error:
-            if error.code != 429:
-                raise
-            if not retry:
-                raise RateLimited("%s answered HTTP 429 twice" % host) from error
-            self.last_request[host] = self.clock()
-            self.sleep(RETRY_PAUSE.get(host, DEFAULT_RETRY_PAUSE))
-            return self._get(url, host, retry=False)
+            if error.code == 429:
+                failure = RateLimited("%s answered HTTP 429 twice" % host)
+                return self._pause_then_retry(url, host, retry, error, failure)
+            raise FetchError("%s answered HTTP %d" % (host, error.code)) from error
+        except (TimeoutError, urllib.error.URLError, OSError) as error:
+            reason = getattr(error, "reason", error)
+            if isinstance(reason, TimeoutError):
+                failure = FetchError("%s timed out twice" % host)
+                return self._pause_then_retry(url, host, retry, error, failure)
+            raise FetchError("%s could not be reached: %s" % (host, reason)) from error
         finally:
             self.last_request[host] = self.clock()
 

@@ -11,3 +11,7 @@ class RateLimited(SourceError):
 
 class Unavailable(SourceError):
     """The source cannot be used on this machine, for example yaz-client is not installed."""
+
+
+class FetchError(SourceError):
+    """An HTTP request failed for a reason other than rate limiting."""
