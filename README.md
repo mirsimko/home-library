@@ -14,6 +14,7 @@ Planning. Nothing is built yet. As of 2026-10-05 the requirements are settled an
 - [CONTEXT.md](CONTEXT.md): the project's vocabulary.
 - [docs/research/existing-home-library-tools.md](docs/research/existing-home-library-tools.md): which existing tools could hold the catalog, and what would still have to be built around each.
 - [docs/research/book-metadata-sources.md](docs/research/book-metadata-sources.md): which free sources return metadata for children's books in the three languages, tested with real calls.
+- [docs/research/shelf-photo-reading-test.md](docs/research/shelf-photo-reading-test.md): how well five vision models read titles from real shelf photos, as whole photos and as tiles.
 
 ## How these documents were made
 

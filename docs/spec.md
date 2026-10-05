@@ -116,10 +116,24 @@ These are not yet confirmed by the family.
 
 **Proposed:** an agent harness runs the vision model over new photos (R3, R6). For each book it sees, it writes the title, the author, the language and how sure it is.
 
+**Tested on 2026-10-05**, on four shelf photos and against a provisional answer key (see the [shelf photo reading test](research/shelf-photo-reading-test.md)):
+
+- Claude Opus 5.5, Claude Sonnet 5.5 and GPT-6.1 Sol each read every clearly printed spine, in all three languages.
+- Cutting a photo into full-resolution tiles recovered most small-print titles.
+- No model read small print on upside-down spines.
+- GPT-6 Luna and Space Bunny missed a quarter to a third of the clear titles and gave wrong titles as certain.
+- Many books have no spine text, so a shelf photo cannot be the only way in.
+
+**Proposed**, following that test:
+
+- Shelf photos are read as full-resolution tiles, each offered in both orientations. The second orientation is untested.
+- The reader is Claude Sonnet 5.5 or GPT-6.1 Sol, both on existing subscriptions. Luna and Space Bunny are ruled out for unattended reading.
+- The model may not complete a title from memory. A partial reading or a guess goes into its own field and marks the record for review.
+
 **Open:**
 
-- The mix of the three. It stays a proposal until it has been tested on the family's own photos (section 3).
-- Which model. The family named GPT-6 Luna, and Space Bunny, which it reports as free over API on 2026-10-05. Whether each accepts images is not yet checked.
+- The mix of the three ways in. Cover photos and barcode photos are not tested yet (section 3).
+- Which of the two readers.
 
 ### 2.5 Matching a photo to a catalogue record
 
@@ -177,8 +191,8 @@ No step involves moving files by hand.
 
 ## 3. What has to happen before the design is final
 
-1. **Sample photos.** The family photographs a few shelves, an open box, a stack of thin books, some covers and some barcodes, and times one whole shelf taken cover by cover.
-2. **Photo test.** Two or three vision models read those photos. The result fixes the capture mix and the model (2.4), and shows how much correction to expect.
+1. **Sample photos.** The family photographs a few shelves, an open box, a stack of thin books, some covers and some barcodes, and times one whole shelf taken cover by cover. Four shelf photos exist as of 2026-10-05; the rest are still to come.
+2. **Photo test.** Vision models read those photos. The result fixes the capture mix and the model (2.4), and shows how much correction to expect. The shelf-photo part is done; covers, barcodes, a box, and tiles in both orientations remain. A person also has to confirm the answer key.
 3. **Catalog decisions.** The family settles the open points in 2.1 to 2.3.
 4. **Store test.** About twenty real records go into Google Sheets and into Grist, and are used on a phone, the iPad and the laptop. The test covers cover display, ease of correction, Japanese and Czech sorting and search, and reading and writing by a harness.
 5. **Store decision**, then a rough version of the flow in 2.7 tried on one real shelf.
@@ -189,3 +203,4 @@ After that come the build and the cataloging of the whole collection.
 
 - [Existing home library tools](research/existing-home-library-tools.md)
 - [Book metadata sources](research/book-metadata-sources.md)
+- [Shelf photo reading test](research/shelf-photo-reading-test.md)
