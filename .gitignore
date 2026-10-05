@@ -1,2 +1,14 @@
 # Photos of the home never go into this public repository.
 samples/
+work/
+*.jpg
+*.jpeg
+*.png
+*.heic
+*.webp
+
+# Python
+.venv/
+__pycache__/
+*.egg-info/
+.pytest_cache/
