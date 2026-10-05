@@ -253,3 +253,74 @@ def test_a_record_that_a_source_returns_twice_is_kept_once(fixture_bytes):
     ids = [c["id"] for c in result["candidates"]]
     assert ids == ["ndl:000009209109", "ndl:025053389", "ndl:000011170599"]
     assert result["queries"][0]["count"] == 3
+
+
+def test_a_step_that_ran_before_is_answered_from_the_cache_and_recorded_as_if_it_had_run(fixture_bytes, tmp_path):
+    fetch = Router(fixture_bytes, **{"ndlsearch.ndl.go.jp": "ndl_search_daruma.xml"})
+    first = find_candidates("だるまさんが", "ja", fetch=fetch, run_yaz=no_yaz, cache_dir=tmp_path / "cache")
+
+    second = find_candidates("だるまさんが", "ja", fetch=no_http, run_yaz=no_yaz, cache_dir=tmp_path / "cache")
+
+    assert second == first
+    assert second["queries"] == [{"source": "ndl", "step": "title", "status": "ok", "count": 3}]
+    assert [c["id"] for c in second["candidates"]] == [
+        "ndl:000009209109", "ndl:025053389", "ndl:000011170599",
+    ]
+
+
+def test_an_empty_answer_is_cached_too_because_no_match_is_an_answer(fixture_bytes, tmp_path):
+    fetch = Router(fixture_bytes, **{"ndlsearch.ndl.go.jp": "ndl_empty.xml"})
+    find_candidates("Zelený drak", "ja", fetch=fetch, run_yaz=no_yaz, cache_dir=tmp_path)
+
+    second = find_candidates("Zelený drak", "ja", fetch=no_http, run_yaz=no_yaz, cache_dir=tmp_path)
+
+    assert second["queries"] == [{"source": "ndl", "step": "title", "status": "no_match", "count": 0}]
+
+
+def test_a_step_that_failed_is_not_cached(fixture_bytes, tmp_path):
+    def broken(url):
+        raise FetchError("HTTP 500")
+
+    find_candidates("だるまさんが", "ja", fetch=broken, run_yaz=no_yaz, cache_dir=tmp_path)
+    fetch = Router(fixture_bytes, **{"ndlsearch.ndl.go.jp": "ndl_search_daruma.xml"})
+
+    second = find_candidates("だるまさんが", "ja", fetch=fetch, run_yaz=no_yaz, cache_dir=tmp_path)
+
+    assert second["queries"] == [{"source": "ndl", "step": "title", "status": "ok", "count": 3}]
+    assert len(fetch.urls) == 1
+
+
+def test_a_step_is_cached_by_its_query_values(fixture_bytes, tmp_path):
+    fetch = Router(fixture_bytes, **{"ndlsearch.ndl.go.jp": "ndl_search_daruma.xml"})
+    find_candidates("だるまさんが", "ja", fetch=fetch, run_yaz=no_yaz, cache_dir=tmp_path)
+
+    find_candidates("あかいふうせん", "ja", fetch=fetch, run_yaz=no_yaz, cache_dir=tmp_path)
+    find_candidates("だるまさんが", "ja", author="山田花子", fetch=fetch, run_yaz=no_yaz, cache_dir=tmp_path)
+
+    assert [fetch.params(i).get("title") for i in range(3)] == ["だるまさんが", "あかいふうせん", "だるまさんが"]
+    assert "creator" in fetch.params(2)
+
+
+def test_nkcr_answers_are_cached_too(fake_yaz, fixture_bytes, tmp_path):
+    run_yaz = fake_yaz(fixture_bytes("nkcr_isbn_9788024297217.txt").decode("utf-8"))
+    first = find_candidates(
+        "Krtek a zajíček", "cs", isbn="9788024297217", fetch=no_http, run_yaz=run_yaz, cache_dir=tmp_path
+    )
+
+    second = find_candidates(
+        "Krtek a zajíček", "cs", isbn="9788024297217", fetch=no_http, run_yaz=no_yaz, cache_dir=tmp_path
+    )
+
+    assert second == first
+    assert len(run_yaz.scripts) == 1
+
+
+def test_the_cache_directory_is_created_on_the_first_write_and_leaves_only_finished_files(fixture_bytes, tmp_path):
+    cache = tmp_path / "lookup" / "cache"
+    fetch = Router(fixture_bytes, **{"ndlsearch.ndl.go.jp": "ndl_search_daruma.xml"})
+
+    find_candidates("だるまさんが", "ja", fetch=fetch, run_yaz=no_yaz, cache_dir=cache)
+
+    names = [path.name for path in cache.iterdir()]
+    assert len(names) == 1
+    assert names[0].endswith(".json")
