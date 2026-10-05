@@ -394,3 +394,21 @@ def test_a_listed_tile_that_is_not_a_file_is_refused_before_anything_runs(tmp_pa
         run_read(work, "b-spark", "pi", run=run)
 
     assert run.calls == []
+
+
+def test_a_timeout_keeps_the_partial_stream_and_its_answer_and_tool_calls(tmp_path):
+    work, _ = cut_small_photo(tmp_path)
+    command = {"id": "item_1", "type": "command_execution", "command": "ls", "status": "in_progress"}
+    partial = codex_stream(extra=[{"type": "item.started", "item": command}])
+    run = FakeRun(raises=subprocess.TimeoutExpired(cmd="codex", timeout=600, output=partial.encode("utf-8")))
+
+    with pytest.raises(ReadError, match="timed out after 600"):
+        run_read(work, "a-sol", "codex-exec", run=run)
+
+    read_dir = read_dir_of(work, "a-sol")
+    assert (read_dir / "events.jsonl").read_text(encoding="utf-8") == partial
+    assert (read_dir / "raw.txt").read_text(encoding="utf-8") == ANSWER
+    info = json.loads((read_dir / "run.json").read_text(encoding="utf-8"))
+    assert info["returncode"] is None
+    assert info["tool_calls"] == ["command_execution"]
+    assert not (read_dir / "read.json").exists()
