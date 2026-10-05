@@ -29,3 +29,17 @@ def test_nkcr_by_isbn_returns_the_candidate_in_the_contract_shape(fake_yaz, fixt
             "summary": "Příběh o Krtkovi, který tentokrát pomůže ztracenému zajíčkovi najít maminku.",
         }
     ]
+
+
+def test_nkcr_by_isbn_sends_an_isbn_search_to_the_catalogue_database(fake_yaz, fixture_bytes):
+    run = fake_yaz(fixture_bytes("nkcr_empty.txt").decode("utf-8"))
+
+    nkcr.by_isbn("9788024297217", run)
+
+    assert run.lines() == [
+        "open aleph.nkp.cz:9991/NKC-UTF",
+        "format usmarc",
+        'find @attr 1=7 "9788024297217"',
+        "show 1+10",
+        "quit",
+    ]
