@@ -1,3 +1,4 @@
+import hashlib
 import json
 import shutil
 import subprocess
@@ -553,3 +554,16 @@ def test_a_read_id_with_dots_and_dashes_inside_a_plain_name_is_accepted(tmp_path
     read = run_read(work, "b-spark_2.v1", "pi", run=FakeRun(stdout=ANSWER))
 
     assert read["read_id"] == "b-spark_2.v1"
+
+
+def test_read_json_records_the_hash_of_the_tiles_manifest_the_read_was_made_from(tmp_path):
+    work, _ = cut_small_photo(tmp_path)
+    manifest_bytes = (work / "tiles.json").read_bytes()
+
+    read = run_read(work, "b-spark", "pi", run=FakeRun(stdout=ANSWER))
+
+    expected = hashlib.sha256(manifest_bytes).hexdigest()
+    assert len(expected) == 64
+    assert read["photo_sha256"] == expected
+    stored = json.loads((read_dir_of(work, "b-spark") / "read.json").read_text(encoding="utf-8"))
+    assert stored["photo_sha256"] == expected
