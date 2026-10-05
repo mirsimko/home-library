@@ -127,3 +127,12 @@ def test_unknown_readable_value_becomes_partial_and_known_values_stay():
                  entry(4, "D", readable="mostly"), entry(5, "E", readable="Yes"), entry(6, "F", readable=True))
     read = parse_read(raw)
     assert [b["readable"] for b in read["books"]] == ["yes", "no", "partial", "partial", "partial", "partial"]
+
+
+def test_non_object_entries_become_errors_and_neighbours_survive():
+    raw = '{"file": "shelf-1.jpg", "books": [{"n": 1, "title": "A"}, 42, "text, ] }", {"n": 4, "title": "D"}]}'
+    read = parse_read(raw)
+    assert [b["title"] for b in read["books"]] == ["A", "D"]
+    assert [(e["position"], e["raw"]) for e in read["errors"]] == [(2, "42"), (3, '"text, ] }"')]
+    assert read["errors"][0]["offset"] == 58
+    assert read["complete"] is False
