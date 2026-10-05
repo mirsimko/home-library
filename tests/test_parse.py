@@ -80,3 +80,20 @@ def test_braces_brackets_and_escaped_quotes_inside_a_title_do_not_split_entries(
     assert [b["title"] for b in read["books"]] == ['Kite } ] { [ "Blue"', "C"]
     assert len(read["errors"]) == 1
     assert read["errors"][0]["raw"] == '{"n": 2, "title": "Broken {x} \\"q\\"" "other_text": "}"}'
+
+
+def test_answer_cut_off_inside_an_entry_keeps_complete_entries_and_is_incomplete():
+    raw = '{"file": "shelf-1.jpg", "books": [\n{"n": 1, "title": "A"},\n{"n": 2, "title": "Zel'
+    read = parse_read(raw)
+    assert [b["title"] for b in read["books"]] == ["A"]
+    assert read["errors"][0]["position"] == 2
+    assert read["errors"][0]["raw"] == '{"n": 2, "title": "Zel'
+    assert read["complete"] is False
+
+
+def test_answer_cut_off_between_entries_is_incomplete_without_an_error():
+    raw = '{"file": "shelf-1.jpg", "books": [\n{"n": 1, "title": "A"},\n'
+    read = parse_read(raw)
+    assert [b["title"] for b in read["books"]] == ["A"]
+    assert read["errors"] == []
+    assert read["complete"] is False
