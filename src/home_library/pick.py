@@ -92,6 +92,12 @@ def _write_picks(lookup_dir: Path, picks: dict) -> None:
     (lookup_dir / "picks.json").write_text(text, encoding="utf-8")
 
 
+def _failed(lookup_dir: Path, candidates: dict, why: str) -> dict:
+    picks = none_for_all(candidates, f"The pick step failed: {why}.")
+    _write_picks(lookup_dir, picks)
+    return picks
+
+
 def run_pick(photo_dir, *, run=subprocess.run, timeout=300) -> dict:
     photo_dir = Path(photo_dir)
     lookup_dir = photo_dir / "lookup"
@@ -104,8 +110,20 @@ def run_pick(photo_dir, *, run=subprocess.run, timeout=300) -> dict:
         command = ["codex", "exec", "--ignore-user-config", "-m", "gpt-6.1-sol",
                    "-c", 'model_reasoning_effort="low"', "-s", "read-only", "--skip-git-repo-check",
                    "--ephemeral", "-C", str(lookup_dir), "-o", str(raw_file), "-"]
-        run(command, input=build_prompt(merged, candidates), cwd=str(lookup_dir), timeout=timeout,
-            capture_output=True, text=True, encoding="utf-8")
-        picks = parse_picks(raw_file.read_text(encoding="utf-8"), candidates)
+        raw_file.unlink(missing_ok=True)
+        try:
+            done = run(command, input=build_prompt(merged, candidates), cwd=str(lookup_dir), timeout=timeout,
+                       capture_output=True, text=True, encoding="utf-8")
+        except subprocess.TimeoutExpired:
+            return _failed(lookup_dir, candidates, f"codex timed out after {timeout} seconds")
+        except OSError as error:
+            return _failed(lookup_dir, candidates, f"codex not found or could not be run: {error}")
+        if done.returncode != 0:
+            return _failed(lookup_dir, candidates, f"codex exit code {done.returncode}")
+        try:
+            raw = raw_file.read_text(encoding="utf-8")
+        except OSError:
+            return _failed(lookup_dir, candidates, "no answer file from codex")
+        picks = parse_picks(raw, candidates)
     _write_picks(lookup_dir, picks)
     return picks
