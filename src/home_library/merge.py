@@ -59,6 +59,24 @@ def _pair_similar(keys_a: dict, keys_b: dict) -> dict:
     return pairs
 
 
+def _words_found(entry: dict, other: dict) -> bool:
+    words = [key for key in map(match_key, entry["title"].split()) if key]
+    everything = match_key(other["title"] + " " + other["other_text"])
+    return bool(words) and all(word in everything for word in words)
+
+
+def _pair_same_words(books_a: dict, books_b: dict) -> dict:
+    """Pairs that hold the same words but divide them differently between title and other_text."""
+    pairs, used_b = {}, set()
+    for i, entry in books_a.items():
+        for j, other in books_b.items():
+            if j not in used_b and _words_found(entry, other) and _words_found(other, entry):
+                pairs[i] = j
+                used_b.add(j)
+                break
+    return pairs
+
+
 def merge_reads(read_a: dict, read_b: dict) -> dict:
     id_a, id_b = read_a["read_id"], read_b["read_id"]
     file_a, file_b = read_a["file"], read_b["file"]
@@ -82,6 +100,8 @@ def merge_reads(read_a: dict, read_b: dict) -> dict:
     left_a = {i: k for i, k in keys_a.items() if i not in pairs and k}
     left_b = {j: k for j, k in keys_b.items() if j not in pairs.values() and k}
     near = _pair_similar(left_a, left_b)
+    split = _pair_same_words({i: books_a[i] for i in left_a if i not in near},
+                             {j: books_b[j] for j in left_b if j not in near.values()})
     items = []
     for i, entry in enumerate(books_a):
         if i in pairs:
@@ -93,9 +113,13 @@ def merge_reads(read_a: dict, read_b: dict) -> dict:
             reason = "near" if _eligible(entry) and _eligible(other) else "partial"
             items.append(_item("review", reason, entry, [_reading(id_a, entry), _reading(id_b, other)],
                                _exact(entry["title"], other["title"])))
+        elif i in split:
+            other = books_b[split[i]]
+            reason = "split" if _eligible(entry) and _eligible(other) else "partial"
+            items.append(_item("review", reason, entry, [_reading(id_a, entry), _reading(id_b, other)], False))
         else:
             items.append(_solo(id_a, entry))
-    paired_b = set(pairs.values()) | set(near.values())
+    paired_b = set(pairs.values()) | set(near.values()) | set(split.values())
     for j, entry in enumerate(books_b):
         if j not in paired_b:
             items.append(_solo(id_b, entry))

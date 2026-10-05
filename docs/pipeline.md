@@ -151,10 +151,11 @@ Turns a raw answer into a read, entry by entry, so that one malformed entry does
 
 Compares two reads of the same photo that could not see each other.
 
-- The **match key** of a title: Unicode NFKC, then case folding, then every character that is not a letter or a digit removed. Diacritics, kana and digits stay significant.
+- The **match key** of a title: the signs ™, ®, © and ℠ removed, then Unicode NFKC, then case folding, then every character that is not a letter or a digit removed. Diacritics, kana and digits stay significant.
 - An entry is **eligible** when `readable` is `yes`, its match key is not empty and `inferred` is empty.
 - Eligible entries with equal match keys are paired one to one across the two reads. Two copies in one read and one in the other give one pair and one left over. Each pair is **accepted**.
 - Left-over entries that have a title are then paired one to one where their match keys are at least 0.9 similar (`difflib.SequenceMatcher` ratio), best pairs first. Such a pair goes to review as `near` when both entries are eligible, and as `partial` otherwise.
+- Entries still left over are paired one to one where the two reads hold the same words but divide them differently between `title` and `other_text`, as happens when one model takes a series name for part of the title. Two entries pair when every word of each entry's title is found, by match key, in the other entry's title and other text taken together. Such a pair goes to review as `split` when both entries are eligible, and as `partial` otherwise.
 - Every other entry with a title goes to review alone: `solo` when eligible, `partial` otherwise.
 - Entries without a title are not compared. They are listed under `unreadable`. A title that is only white space counts as no title. A title of punctuation only has an empty match key: it is never paired and goes to review alone as `partial`.
 
@@ -175,7 +176,7 @@ Compares two reads of the same photo that could not see each other.
 }
 ```
 
-- `status` is `accepted` or `review`. `reason` is `agreed`, `near`, `solo` or `partial`.
+- `status` is `accepted` or `review`. `reason` is `agreed`, `near`, `split`, `solo` or `partial`.
 - `title` and `language` come from the first read that has the entry.
 - `exact` is true when the two titles are equal after Unicode NFC and trimming of outer white space only. It is false for an item with one reading.
 - `items` keeps the order of the first read, followed by entries only the second read gave.
@@ -277,7 +278,7 @@ The pick step gives a model the reading and its candidates as text and asks whic
 - The catalogue fields are filled only from a candidate picked as `match`: `catalogue_title`, `author` (the candidate's authors joined with `; `), `publisher`, `year`, `isbn`, `series`, `source`, `source_id`, and `sort_key` (the candidate's title reading). Without a match, or without a title reading, `sort_key` is the title.
 - `age_from` and `age_to` come from a matched candidate's age note: its first number, and its second when the note gives a range such as `5-8`. Otherwise they are empty.
 - `illustrator`, `tags`, `state` and `cover_photo` are empty in this version. `location` is filled only when it was given for the photo.
-- `read_status` is `agreed`, `near`, `solo`, `partial` or `unreadable`.
+- `read_status` is `agreed`, `near`, `split`, `solo`, `partial` or `unreadable`.
 - `other_text` and `where` come from the item's first reading. `read_ids` joins the readings' read ids with `; `.
 - `notes` says in plain words why the row needs a look: which read gave a solo title, a guess the model put in `inferred`, an ambiguous catalogue match with its reason, a catalogue age or audience note.
 - `records.json` is a list of objects with every column. `needs_review` is a boolean and `candidate_count` an integer there.
