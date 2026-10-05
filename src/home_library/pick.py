@@ -47,17 +47,27 @@ def _none(item: int, reason: str) -> dict:
     return {"item": item, "verdict": "none", "candidate_id": None, "reason": reason}
 
 
-def _check(item: int, pick: dict, ids: set) -> dict:
+def _check(item: int, pick, ids: set) -> dict:
     if pick is None:
         return _none(item, "The model gave no answer for this book.")
-    if pick["verdict"] == "match" and pick["candidate_id"] not in ids:
-        return _none(item, f"The model named candidate {pick['candidate_id']}, which was not fetched for this book; the answer was rejected.")
-    return pick
+    if not isinstance(pick, dict):
+        return _none(item, "The model's answer for this book was not an object.")
+    verdict = pick.get("verdict")
+    reason = pick.get("reason")
+    reason = reason if isinstance(reason, str) else ""
+    if verdict not in ("match", "ambiguous", "none"):
+        return _none(item, f"The model gave an unknown verdict: {verdict!r}.")
+    if verdict == "match":
+        cid = pick.get("candidate_id")
+        if cid not in ids:
+            return _none(item, f"The model named candidate {cid}, which was not fetched for this book; the answer was rejected.")
+        return {"item": item, "verdict": verdict, "candidate_id": cid, "reason": reason}
+    return {"item": item, "verdict": verdict, "candidate_id": None, "reason": reason}
 
 
 def parse_picks(raw: str, candidates: dict) -> dict:
     answer = _find_object(raw)
-    by_item = {pick["item"]: pick for pick in answer["picks"]}
+    by_item = {pick["item"]: pick for pick in answer["picks"] if isinstance(pick, dict) and "item" in pick}
     picks = []
     for book in candidates["books"]:
         if book["candidates"]:
