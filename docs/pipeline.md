@@ -2,7 +2,7 @@
 
 This is the contract between the stages of the shelf-photo reading pipeline. Each stage is a module under `src/home_library/` with a small public interface, and each reads and writes plain UTF-8 files in a work directory. The design reasons are in [spec.md](spec.md) section 2.4 and 2.5 and in the [research notes](research/).
 
-Status: being built. This file is updated as the stages land.
+Status: built and tried on the four test photos on 2026-10-05. Cover photos, barcode photos and a catalog store are not part of it yet.
 
 ## Rules that hold everywhere
 
@@ -11,6 +11,23 @@ Status: being built. This file is updated as the stages land.
 - **One photo per model session**, started fresh, with about 5 MB of images. Few requests at once: the home uplink is about 10 Mbit/s.
 - **A read never sees another read.** A reader gets the tiles and the prompt, nothing else.
 - **Nothing is lost silently.** An entry that cannot be parsed, a title only one read gave and a look-up that failed all reach the review output with a reason.
+
+## Running it
+
+The command is `hl`. From a checkout, run it as `uv run hl`.
+
+```sh
+uv run hl run ~/photos/shelf-1.jpg ~/photos/shelf-2.jpg --location "Box 3"
+```
+
+This cuts the tiles, reads each photo twice, merges the reads, looks the titles up, picks catalogue records and writes `records.csv` and `records.json` into each photo's work directory. It prints one line per photo and exits with 1 if any photo failed.
+
+- **Needs:** [uv](https://docs.astral.sh/uv/); the `codex` command, logged in, for GPT-6.1 Sol; the `pi` command with access to Muse Spark 1.3 for the second read; and `yaz-client` (Ubuntu package `yaz`) for Czech look-ups. Without `yaz-client` Czech titles are simply not looked up.
+- **Starting again is safe.** A read that is already stored is not repeated. If a run fails half way, run the same command again. `--force` starts a photo from nothing, and so does a changed photo file.
+- **`--second-reader codex-exec`** makes the second read another Sol session in place of Muse Spark.
+- **What runs at once.** The two reads of one photo run at the same time. Photos are read one after another. The look-ups and the pick of a photo run in the background while the next photo is read, because one NDL title search takes 10 to 15 seconds.
+- **From an agent harness,** start a run of several photos as a background job: a photo takes about two minutes, and a harness may cap a single command at ten.
+- Each stage is also a command of its own, for repeating one step: `hl tiles`, `hl read`, `hl merge`, `hl lookup`, `hl pick`, `hl export`. Each takes the photo and the same `--work-root`. `hl gather <read-id>` prints one read's answers for all photos in the shape the scoring tools of the 2026-10-05 tests take.
 
 ## Work directory
 

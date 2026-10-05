@@ -32,12 +32,12 @@ def merged_and_candidates():
                    "exact": False, "readings": [reading("a-sol", 9, "あかいふうせん")]},
               ]}
     candidates = {"file": "shelf-1.jpg", "books": [
-        {"item": 0, "title": "Zelený drak", "language": "cs", "queries": [],
+        {"book": 1, "title": "Zelený drak", "title": "Zelený drak", "language": "cs", "queries": [],
          "candidates": [cand("nkcr:cnb001", "Zelený drak", authors=["Novotná, Marta"], publisher="Albatros",
                              year="2001", isbn="9788000000001", series="Malá knihovna"),
                         cand("nkcr:cnb002", "Zelený drak a jiné pohádky")]},
-        {"item": 1, "title": "The Blue Kite", "language": "en", "queries": [], "candidates": []},
-        {"item": 2, "title": "あかいふうせん", "language": "ja", "queries": [],
+        {"book": 3, "title": "The Blue Kite", "title": "The Blue Kite", "language": "en", "queries": [], "candidates": []},
+        {"book": 2, "title": "あかいふうせん", "title": "あかいふうせん", "language": "ja", "queries": [],
          "candidates": [cand("ndl:000111", "あかいふうせん", title_reading="アカイ フウセン")]},
     ]}
     return merged, candidates
@@ -47,9 +47,9 @@ def test_prompt_lists_each_book_with_its_reading_and_candidates_and_skips_books_
     merged, candidates = merged_and_candidates()
     prompt = build_prompt(merged, candidates)
     assert "The Blue Kite" not in prompt
-    head, rest = prompt.split("Book 0\n", 1)
+    head, rest = prompt.split("Book 1\n", 1)  # numbered by position, whatever the item numbers are
     book0, book2 = rest.split("Book 2\n", 1)
-    assert "Book 1" not in prompt
+    assert "Book 0" not in prompt and "Book 3" not in prompt
     assert "Title as read: Zelený drak" in book0 and "Language: cs" in book0
     assert "Marta Novotná" in book0 and "Albatros" in book0
     first, second = book0.split("Candidate nkcr:cnb002")
@@ -73,8 +73,8 @@ def answer(*picks):
 def test_parse_picks_reads_a_clean_answer_in_candidates_order():
     _, candidates = merged_and_candidates()
     raw = answer(
-        {"item": 2, "verdict": "match", "candidate_id": "ndl:000111", "reason": "Same title."},
-        {"item": 0, "verdict": "ambiguous", "candidate_id": None, "reason": "Two editions."},
+        {"book": 2, "title": "あかいふうせん", "verdict": "match", "candidate_id": "ndl:000111", "reason": "Same title."},
+        {"book": 1, "title": "Zelený drak", "verdict": "ambiguous", "candidate_id": None, "reason": "Two editions."},
     )
     assert parse_picks(raw, candidates) == {"file": "shelf-1.jpg", "picks": [
         {"item": 0, "verdict": "ambiguous", "candidate_id": None, "reason": "Two editions."},
@@ -85,8 +85,8 @@ def test_parse_picks_reads_a_clean_answer_in_candidates_order():
 def test_parse_picks_finds_the_object_in_a_fence_with_prose_around_it():
     _, candidates = merged_and_candidates()
     raw = ("Here is my answer.\n```json\n"
-           + answer({"item": 0, "verdict": "match", "candidate_id": "nkcr:cnb001", "reason": "Same."},
-                    {"item": 2, "verdict": "none", "candidate_id": None, "reason": "Different."})
+           + answer({"book": 1, "title": "Zelený drak", "verdict": "match", "candidate_id": "nkcr:cnb001", "reason": "Same."},
+                    {"book": 2, "title": "あかいふうせん", "verdict": "none", "candidate_id": None, "reason": "Different."})
            + "\n```\nHope that helps {really}.")
     picks = parse_picks(raw, candidates)["picks"]
     assert [(p["item"], p["verdict"], p["candidate_id"]) for p in picks] == [
@@ -95,18 +95,18 @@ def test_parse_picks_finds_the_object_in_a_fence_with_prose_around_it():
 
 def test_parse_picks_rejects_a_match_naming_another_books_candidate():
     _, candidates = merged_and_candidates()
-    raw = answer({"item": 0, "verdict": "match", "candidate_id": "ndl:000111", "reason": "Looks right."},
-                 {"item": 2, "verdict": "match", "candidate_id": "ndl:000111", "reason": "Same title."})
+    raw = answer({"book": 1, "title": "Zelený drak", "verdict": "match", "candidate_id": "ndl:000111", "reason": "Looks right."},
+                 {"book": 2, "title": "あかいふうせん", "verdict": "match", "candidate_id": "ndl:000111", "reason": "Same title."})
     first, second = parse_picks(raw, candidates)["picks"]
     assert first["verdict"] == "none" and first["candidate_id"] is None
     assert "rejected" in first["reason"] and "ndl:000111" in first["reason"]
     assert second["verdict"] == "match"
 
 
-def test_parse_picks_gives_none_for_a_book_the_answer_skips_and_ignores_unknown_items():
+def test_parse_picks_gives_none_for_a_book_the_answer_skips_and_ignores_unknown_books():
     _, candidates = merged_and_candidates()
-    raw = answer({"item": 2, "verdict": "match", "candidate_id": "ndl:000111", "reason": "Same."},
-                 {"item": 1, "verdict": "match", "candidate_id": "x:1", "reason": "No candidates here."})
+    raw = answer({"book": 2, "title": "あかいふうせん", "verdict": "match", "candidate_id": "ndl:000111", "reason": "Same."},
+                 {"book": 3, "title": "The Blue Kite", "verdict": "match", "candidate_id": "x:1", "reason": "No candidates here."})
     picks = parse_picks(raw, candidates)["picks"]
     assert [p["item"] for p in picks] == [0, 2]
     assert picks[0]["verdict"] == "none" and picks[0]["candidate_id"] is None
@@ -115,8 +115,8 @@ def test_parse_picks_gives_none_for_a_book_the_answer_skips_and_ignores_unknown_
 
 def test_parse_picks_turns_unknown_verdict_and_non_object_pick_into_none():
     _, candidates = merged_and_candidates()
-    raw = json.dumps({"picks": [{"item": 0, "verdict": "probably", "candidate_id": "nkcr:cnb001", "reason": 5},
-                                "item 2 is fine"]})
+    raw = json.dumps({"picks": [{"book": 1, "title": "Zelený drak", "verdict": "probably", "candidate_id": "nkcr:cnb001", "reason": 5},
+                                "book 2 is fine"]})
     first, second = parse_picks(raw, candidates)["picks"]
     assert first["verdict"] == "none" and first["candidate_id"] is None
     assert "probably" in first["reason"]
@@ -126,15 +126,15 @@ def test_parse_picks_turns_unknown_verdict_and_non_object_pick_into_none():
 
 def test_parse_picks_drops_candidate_id_unless_the_verdict_is_match():
     _, candidates = merged_and_candidates()
-    raw = answer({"item": 0, "verdict": "ambiguous", "candidate_id": "nkcr:cnb001", "reason": "Editions."},
-                 {"item": 2, "verdict": "none", "candidate_id": "ndl:000111", "reason": "No."})
+    raw = answer({"book": 1, "title": "Zelený drak", "verdict": "ambiguous", "candidate_id": "nkcr:cnb001", "reason": "Editions."},
+                 {"book": 2, "title": "あかいふうせん", "verdict": "none", "candidate_id": "ndl:000111", "reason": "No."})
     assert [p["candidate_id"] for p in parse_picks(raw, candidates)["picks"]] == [None, None]
 
 
 def test_parse_picks_gives_none_for_every_book_when_the_answer_cannot_be_read():
     _, candidates = merged_and_candidates()
-    for raw in ["I cannot do this.", "", '{"picks": "none"}', '{"picks": [{"item": 0, "verdi', "[1, 2]",
-                '{"picks": [{"item": [1], "verdict": "match"}]}']:
+    for raw in ["I cannot do this.", "", '{"picks": "none"}', '{"picks": [{"book": 1, "title": "Zelený drak", "verdi', "[1, 2]",
+                '{"picks": [{"book": [1], "verdict": "match"}]}']:
         result = parse_picks(raw, candidates)
         assert result["file"] == "shelf-1.jpg"
         assert [(p["item"], p["verdict"], p["candidate_id"]) for p in result["picks"]] == [
@@ -180,7 +180,7 @@ def test_run_pick_runs_codex_once_in_the_lookup_directory_with_the_prompt_on_std
     photo = photo_dir_with_lookup(tmp_path)
     merged, candidates = merged_and_candidates()
     lookup = str(photo / "lookup")
-    fake = FakeCodex(reply=answer({"item": 0, "verdict": "none", "candidate_id": None, "reason": "-"}))
+    fake = FakeCodex(reply=answer({"book": 1, "title": "Zelený drak", "verdict": "none", "candidate_id": None, "reason": "-"}))
     run_pick(photo, run=fake, timeout=42)
     (args, kwargs), = fake.calls
     assert args == ["codex", "exec", "--ignore-user-config", "-m", "gpt-6.1-sol",
@@ -193,8 +193,8 @@ def test_run_pick_runs_codex_once_in_the_lookup_directory_with_the_prompt_on_std
 
 def test_run_pick_writes_picks_json_from_the_answer_file(tmp_path):
     photo = photo_dir_with_lookup(tmp_path)
-    reply = answer({"item": 0, "verdict": "match", "candidate_id": "nkcr:cnb001", "reason": "Same title."},
-                   {"item": 2, "verdict": "none", "candidate_id": None, "reason": "Different book."})
+    reply = answer({"book": 1, "title": "Zelený drak", "verdict": "match", "candidate_id": "nkcr:cnb001", "reason": "Same title."},
+                   {"book": 2, "title": "あかいふうせん", "verdict": "none", "candidate_id": None, "reason": "Different book."})
     result = run_pick(photo, run=FakeCodex(reply=reply))
     assert [p["verdict"] for p in result["picks"]] == ["match", "none"]
     text = (photo / "lookup" / "picks.json").read_text(encoding="utf-8")
@@ -223,7 +223,7 @@ def test_a_failing_model_call_gives_none_for_every_book_with_the_reason(tmp_path
 def test_a_stale_answer_file_is_not_taken_for_this_runs_answer(tmp_path):
     photo = photo_dir_with_lookup(tmp_path)
     (photo / "lookup" / "picks.raw.txt").write_text(
-        answer({"item": 0, "verdict": "match", "candidate_id": "nkcr:cnb001", "reason": "Old."}),
+        answer({"book": 1, "title": "Zelený drak", "verdict": "match", "candidate_id": "nkcr:cnb001", "reason": "Old."}),
         encoding="utf-8")
     result = run_pick(photo, run=FakeCodex())
     assert [p["verdict"] for p in result["picks"]] == ["none", "none"]
@@ -232,8 +232,8 @@ def test_a_stale_answer_file_is_not_taken_for_this_runs_answer(tmp_path):
 def test_parse_picks_rejects_a_match_whose_candidate_id_is_not_a_string():
     _, candidates = merged_and_candidates()
     for bad in ([], {}, 7, ["nkcr:cnb001"]):
-        raw = answer({"item": 0, "verdict": "match", "candidate_id": bad, "reason": "x"},
-                     {"item": 2, "verdict": "match", "candidate_id": "ndl:000111", "reason": "Same."})
+        raw = answer({"book": 1, "title": "Zelený drak", "verdict": "match", "candidate_id": bad, "reason": "x"},
+                     {"book": 2, "title": "あかいふうせん", "verdict": "match", "candidate_id": "ndl:000111", "reason": "Same."})
         picks = parse_picks(raw, candidates)["picks"]
         assert [(p["verdict"], p["candidate_id"]) for p in picks] == [("none", None), ("match", "ndl:000111")]
         assert "rejected" in picks[0]["reason"]
@@ -279,3 +279,36 @@ def test_run_pick_refuses_a_symlink_into_a_git_checkout(tmp_path):
     link.symlink_to(tmp_path / "repo" / "work")
     with pytest.raises(ValueError):
         run_pick(link, run=FakeCodex(reply=answer()))
+
+
+def test_the_prompt_asks_for_each_books_number_and_title_back():
+    prompt = build_prompt(*merged_and_candidates())
+    assert '{"picks": [{"book": 1, "title": "<the title as read, copied>"' in prompt
+
+
+def test_parse_picks_maps_a_books_position_back_to_its_item():
+    _, candidates = merged_and_candidates()
+    candidates["books"][2]["item"] = 7  # the second book with candidates is item 7
+    raw = answer({"book": 2, "title": "あかいふうせん", "verdict": "match", "candidate_id": "ndl:000111",
+                  "reason": "Same title."})
+    assert parse_picks(raw, candidates)["picks"][1] == {
+        "item": 7, "verdict": "match", "candidate_id": "ndl:000111", "reason": "Same title."}
+
+
+def test_parse_picks_rejects_an_answer_that_echoes_another_title():
+    # Seen on real photos: the model renumbered the books, so its verdicts landed on the wrong ones.
+    _, candidates = merged_and_candidates()
+    raw = answer({"book": 1, "title": "あかいふうせん", "verdict": "ambiguous", "candidate_id": None,
+                  "reason": "Two editions."},
+                 {"book": 2, "verdict": "none", "candidate_id": None, "reason": "No title echoed."})
+    first, second = parse_picks(raw, candidates)["picks"]
+    assert (first["verdict"], second["verdict"]) == ("none", "none")
+    assert "rejected" in first["reason"] and "あかいふうせん" in first["reason"]
+    assert "rejected" in second["reason"]
+
+
+def test_parse_picks_accepts_an_echoed_title_that_differs_only_in_case_and_spacing():
+    _, candidates = merged_and_candidates()
+    raw = answer({"book": 1, "title": "zelený  DRAK", "verdict": "match", "candidate_id": "nkcr:cnb001",
+                  "reason": "Same."})
+    assert parse_picks(raw, candidates)["picks"][0]["verdict"] == "match"
