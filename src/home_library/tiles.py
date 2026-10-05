@@ -44,8 +44,9 @@ def cut_tiles(photo, out_dir, *, quality=88, **layout_options):
                 name = f"r{row}c{column}-r{rotation}.jpg"
                 shown = tile if rotation == 0 else tile.rotate(180)
                 shown.save(tiles_dir / name, "JPEG", quality=quality)
+                size = (tiles_dir / name).stat().st_size
                 tiles.append({"file": name, "row": row, "column": column,
-                              "rotation": rotation, "box": box})
+                              "rotation": rotation, "box": box, "bytes": size})
     manifest = {
         "photo": photo.name,
         "width": width,
@@ -53,6 +54,7 @@ def cut_tiles(photo, out_dir, *, quality=88, **layout_options):
         "layout": layout,
         "quality": quality,
         "tiles": tiles,
+        "total_bytes": sum(t["bytes"] for t in tiles),
     }
     (out_dir / "tiles.json").write_text(
         json.dumps(manifest, indent=2, ensure_ascii=False) + "\n", encoding="utf-8")
