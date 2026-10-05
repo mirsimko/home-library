@@ -224,3 +224,49 @@ def test_an_impossible_layout_leaves_an_earlier_run_untouched(tmp_path):
         cut_tiles(photo, out, tile_width=200)
 
     assert before and sorted(p.name for p in (out / "tiles").iterdir()) == before
+
+
+def block_color(x, y):
+    """Colour of the generated mosaic at a source pixel: 510x512 blocks, each its own colour."""
+    return (20 + 25 * (x // 510), 20 + 35 * (y // 512), 128)
+
+
+def test_every_tile_shows_its_own_part_of_the_photo(tmp_path):
+    mosaic = Image.new("RGB", (4080, 3072))
+    for bx in range(8):
+        for by in range(6):
+            mosaic.paste(block_color(bx * 510, by * 512),
+                         (bx * 510, by * 512, bx * 510 + 510, by * 512 + 512))
+    photo = tmp_path / "shelf-1.jpg"
+    mosaic.save(photo, "JPEG", quality=95)
+    out = tmp_path / "out"
+
+    manifest = cut_tiles(photo, out)
+
+    assert len(manifest["tiles"]) == 12
+    for tile_info in manifest["tiles"]:
+        left, top, right, bottom = tile_info["box"]
+        with Image.open(out / "tiles" / tile_info["file"]) as tile:
+            tile.load()
+            assert tile.size == (right - left, bottom - top) == (1560, 2000)
+            for px in range(100, 1560, 200):
+                for py in range(100, 2000, 200):
+                    x, y = left + px, top + py
+                    if min(x % 510, y % 512, 510 - x % 510, 512 - y % 512) < 12:
+                        continue  # too close to a block edge for lossy compression
+                    sx, sy = (px, py) if tile_info["rotation"] == 0 else (1559 - px, 1999 - py)
+                    assert close(tile.getpixel((sx, sy)), block_color(x, y)), (tile_info["file"], px, py)
+
+
+def test_every_manifest_entry_has_its_file_row_column_rotation_and_box(tmp_path):
+    photo = make_photo(tmp_path / "shelf-1.jpg", (4080, 3072))
+
+    manifest = cut_tiles(photo, tmp_path / "out")
+
+    lefts, tops = [0, 1260, 2520], [0, 1072]
+    expected = [
+        (f"r{r}c{c}-r{rot}.jpg", r, c, rot, [lefts[c - 1], tops[r - 1], lefts[c - 1] + 1560, tops[r - 1] + 2000])
+        for r in (1, 2) for c in (1, 2, 3) for rot in (0, 180)
+    ]
+    assert [(t["file"], t["row"], t["column"], t["rotation"], t["box"])
+            for t in manifest["tiles"]] == expected
