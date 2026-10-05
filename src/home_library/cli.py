@@ -39,8 +39,8 @@ def _parser():
     read.add_argument("--backend", choices=sorted(BACKENDS), required=True)
     merge = command("merge", "Compare two stored reads of a photo.")
     merge.add_argument("photo", type=Path)
-    merge.add_argument("--reads", nargs=2, default=[read_id for read_id, _ in pipeline.READERS],
-                       metavar="READ_ID")
+    merge.add_argument("--reads", nargs=2, metavar="READ_ID",
+                       help="the two reads to compare (default: the two that are stored)")
     command("lookup", "Fetch catalogue candidates for a photo's titles.").add_argument("photo", type=Path)
     command("pick", "Let the model pick among a photo's candidates.").add_argument("photo", type=Path)
     export = command("export", "Write a photo's records.json and records.csv.")
@@ -78,7 +78,11 @@ def _stage(args):
         read = run_read(directory, args.read_id, args.backend)
         print(f"{read['file']}: {len(read['books'])} entries, {len(read['errors'])} unreadable pieces")
     elif args.command == "merge":
-        merged = pipeline.merge_photo(directory, args.reads)
+        stored = sorted(path.parent.name for path in directory.glob("reads/*/read.json"))
+        if args.reads is None and len(stored) != 2:
+            raise ValueError(f"{len(stored)} reads are stored ({', '.join(stored) or 'none'}); "
+                             "name the two to compare with --reads")
+        merged = pipeline.merge_photo(directory, args.reads or stored)
         statuses = [item["status"] for item in merged["items"]]
         print(f"{merged['file']}: {statuses.count('accepted')} accepted, {statuses.count('review')} to review")
     elif args.command == "lookup":
