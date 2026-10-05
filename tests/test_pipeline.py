@@ -85,3 +85,76 @@ def test_one_reads_answers_for_all_photos_are_gathered_in_the_scoring_shape(tmp_
         {"file": "shelf-1.jpg", "books": [entry(1, "Zelený drak")]},
         {"file": "shelf-2.jpg", "books": [entry(1, "あかいふうせん")]},
     ]}
+
+
+# --- the whole pipeline on one photo, with the model programs and the catalogues faked ---
+
+import csv
+from types import SimpleNamespace
+
+from PIL import Image
+
+
+def answer(*books):
+    return json.dumps({"file": "shelf-9.jpg", "books": list(books)}, ensure_ascii=False)
+
+
+class FakePrograms:
+    """Stands in for subprocess.run: the codex read, the pi read and the codex pick."""
+
+    def __init__(self, sol_answer, spark_answer, pick_answer):
+        self.sol_answer, self.spark_answer, self.pick_answer = sol_answer, spark_answer, pick_answer
+        self.started = []
+
+    def __call__(self, command, **kwargs):
+        if command[0] == "pi":
+            self.started.append("pi read")
+            return SimpleNamespace(returncode=0, stdout=self.spark_answer, stderr="")
+        if "-o" in command:
+            self.started.append("codex pick")
+            Path(command[command.index("-o") + 1]).write_text(self.pick_answer, encoding="utf-8")
+            return SimpleNamespace(returncode=0, stdout="", stderr="")
+        self.started.append("codex read")
+        events = [{"type": "item.completed", "item": {"id": "item_0", "type": "agent_message",
+                                                      "text": self.sol_answer}}]
+        return SimpleNamespace(returncode=0, stdout="\n".join(json.dumps(e) for e in events), stderr="")
+
+
+def photo_and_programs(tmp_path):
+    photo = tmp_path / "phone" / "shelf-9.jpg"
+    photo.parent.mkdir()
+    Image.new("RGB", (640, 480), "white").save(photo)
+    programs = FakePrograms(
+        sol_answer=answer(entry(1, "だるまさんが", "ja"), entry(2, "The Blue Kite", "en"), entry(3, "", "unknown", "no")),
+        spark_answer=answer(entry(1, "だるまさんが", "ja")),
+        pick_answer=json.dumps({"picks": [{"item": 0, "verdict": "match", "candidate_id": "ndl:000009209109",
+                                           "reason": "Same title."}]}))
+    return photo, programs
+
+
+def catalogues():
+    ndl_answer = (FIXTURES / "ndl_search_daruma.xml").read_bytes()
+    nothing = (FIXTURES / "openlibrary_search_empty.json").read_bytes()
+    return lambda url: ndl_answer if "ndlsearch" in url else nothing
+
+
+def test_a_photo_goes_from_tiles_to_review_records_in_one_call(tmp_path):
+    photo, programs = photo_and_programs(tmp_path)
+
+    summary = pipeline.run_photo(photo, tmp_path / "work", location="Box 3",
+                                 run=programs, fetch=catalogues())
+
+    assert programs.started == ["codex read", "pi read", "codex pick"]
+    photo_dir = tmp_path / "work" / "shelf-9"
+    with open(photo_dir / "records.csv", encoding="utf-8-sig", newline="") as handle:
+        rows = list(csv.DictReader(handle))
+    assert [(r["title"], r["read_status"], r["location"], r["needs_review"]) for r in rows] == [
+        ("だるまさんが", "agreed", "Box 3", "true"),
+        ("The Blue Kite", "solo", "Box 3", "true"),
+        ("", "unreadable", "Box 3", "true"),
+    ]
+    assert (rows[0]["publisher"], rows[0]["source_id"], rows[0]["sort_key"]) == (
+        "ブロンズ新社", "000009209109", "ダルマサン ガ")
+    assert (summary["photo"], summary["accepted"], summary["review"], summary["unreadable"]) == (
+        "shelf-9.jpg", 1, 1, 1)
+    assert summary["directory"] == str(photo_dir)
