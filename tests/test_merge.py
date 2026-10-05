@@ -78,3 +78,22 @@ def test_a_one_character_difference_is_not_accepted_and_goes_to_review_as_near()
     assert item["title"] == "The Blue Kite"
     assert [r["read_id"] for r in item["readings"]] == ["a-sol", "b-spark"]
     assert [r["title"] for r in item["readings"]] == ["The Blue Kite", "The Blue Kito"]
+
+
+def test_a_title_only_one_read_gave_is_solo_review_with_one_reading():
+    a = read("a-sol", [book(1, "Zelený drak")])
+    b = read("b-spark", [book(1, "あかいふうせん", language="ja")])
+    items = merge_reads(a, b)["items"]
+    assert [(i["status"], i["reason"], i["title"], i["language"], i["exact"]) for i in items] == [
+        ("review", "solo", "Zelený drak", "cs", False),
+        ("review", "solo", "あかいふうせん", "ja", False),
+    ]
+    assert [r["read_id"] for r in items[0]["readings"]] == ["a-sol"]
+    assert [r["read_id"] for r in items[1]["readings"]] == ["b-spark"]
+
+
+def test_items_follow_the_first_read_then_entries_only_the_second_read_gave():
+    a = read("a-sol", [book(1, "Alpha Book"), book(2, "Bravo Tale"), book(3, "Charlie Song")])
+    b = read("b-spark", [book(1, "Zulu Story"), book(2, "Charlie Song"), book(3, "Alpha Book"), book(4, "Yankee Hill")])
+    titles = [i["title"] for i in merge_reads(a, b)["items"]]
+    assert titles == ["Alpha Book", "Bravo Tale", "Charlie Song", "Zulu Story", "Yankee Hill"]
