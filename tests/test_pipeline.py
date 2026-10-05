@@ -158,3 +158,55 @@ def test_a_photo_goes_from_tiles_to_review_records_in_one_call(tmp_path):
     assert (summary["photo"], summary["accepted"], summary["review"], summary["unreadable"]) == (
         "shelf-9.jpg", 1, 1, 1)
     assert summary["directory"] == str(photo_dir)
+
+
+def test_running_a_photo_again_repeats_no_model_call(tmp_path):
+    photo, programs = photo_and_programs(tmp_path)
+    pipeline.run_photo(photo, tmp_path / "work", run=programs, fetch=catalogues())
+    programs.started.clear()
+
+    summary = pipeline.run_photo(photo, tmp_path / "work", run=programs, fetch=catalogues())
+
+    assert programs.started == []
+    assert (summary["accepted"], summary["review"]) == (1, 1)
+    assert (tmp_path / "work" / "shelf-9" / "records.csv").exists()
+
+
+def test_a_read_that_failed_is_the_only_one_repeated(tmp_path):
+    photo, programs = photo_and_programs(tmp_path)
+    good_answer, programs.spark_answer = programs.spark_answer, ""  # pi returns nothing the first time
+    try:
+        pipeline.run_photo(photo, tmp_path / "work", run=programs, fetch=catalogues())
+    except Exception as failure:
+        assert "empty answer" in str(failure)
+    else:
+        raise AssertionError("the empty second read should have stopped the run")
+    programs.started.clear()
+    programs.spark_answer = good_answer
+
+    pipeline.run_photo(photo, tmp_path / "work", run=programs, fetch=catalogues())
+
+    assert programs.started == ["pi read", "codex pick"]
+
+
+def test_a_changed_photo_or_force_runs_everything_again(tmp_path):
+    photo, programs = photo_and_programs(tmp_path)
+    pipeline.run_photo(photo, tmp_path / "work", run=programs, fetch=catalogues())
+
+    programs.started.clear()
+    pipeline.run_photo(photo, tmp_path / "work", run=programs, fetch=catalogues(), force=True)
+    assert programs.started == ["codex read", "pi read", "codex pick"]
+
+    programs.started.clear()
+    Image.new("RGB", (640, 480), "grey").save(photo)  # another photo under the same name
+    pipeline.run_photo(photo, tmp_path / "work", run=programs, fetch=catalogues())
+    assert programs.started == ["codex read", "pi read", "codex pick"]
+
+
+def test_the_summary_reports_how_long_each_read_took(tmp_path):
+    photo, programs = photo_and_programs(tmp_path)
+
+    summary = pipeline.run_photo(photo, tmp_path / "work", run=programs, fetch=catalogues())
+
+    assert sorted(summary["seconds"]) == ["a-sol", "b-spark"]
+    assert all(isinstance(value, float) and value >= 0 for value in summary["seconds"].values())
