@@ -70,12 +70,19 @@ def _words_found(entry: dict, other: dict) -> bool:
     return bool(words) and all(word in available for word in words)
 
 
+def _same_text(entry: dict, other: dict) -> bool:
+    """The same words, divided differently: word for word, or as one run of text when a model glued two."""
+    if _words_found(entry, other) and _words_found(other, entry):
+        return True
+    return match_key(entry["title"] + entry["other_text"]) == match_key(other["title"] + other["other_text"])
+
+
 def _pair_same_words(books_a: dict, books_b: dict) -> dict:
     """Pairs that hold the same words but divide them differently between title and other_text."""
     pairs, used_b = {}, set()
     for i, entry in books_a.items():
         for j, other in books_b.items():
-            if j not in used_b and _words_found(entry, other) and _words_found(other, entry):
+            if j not in used_b and _same_text(entry, other):
                 pairs[i] = j
                 used_b.add(j)
                 break
