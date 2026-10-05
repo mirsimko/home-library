@@ -210,21 +210,26 @@ def test_a_missing_yaz_client_is_recorded_as_unavailable_and_does_not_raise():
     }
 
 
-def test_a_failed_request_is_recorded_as_an_error_and_the_next_step_still_runs(fixture_bytes):
-    answers = [FetchError("connection refused"), fixture_bytes("ndl_search_daruma.xml")]
+def test_a_failed_request_is_recorded_as_an_error_and_ends_that_sources_ladder_but_not_the_next_source(
+    fixture_bytes,
+):
+    urls = []
 
     def fetch(url):
-        answer = answers.pop(0)
-        if isinstance(answer, Exception):
-            raise answer
-        return answer
+        urls.append(url)
+        if "ndlsearch" in url:
+            raise FetchError("HTTP 500")
+        return fixture_bytes("openbd_9784001111118.json")
 
-    result = find_candidates("だるまさんが", "ja", author="かがくいひろし", fetch=fetch, run_yaz=no_yaz)
+    result = find_candidates(
+        "だるまさんが", "ja", author="かがくいひろし", isbn="9784001111118", fetch=fetch, run_yaz=no_yaz
+    )
 
     assert result["queries"] == [
-        {"source": "ndl", "step": "title+author", "status": "error", "count": 0},
-        {"source": "ndl", "step": "title", "status": "ok", "count": 3},
+        {"source": "ndl", "step": "isbn", "status": "error", "count": 0},
+        {"source": "openbd", "step": "isbn", "status": "ok", "count": 1},
     ]
+    assert len([u for u in urls if "ndlsearch" in u]) == 1
 
 
 def test_an_answer_that_cannot_be_read_is_an_error_and_never_raises():
