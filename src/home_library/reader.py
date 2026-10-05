@@ -95,7 +95,13 @@ def _events(stdout):
 
 def run_read(photo_dir, read_id, backend, *, run=subprocess.run, clock=time.monotonic,
              now=lambda: datetime.now().astimezone(), timeout=600):
-    """Run one read of the photo in photo_dir and return the stored read."""
+    """Run one read of the photo in photo_dir and return the stored read.
+
+    Raises ReadError for an unknown backend, a tiles directory that does not match the manifest, and any failed
+    run. A failed run leaves raw.txt and run.json, never read.json.
+    """
+    if backend not in BACKENDS:
+        raise ReadError(f"unknown backend {backend!r}; choose one of {', '.join(BACKENDS)}")
     photo_dir = Path(photo_dir)
     manifest = json.loads((photo_dir / "tiles.json").read_text(encoding="utf-8"))
     tiles_dir = photo_dir / "tiles"
