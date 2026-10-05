@@ -39,10 +39,14 @@ def _scan_entries(raw: str, start: int):
     books, errors = [], []
     pos = start
     position = 0
+    closed = False
     while True:
         while pos < len(raw) and raw[pos] in " \t\r\n,":
             pos += 1
-        if pos >= len(raw) or raw[pos] == "]":
+        if pos >= len(raw):
+            break
+        if raw[pos] == "]":
+            closed = True
             break
         position += 1
         try:
@@ -55,10 +59,10 @@ def _scan_entries(raw: str, start: int):
             errors.append({"position": position, "offset": pos, "reason": exc.msg,
                            "raw": raw[pos:end].rstrip(" \t\r\n,")})
             pos = end
-    return books, errors
+    return books, errors, closed
 
 
 def parse_read(raw: str) -> dict:
     found = _BOOKS.search(raw)
-    books, errors = _scan_entries(raw, found.end())
-    return {"file": _file_name(raw), "books": books, "errors": errors, "complete": not errors}
+    books, errors, closed = _scan_entries(raw, found.end())
+    return {"file": _file_name(raw), "books": books, "errors": errors, "complete": closed and not errors}
