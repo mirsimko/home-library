@@ -115,3 +115,37 @@ def test_two_copies_in_each_read_give_two_accepted_pairs():
     items = merge_reads(a, b)["items"]
     assert [i["reason"] for i in items] == ["agreed", "agreed"]
     assert [[r["n"] for r in i["readings"]] for i in items] == [[1, 5], [2, 6]]
+
+
+def test_partial_or_inferred_titles_are_never_accepted_even_when_the_other_read_agrees():
+    clean = book(1, "The Blue Kite", language="en")
+    cases = [
+        book(1, "The Blue Kite", language="en", readable="partial"),
+        book(1, "The Blue Kite", language="en", inferred="The Blue Kite?"),
+        book(1, "The Blue Kite", language="en", readable="no"),
+    ]
+    for other in cases:
+        for first, second in [(clean, other), (other, clean)]:
+            items = merge_reads(read("a-sol", [first]), read("b-spark", [second]))["items"]
+            assert len(items) == 1, other
+            assert (items[0]["status"], items[0]["reason"]) == ("review", "partial"), other
+            assert len(items[0]["readings"]) == 2
+            assert items[0]["exact"] is True
+
+
+def test_a_title_marked_yes_with_an_empty_inferred_is_eligible():
+    items = merge_reads(read("a-sol", [book(1, "A Tale", inferred="")]), read("b-spark", [book(1, "A Tale")]))["items"]
+    assert items[0]["status"] == "accepted"
+
+
+def test_a_partial_entry_alone_is_reported_as_partial_not_solo():
+    a = read("a-sol", [book(1, "Zelený dr", readable="partial")])
+    items = merge_reads(a, read("b-spark", []))["items"]
+    assert [(i["status"], i["reason"]) for i in items] == [("review", "partial")]
+
+
+def test_near_titles_where_one_is_partial_are_reported_as_partial():
+    a = read("a-sol", [book(1, "The Blue Kite", readable="partial")])
+    b = read("b-spark", [book(1, "The Blue Kito")])
+    items = merge_reads(a, b)["items"]
+    assert [(i["reason"], len(i["readings"])) for i in items] == [("partial", 2)]
