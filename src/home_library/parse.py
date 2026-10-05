@@ -18,9 +18,14 @@ def _whole_object(raw: str):
         return None
 
 
-def _file_name(raw: str) -> str:
+def _file_name(raw: str):
     found = _FILE.search(raw)
-    return json.loads(found.group(1)) if found else ""
+    if not found:
+        return "", True
+    try:
+        return json.loads(found.group(1)), True
+    except ValueError:
+        return "", False
 
 
 def _next_decodable_object(raw: str, after: int) -> int:
@@ -88,6 +93,7 @@ def parse_read(raw: str) -> dict:
     found = _BOOKS.search(raw)
     if found is None:
         error = {"position": 0, "offset": 0, "reason": 'No "books" list found', "raw": raw}
-        return {"file": _file_name(raw), "books": [], "errors": [error], "complete": False}
+        return {"file": _file_name(raw)[0], "books": [], "errors": [error], "complete": False}
     books, errors, closed = _scan_entries(raw, found.end())
-    return {"file": _file_name(raw), "books": books, "errors": errors, "complete": closed and not errors}
+    file_name, file_ok = _file_name(raw)
+    return {"file": file_name, "books": books, "errors": errors, "complete": closed and not errors and file_ok}
