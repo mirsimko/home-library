@@ -4,7 +4,7 @@ import urllib.error
 import urllib.request
 from urllib.parse import urlparse
 
-from home_library.lookup.errors import FetchError, RateLimited
+from home_library.lookup.errors import FetchError, RateLimited, Unavailable
 
 USER_AGENT = "home-library/0.1 (+https://github.com/mirsimko/home-library)"
 TIMEOUT_SECONDS = 30
@@ -51,9 +51,9 @@ class Fetcher:
         except (TimeoutError, urllib.error.URLError, OSError) as error:
             reason = getattr(error, "reason", error)
             if isinstance(reason, TimeoutError):
-                failure = FetchError("%s timed out twice" % host)
+                failure = Unavailable("%s timed out twice" % host)
                 return self._pause_then_retry(url, host, retry, error, failure)
-            raise FetchError("%s could not be reached: %s" % (host, reason)) from error
+            raise Unavailable("%s could not be reached: %s" % (host, reason)) from error
         finally:
             self.last_request[host] = self.clock()
 

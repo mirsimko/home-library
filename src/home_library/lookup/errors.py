@@ -10,7 +10,7 @@ class RateLimited(SourceError):
 
 
 class Unavailable(SourceError):
-    """The source cannot be used on this machine, for example yaz-client is not installed."""
+    """The source cannot be reached from this machine: yaz-client is missing, or a host or a program timed out."""
 
 
 class FetchError(SourceError):

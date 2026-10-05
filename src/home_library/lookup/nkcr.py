@@ -89,5 +89,5 @@ def run_yaz_client(commands):
     except FileNotFoundError as error:
         raise Unavailable("the yaz-client program is not installed") from error
     except subprocess.TimeoutExpired as error:
-        raise SourceError("yaz-client did not finish in %d s" % TIMEOUT_SECONDS) from error
+        raise Unavailable("yaz-client did not finish in %d s" % TIMEOUT_SECONDS) from error
     return done.stdout
