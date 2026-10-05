@@ -65,12 +65,22 @@ def _check(item: int, pick, ids: set) -> dict:
     return {"item": item, "verdict": verdict, "candidate_id": None, "reason": reason}
 
 
+def books_with_candidates(candidates: dict) -> list:
+    return [book for book in candidates["books"] if book["candidates"]]
+
+
+def none_for_all(candidates: dict, reason: str) -> dict:
+    return {"file": candidates["file"], "picks": [_none(book["item"], reason) for book in books_with_candidates(candidates)]}
+
+
 def parse_picks(raw: str, candidates: dict) -> dict:
     answer = _find_object(raw)
-    by_item = {pick["item"]: pick for pick in answer["picks"] if isinstance(pick, dict) and "item" in pick}
+    if answer is None:
+        return none_for_all(candidates, "The answer could not be read as a list of picks.")
+    by_item = {pick["item"]: pick for pick in answer["picks"]
+               if isinstance(pick, dict) and type(pick.get("item")) is int}
     picks = []
-    for book in candidates["books"]:
-        if book["candidates"]:
-            ids = {c["id"] for c in book["candidates"]}
-            picks.append(_check(book["item"], by_item.get(book["item"]), ids))
+    for book in books_with_candidates(candidates):
+        ids = {c["id"] for c in book["candidates"]}
+        picks.append(_check(book["item"], by_item.get(book["item"]), ids))
     return {"file": candidates["file"], "picks": picks}
