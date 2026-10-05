@@ -1,6 +1,8 @@
 import hashlib
 import json
 
+import pytest
+
 from PIL import Image
 
 from home_library.tiles import cut_tiles, plan_layout
@@ -178,3 +180,14 @@ def test_a_second_run_with_another_layout_leaves_only_the_new_tiles(tmp_path):
         f"r{r}c{c}-r{rot}.jpg" for r in (1, 2) for c in (1, 2) for rot in (0, 180))
     assert sorted(t["file"] for t in manifest["tiles"]) == expected
     assert sorted(p.name for p in (out / "tiles").iterdir()) == expected
+
+
+def test_cutting_into_a_directory_inside_a_git_checkout_is_refused_and_writes_nothing(tmp_path):
+    (tmp_path / "repo" / ".git").mkdir(parents=True)
+    photo = make_photo(tmp_path / "shelf-1.jpg", (1200, 900))
+    out = tmp_path / "repo" / "work" / "shelf-1"
+
+    with pytest.raises(ValueError):
+        cut_tiles(photo, out)
+
+    assert not (tmp_path / "repo" / "work").exists()
