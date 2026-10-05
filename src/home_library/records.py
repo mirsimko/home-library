@@ -47,6 +47,26 @@ def _fill_catalogue(record: dict, cand: dict) -> None:
         record["sort_key"] = cand["title_reading"]
 
 
+def _notes(item: dict, pick: dict | None, matched: dict | None) -> str:
+    sentences = []
+    if item["reason"] == "solo":
+        sentences.append(f"Only {item['readings'][0]['read_id']} gave this title.")
+    elif item["reason"] == "near":
+        sentences.append("The two reads differ.")
+    elif item["reason"] == "partial":
+        sentences.append("Partly legible.")
+    guess = next((r["inferred"] for r in item["readings"] if r["inferred"]), "")
+    if guess:
+        sentences.append(f"Guess: {guess}.")
+    if pick and pick["verdict"] == "ambiguous":
+        sentences.append(f"Catalogue match ambiguous: {pick['reason']}")
+    if matched and matched["audience"]:
+        sentences.append(f"Catalogue audience: {matched['audience']}.")
+    if matched and matched["age_note"]:
+        sentences.append(f"Catalogue age note: {matched['age_note']}.")
+    return " ".join(sentences)
+
+
 def build_records(merged: dict, candidates: dict | None = None, picks: dict | None = None, *,
                   location: str = "") -> list:
     records = []
@@ -57,7 +77,12 @@ def build_records(merged: dict, candidates: dict | None = None, picks: dict | No
         if pick:
             record["pick_verdict"] = pick["verdict"]
             matched = next((c for c in cands if c["id"] == pick["candidate_id"]), None)
-            if pick["verdict"] == "match" and matched:
+            if pick["verdict"] != "match":
+                matched = None
+            if matched:
                 _fill_catalogue(record, matched)
+        else:
+            matched = None
+        record["notes"] = _notes(item, pick, matched)
         records.append(record)
     return records
