@@ -51,3 +51,18 @@ def test_entry_with_a_missing_quote_is_reported_and_its_neighbours_survive():
     assert error["raw"] == '{"n": 2, "title": B"}'
     assert error["reason"] != ""
     assert read["complete"] is False
+
+
+def test_entry_with_a_missing_comma_is_reported_with_its_raw_text():
+    raw = (
+        '{"file": "shelf-1.jpg", "books": [\n'
+        '{"n": 1, "title": "A"},\n'
+        '{"n": 2 "title": "B"},\n'
+        '{"n": 3, "title": "C"}\n'
+        ']}'
+    )
+    read = parse_read(raw)
+    assert [b["title"] for b in read["books"]] == ["A", "C"]
+    assert read["errors"][0]["position"] == 2
+    assert read["errors"][0]["raw"] == '{"n": 2 "title": "B"}'
+    assert "delimiter" in read["errors"][0]["reason"]
