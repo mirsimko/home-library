@@ -1,6 +1,7 @@
 """Stage 1: cut a photo into overlapping tiles (see docs/pipeline.md)."""
 import hashlib
 import json
+import shutil
 from pathlib import Path
 
 from PIL import Image, ImageOps
@@ -32,6 +33,11 @@ def cut_tiles(photo, out_dir, *, quality=88, **layout_options):
     out_dir = Path(out_dir)
     tiles_dir = out_dir / "tiles"
     tiles_dir.mkdir(parents=True, exist_ok=True)
+    for stale in tiles_dir.iterdir():
+        if stale.is_dir():
+            shutil.rmtree(stale)
+        else:
+            stale.unlink()
     with Image.open(photo) as opened:
         image = ImageOps.exif_transpose(opened).convert("RGB")
     width, height = image.size
