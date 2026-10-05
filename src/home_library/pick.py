@@ -66,22 +66,22 @@ def _check(item: int, pick, ids: set) -> dict:
     return {"item": item, "verdict": verdict, "candidate_id": None, "reason": reason}
 
 
-def books_with_candidates(candidates: dict) -> list:
+def _books_with_candidates(candidates: dict) -> list:
     return [book for book in candidates["books"] if book["candidates"]]
 
 
-def none_for_all(candidates: dict, reason: str) -> dict:
-    return {"file": candidates["file"], "picks": [_none(book["item"], reason) for book in books_with_candidates(candidates)]}
+def _none_for_all(candidates: dict, reason: str) -> dict:
+    return {"file": candidates["file"], "picks": [_none(book["item"], reason) for book in _books_with_candidates(candidates)]}
 
 
 def parse_picks(raw: str, candidates: dict) -> dict:
     answer = _find_object(raw)
     if answer is None:
-        return none_for_all(candidates, "The answer could not be read as a list of picks.")
+        return _none_for_all(candidates, "The answer could not be read as a list of picks.")
     by_item = {pick["item"]: pick for pick in answer["picks"]
                if isinstance(pick, dict) and type(pick.get("item")) is int}
     picks = []
-    for book in books_with_candidates(candidates):
+    for book in _books_with_candidates(candidates):
         ids = {c["id"] for c in book["candidates"]}
         picks.append(_check(book["item"], by_item.get(book["item"]), ids))
     return {"file": candidates["file"], "picks": picks}
@@ -93,7 +93,7 @@ def _write_picks(lookup_dir: Path, picks: dict) -> None:
 
 
 def _failed(lookup_dir: Path, candidates: dict, why: str) -> dict:
-    picks = none_for_all(candidates, f"The pick step failed: {why}.")
+    picks = _none_for_all(candidates, f"The pick step failed: {why}.")
     _write_picks(lookup_dir, picks)
     return picks
 
@@ -103,7 +103,7 @@ def run_pick(photo_dir, *, run=subprocess.run, timeout=300) -> dict:
     lookup_dir = photo_dir / "lookup"
     merged = json.loads((photo_dir / "merged.json").read_text(encoding="utf-8"))
     candidates = json.loads((lookup_dir / "candidates.json").read_text(encoding="utf-8"))
-    if not books_with_candidates(candidates):
+    if not _books_with_candidates(candidates):
         picks = {"file": candidates["file"], "picks": []}
     else:
         raw_file = lookup_dir / "picks.raw.txt"
