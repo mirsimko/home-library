@@ -104,6 +104,7 @@ class FakePrograms:
 
     def __init__(self, sol_answer, spark_answer, pick_answer):
         self.sol_answer, self.spark_answer, self.pick_answer = sol_answer, spark_answer, pick_answer
+        self.pick_returncode = 0
         self.started = []
 
     def __call__(self, command, **kwargs):
@@ -113,7 +114,7 @@ class FakePrograms:
         if "-o" in command:
             self.started.append("codex pick")
             Path(command[command.index("-o") + 1]).write_text(self.pick_answer, encoding="utf-8")
-            return SimpleNamespace(returncode=0, stdout="", stderr="")
+            return SimpleNamespace(returncode=self.pick_returncode, stdout="", stderr="")
         self.started.append("codex read")
         events = [{"type": "item.completed", "item": {"id": "item_0", "type": "agent_message",
                                                       "text": self.sol_answer}}]
@@ -133,6 +134,11 @@ def photo_and_programs(tmp_path):
     return photo, programs
 
 
+def run_one(photo, work_root, **options):
+    (result,) = pipeline.run_photos([photo], work_root, **options)
+    return result
+
+
 def catalogues():
     ndl_answer = (FIXTURES / "ndl_search_daruma.xml").read_bytes()
     nothing = (FIXTURES / "openlibrary_search_empty.json").read_bytes()
@@ -142,7 +148,7 @@ def catalogues():
 def test_a_photo_goes_from_tiles_to_review_records_in_one_call(tmp_path):
     photo, programs = photo_and_programs(tmp_path)
 
-    summary = pipeline.run_photo(photo, tmp_path / "work", location="Box 3",
+    summary = run_one(photo, tmp_path / "work", location="Box 3",
                                  run=programs, fetch=catalogues())
 
     assert sorted(programs.started[:2]) == ["codex read", "pi read"]
@@ -164,10 +170,10 @@ def test_a_photo_goes_from_tiles_to_review_records_in_one_call(tmp_path):
 
 def test_running_a_photo_again_repeats_no_model_call(tmp_path):
     photo, programs = photo_and_programs(tmp_path)
-    pipeline.run_photo(photo, tmp_path / "work", run=programs, fetch=catalogues())
+    run_one(photo, tmp_path / "work", run=programs, fetch=catalogues())
     programs.started.clear()
 
-    summary = pipeline.run_photo(photo, tmp_path / "work", run=programs, fetch=catalogues())
+    summary = run_one(photo, tmp_path / "work", run=programs, fetch=catalogues())
 
     assert programs.started == []
     assert (summary["accepted"], summary["review"]) == (1, 1)
@@ -177,38 +183,34 @@ def test_running_a_photo_again_repeats_no_model_call(tmp_path):
 def test_a_read_that_failed_is_the_only_one_repeated(tmp_path):
     photo, programs = photo_and_programs(tmp_path)
     good_answer, programs.spark_answer = programs.spark_answer, ""  # pi returns nothing the first time
-    try:
-        pipeline.run_photo(photo, tmp_path / "work", run=programs, fetch=catalogues())
-    except Exception as failure:
-        assert "empty answer" in str(failure)
-    else:
-        raise AssertionError("the empty second read should have stopped the run")
+    failed = run_one(photo, tmp_path / "work", run=programs, fetch=catalogues())
+    assert "empty answer" in failed["error"]
     programs.started.clear()
     programs.spark_answer = good_answer
 
-    pipeline.run_photo(photo, tmp_path / "work", run=programs, fetch=catalogues())
+    run_one(photo, tmp_path / "work", run=programs, fetch=catalogues())
 
     assert programs.started == ["pi read", "codex pick"]
 
 
 def test_a_changed_photo_or_force_runs_everything_again(tmp_path):
     photo, programs = photo_and_programs(tmp_path)
-    pipeline.run_photo(photo, tmp_path / "work", run=programs, fetch=catalogues())
+    run_one(photo, tmp_path / "work", run=programs, fetch=catalogues())
 
     programs.started.clear()
-    pipeline.run_photo(photo, tmp_path / "work", run=programs, fetch=catalogues(), force=True)
+    run_one(photo, tmp_path / "work", run=programs, fetch=catalogues(), force=True)
     assert sorted(programs.started) == ["codex pick", "codex read", "pi read"]
 
     programs.started.clear()
     Image.new("RGB", (640, 480), "grey").save(photo)  # another photo under the same name
-    pipeline.run_photo(photo, tmp_path / "work", run=programs, fetch=catalogues())
+    run_one(photo, tmp_path / "work", run=programs, fetch=catalogues())
     assert sorted(programs.started) == ["codex pick", "codex read", "pi read"]
 
 
 def test_the_summary_reports_how_long_each_read_took(tmp_path):
     photo, programs = photo_and_programs(tmp_path)
 
-    summary = pipeline.run_photo(photo, tmp_path / "work", run=programs, fetch=catalogues())
+    summary = run_one(photo, tmp_path / "work", run=programs, fetch=catalogues())
 
     assert sorted(summary["seconds"]) == ["a-sol", "b-spark"]
     assert all(isinstance(value, float) and value >= 0 for value in summary["seconds"].values())
@@ -221,17 +223,16 @@ import threading
 
 def test_the_two_reads_of_a_photo_run_at_the_same_time(tmp_path):
     photo, programs = photo_and_programs(tmp_path)
-    second_read_started = threading.Event()
+    both_running = threading.Barrier(2, timeout=5)  # broken unless the two reads are in progress together
 
     def run(command, **kwargs):
-        if command[0] == "pi":
-            second_read_started.set()
-        elif "-o" not in command:  # the first read does not finish until the second has started
-            assert second_read_started.wait(timeout=5), "the second read did not start while the first ran"
+        if "-o" not in command:
+            both_running.wait()
         return programs(command, **kwargs)
 
-    summary = pipeline.run_photo(photo, tmp_path / "work", run=run, fetch=catalogues())
+    summary = run_one(photo, tmp_path / "work", run=run, fetch=catalogues())
 
+    assert "error" not in summary
     assert (summary["accepted"], summary["review"]) == (1, 1)
 
 
@@ -267,21 +268,142 @@ def test_a_photo_that_fails_does_not_stop_the_others(tmp_path):
 def test_the_look_ups_of_one_photo_run_while_the_next_photo_is_read(tmp_path):
     # NDL takes 10 to 15 seconds for one title search, so look-ups must not hold up the next photo's reads.
     first, programs = photo_and_programs(tmp_path)
-    next_photo_being_read = threading.Event()
     fetch = catalogues()
-    reads_started = []
+    look_up_running, read_running = threading.Event(), threading.Event()
+    pi_reads, overlaps = [], []
 
     def run(command, **kwargs):
         if command[0] == "pi":
-            reads_started.append(command)
-            if len(reads_started) == 2:
-                next_photo_being_read.set()
+            pi_reads.append(command)
+            if len(pi_reads) == 2:  # the second photo's read: it must find the first photo's look-up under way
+                read_running.set()
+                overlaps.append(look_up_running.wait(timeout=5))
         return programs(command, **kwargs)
 
-    def slow_fetch(url):  # the first photo's look-up does not finish until the second photo is being read
-        assert next_photo_being_read.wait(timeout=5), "the next photo was not read during the look-ups"
+    def slow_fetch(url):  # a look-up holds on until the next photo is being read
+        look_up_running.set()
+        overlaps.append(read_running.wait(timeout=5))
         return fetch(url)
 
     results = pipeline.run_photos([first, second_photo(tmp_path)], tmp_path / "work", run=run, fetch=slow_fetch)
 
     assert [r["accepted"] for r in results] == [1, 1]
+    assert overlaps and all(overlaps)
+
+
+# --- a rerun never reuses what no longer fits (review council, 2026-10-05) ---
+
+from home_library.reader import run_read
+
+
+def rows_of(photo_dir):
+    with open(photo_dir / "records.csv", encoding="utf-8-sig", newline="") as handle:
+        return list(csv.DictReader(handle))
+
+
+def test_a_pick_step_that_failed_is_made_again_on_the_next_run(tmp_path):
+    photo, programs = photo_and_programs(tmp_path)
+    programs.pick_returncode = 1
+    run_one(photo, tmp_path / "work", run=programs, fetch=catalogues())
+    assert "The pick step failed" in rows_of(tmp_path / "work" / "shelf-9")[0]["notes"]
+    programs.started.clear()
+    programs.pick_returncode = 0
+
+    run_one(photo, tmp_path / "work", run=programs, fetch=catalogues())
+
+    assert programs.started == ["codex pick"]
+    assert rows_of(tmp_path / "work" / "shelf-9")[0]["publisher"] == "ブロンズ新社"
+
+
+def test_a_pick_is_not_reused_after_a_read_was_made_again(tmp_path):
+    photo, programs = photo_and_programs(tmp_path)
+    run_one(photo, tmp_path / "work", run=programs, fetch=catalogues())
+    photo_dir = tmp_path / "work" / "shelf-9"
+    programs.sol_answer = programs.spark_answer = answer(entry(1, "あかいふうせん", "ja"))
+    for read_id, backend in pipeline.READERS:  # what `hl read` does
+        run_read(photo_dir, read_id, backend, run=programs)
+    programs.started.clear()
+
+    run_one(photo, tmp_path / "work", run=programs, fetch=catalogues())
+
+    assert programs.started == ["codex pick"]
+    (row,) = rows_of(photo_dir)
+    # the fake pick still answers for the old title, which the echo check rejects
+    assert (row["title"], row["pick_verdict"], row["catalogue_title"], row["source_id"]) == (
+        "あかいふうせん", "none", "", "")
+
+
+def test_a_changed_photo_whose_read_fails_leaves_nothing_of_the_old_photo(tmp_path):
+    photo, programs = photo_and_programs(tmp_path)
+    run_one(photo, tmp_path / "work", run=programs, fetch=catalogues())
+    Image.new("RGB", (640, 480), "grey").save(photo)
+    programs.spark_answer = ""
+
+    failed = run_one(photo, tmp_path / "work", run=programs, fetch=catalogues())
+
+    assert "error" in failed
+    photo_dir = tmp_path / "work" / "shelf-9"
+    left = sorted(p.name for p in photo_dir.iterdir()) + sorted(p.name for p in (photo_dir / "lookup").iterdir())
+    for stale in ("merged.json", "records.csv", "records.json", "candidates.json", "picks.json"):
+        assert stale not in left
+
+
+def test_two_photos_with_the_same_file_name_cannot_share_a_run(tmp_path):
+    first, programs = photo_and_programs(tmp_path)
+    twin = tmp_path / "other-phone" / "shelf-9.jpg"
+    twin.parent.mkdir()
+    Image.new("RGB", (640, 480), "grey").save(twin)
+
+    results = pipeline.run_photos([first, twin], tmp_path / "work", run=programs, fetch=catalogues())
+
+    assert "error" not in results[0] and results[0]["accepted"] == 1
+    assert "same file name" in results[1]["error"]
+    assert sorted(programs.started) == ["codex pick", "codex read", "pi read"]  # the twin was never read
+
+
+def test_tiles_that_went_missing_are_cut_again_without_reading_again(tmp_path):
+    photo, programs = photo_and_programs(tmp_path)
+    run_one(photo, tmp_path / "work", run=programs, fetch=catalogues())
+    tiles = tmp_path / "work" / "shelf-9" / "tiles"
+    (tiles / "r1c1-r180.jpg").unlink()
+    programs.started.clear()
+
+    again = run_one(photo, tmp_path / "work", run=programs, fetch=catalogues())
+
+    assert "error" not in again and programs.started == []
+    assert sorted(p.name for p in tiles.iterdir()) == ["r1c1-r0.jpg", "r1c1-r180.jpg"]
+
+
+def test_a_stored_read_that_cannot_be_decoded_is_made_again(tmp_path):
+    photo, programs = photo_and_programs(tmp_path)
+    run_one(photo, tmp_path / "work", run=programs, fetch=catalogues())
+    (tmp_path / "work" / "shelf-9" / "reads" / "b-spark" / "read.json").write_text('{"file": "shelf-9.j',
+                                                                                 encoding="utf-8")
+    programs.started.clear()
+
+    again = run_one(photo, tmp_path / "work", run=programs, fetch=catalogues())
+
+    assert "error" not in again and programs.started == ["pi read"]
+
+
+def test_the_summary_counts_what_the_reads_lost(tmp_path):
+    photo, programs = photo_and_programs(tmp_path)
+    programs.sol_answer = programs.sol_answer.replace('"readable": "no"', '"readable" "no"')  # a missing colon
+
+    summary = run_one(photo, tmp_path / "work", run=programs, fetch=catalogues())
+
+    assert summary["warnings"] == 1
+    assert [r["read_status"] for r in rows_of(tmp_path / "work" / "shelf-9")][-1] == "unparsed"
+
+
+def test_a_stage_refuses_to_write_inside_a_git_checkout(tmp_path):
+    (tmp_path / ".git").mkdir()
+    store_read(tmp_path / "shelf-1", "a-sol", [entry(1, "Zelený drak")])
+    store_read(tmp_path / "shelf-1", "b-spark", [entry(1, "Zelený drak")])
+    try:
+        pipeline.merge_photo(tmp_path / "shelf-1", ["a-sol", "b-spark"])
+    except ValueError as refusal:
+        assert "git checkout" in str(refusal)
+    else:
+        raise AssertionError("merged.json was written inside a git checkout")
+    assert not (tmp_path / "shelf-1" / "merged.json").exists()
