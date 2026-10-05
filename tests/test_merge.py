@@ -291,3 +291,15 @@ def test_a_title_word_found_only_across_a_word_boundary_does_not_pair_the_entrie
     merged = merge_reads(read("a-sol", [a]), read("b-spark", [b]))
 
     assert [(i["reason"], len(i["readings"])) for i in merged["items"]] == [("solo", 1), ("solo", 1)]
+
+
+def test_the_merge_lists_the_reads_that_were_incomplete_in_the_order_of_the_two_reads():
+    complete = merge_reads(read("a-sol", []), read("b-spark", []))
+    first = merge_reads(read("a-sol", [], complete=False), read("b-spark", []))
+    second = merge_reads(read("a-sol", []), read("b-spark", [], complete=False))
+    both = merge_reads(read("a-sol", [], complete=False), read("b-spark", [], complete=False))
+
+    assert complete["incomplete"] == []
+    assert first["incomplete"] == ["a-sol"]
+    assert second["incomplete"] == ["b-spark"]
+    assert both["incomplete"] == ["a-sol", "b-spark"]
