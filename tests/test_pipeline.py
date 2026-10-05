@@ -117,7 +117,8 @@ class FakePrograms:
             return SimpleNamespace(returncode=self.pick_returncode, stdout="", stderr="")
         self.started.append("codex read")
         events = [{"type": "item.completed", "item": {"id": "item_0", "type": "agent_message",
-                                                      "text": self.sol_answer}}]
+                                                      "text": self.sol_answer}},
+                  {"type": "turn.completed", "usage": {"input_tokens": 100, "output_tokens": 5}}]
         return SimpleNamespace(returncode=0, stdout="\n".join(json.dumps(e) for e in events), stderr="")
 
 
