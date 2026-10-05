@@ -3,7 +3,7 @@ import urllib.request
 
 import pytest
 
-from home_library.lookup.errors import FetchError, RateLimited
+from home_library.lookup.errors import FetchError, RateLimited, Unavailable
 from home_library.lookup.http import Fetcher
 
 NDL = "https://ndlsearch.ndl.go.jp/api/opensearch?isbn=9784893094315&dpid=iss-ndl-opac"
@@ -126,24 +126,33 @@ def test_a_timeout_is_retried_once_after_a_pause():
     assert world.requests[1][3] - world.requests[0][3] == pytest.approx(25)
 
 
-def test_a_second_timeout_is_a_fetch_error_and_not_rate_limiting():
+def test_a_second_timeout_makes_the_host_unavailable_and_not_rate_limited():
     world = FakeWorld(urllib.error.URLError(TimeoutError("timed out")))
 
-    with pytest.raises(FetchError) as caught:
+    with pytest.raises(Unavailable) as caught:
         world.fetcher()(NDL)
 
     assert not isinstance(caught.value, RateLimited)
     assert len(world.requests) == 2
 
 
-@pytest.mark.parametrize("failure", [http_error(500), http_error(404), urllib.error.URLError("refused")])
-def test_other_failures_are_fetch_errors_without_a_retry(failure):
+def test_a_host_that_cannot_be_reached_is_unavailable_without_a_retry():
+    world = FakeWorld(urllib.error.URLError("refused"))
+
+    with pytest.raises(Unavailable):
+        world.fetcher()(NDL)
+
+    assert len(world.requests) == 1
+
+
+@pytest.mark.parametrize("failure", [http_error(500), http_error(404)])
+def test_an_http_error_status_other_than_429_is_a_fetch_error_without_a_retry(failure):
     world = FakeWorld(failure)
 
     with pytest.raises(FetchError) as caught:
         world.fetcher()(NDL)
 
-    assert not isinstance(caught.value, RateLimited)
+    assert not isinstance(caught.value, (RateLimited, Unavailable))
     assert len(world.requests) == 1
 
 
