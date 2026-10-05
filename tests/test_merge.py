@@ -204,3 +204,12 @@ def test_title_with_only_punctuation_goes_to_review_as_partial_not_to_unreadable
         ("review", "partial", "---", 1),
         ("review", "partial", "---", 1),
     ]
+
+
+def test_titles_exactly_ninety_percent_similar_form_one_near_pair():
+    a = read("a-sol", [book(1, "abcdefghij")])
+    b = read("b-spark", [book(1, "abcdefghix")])
+    items = merge_reads(a, b)["items"]
+    assert [(i["status"], i["reason"], i["exact"]) for i in items] == [("review", "near", False)]
+    assert [r["read_id"] for r in items[0]["readings"]] == ["a-sol", "b-spark"]
+    assert [r["title"] for r in items[0]["readings"]] == ["abcdefghij", "abcdefghix"]
