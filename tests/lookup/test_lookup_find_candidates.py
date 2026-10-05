@@ -370,3 +370,7 @@ def test_the_language_is_matched_ignoring_case_and_surrounding_whitespace(langua
 
 def test_a_language_that_is_not_ja_cs_or_en_still_gets_no_source_after_cleaning():
     assert find_candidates("Zelený drak", " ZH ", fetch=no_http, run_yaz=no_yaz) == {"queries": [], "candidates": []}
+
+
+def test_a_missing_language_gets_no_source_and_does_not_raise():
+    assert find_candidates("Zelený drak", None, fetch=no_http, run_yaz=no_yaz) == {"queries": [], "candidates": []}
