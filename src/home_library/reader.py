@@ -101,9 +101,11 @@ def run_read(photo_dir, read_id, backend, *, run=subprocess.run, clock=time.mono
     tiles_dir = photo_dir / "tiles"
     files = [tile["file"] for tile in manifest["tiles"]]
     present = {entry.name for entry in tiles_dir.iterdir()}
-    extra = sorted(present - set(files))
+    extra, missing = sorted(present - set(files)), sorted(set(files) - present)
     if extra:
         raise ReadError(f"{tiles_dir} holds files the manifest does not list: {', '.join(extra)}")
+    if missing:
+        raise ReadError(f"{tiles_dir} lacks files the manifest lists: {', '.join(missing)}")
     prompt = render_prompt(manifest)
     read_dir = photo_dir / "reads" / read_id
     read_dir.mkdir(parents=True, exist_ok=True)
