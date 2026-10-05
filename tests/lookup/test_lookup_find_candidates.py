@@ -232,3 +232,24 @@ def test_an_answer_that_cannot_be_read_is_an_error_and_never_raises():
 
     assert [q["status"] for q in result["queries"]] == ["error"]
     assert result["candidates"] == []
+
+
+def test_no_more_than_max_per_source_candidates_are_kept_from_each_source(fixture_bytes):
+    fetch = Router(fixture_bytes, **{"ndlsearch.ndl.go.jp": "ndl_search_daruma.xml"})
+
+    result = find_candidates("だるまさんが", "ja", fetch=fetch, run_yaz=no_yaz, max_per_source=2)
+
+    assert [c["id"] for c in result["candidates"]] == ["ndl:000009209109", "ndl:025053389"]
+    assert result["queries"][0]["count"] == 2
+
+
+def test_a_record_that_a_source_returns_twice_is_kept_once(fixture_bytes):
+    text = fixture_bytes("ndl_search_daruma.xml").decode("utf-8")
+    first_item = text[text.index("<item>"): text.index("</item>") + len("</item>")]
+    doubled = text.replace(first_item, first_item + first_item, 1).encode("utf-8")
+
+    result = find_candidates("だるまさんが", "ja", fetch=lambda url: doubled, run_yaz=no_yaz)
+
+    ids = [c["id"] for c in result["candidates"]]
+    assert ids == ["ndl:000009209109", "ndl:025053389", "ndl:000011170599"]
+    assert result["queries"][0]["count"] == 3
