@@ -156,3 +156,21 @@ def test_location_is_passed_through_to_every_record():
     records = build_records(merged_of([agreed(), near_item()]), location="Kids room, shelf 2")
     assert [r["location"] for r in records] == ["Kids room, shelf 2"] * 2
     assert build_records(merged_of([agreed()]))[0]["location"] == ""
+
+
+def test_unreadable_entries_of_the_first_read_follow_the_items():
+    unreadable = [reading("b-spark", 6, "", where="r2c1-r0.jpg, #6", other_text="red spine", readable="no"),
+                  reading("a-sol", 9, "", where="r2c2-r0.jpg, #9", other_text="gold letters", readable="no"),
+                  reading("a-sol", 11, "", where="r2c3-r0.jpg, #11", readable="no")]
+    records = build_records(merged_of([agreed(), near_item()], unreadable), location="Hall")
+    assert [r["title"] for r in records] == ["Zelený drak", "The Blue Kite", "", ""]
+    first = records[2]
+    assert first["read_status"] == "unreadable"
+    assert first["other_text"] == "gold letters"
+    assert first["where"] == "r2c2-r0.jpg, #9"
+    assert first["read_ids"] == "a-sol"
+    assert first["photo"] == "shelf-1.jpg"
+    assert first["location"] == "Hall"
+    assert first["needs_review"] is True and first["candidate_count"] == 0
+    assert first["notes"] == "Could not be read from the shelf photo; needs a cover photo."
+    assert set(first) == set(COLUMNS)
