@@ -33,7 +33,7 @@ def _item_record(photo: str, item: dict, location: str) -> dict:
 
 def _unreadable_record(photo: str, entry: dict, location: str) -> dict:
     record = _empty()
-    record.update(photo=photo, location=location, read_status="unreadable", other_text=entry["other_text"],
+    record.update(photo=photo, location=location, language=entry["language"], read_status="unreadable", other_text=entry["other_text"],
                   where=entry["where"], read_ids=entry["read_id"],
                   notes="Could not be read from the shelf photo; needs a cover photo.")
     return record
@@ -51,9 +51,10 @@ def _fill_catalogue(record: dict, cand: dict) -> None:
     record.update(catalogue_title=cand["title"], author="; ".join(cand["authors"]), publisher=cand["publisher"],
                   year=cand["year"], isbn=cand["isbn"], series=cand["series"], source=cand["source"],
                   source_id=cand["source_id"])
-    ages = re.findall(r"\d+", cand["age_note"])
-    record["age_from"] = ages[0] if ages else ""
-    record["age_to"] = ages[1] if len(ages) > 1 else ""
+    span = re.search(r"(\d+)\s*[-\u2013\u2014]\s*(\d+)", cand["age_note"])
+    first = re.search(r"\d+", cand["age_note"])
+    record["age_from"] = span.group(1) if span else first.group(0) if first else ""
+    record["age_to"] = span.group(2) if span else ""
     if cand["title_reading"]:
         record["sort_key"] = cand["title_reading"]
 
