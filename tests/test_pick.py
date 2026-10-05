@@ -213,3 +213,20 @@ def test_a_stale_answer_file_is_not_taken_for_this_runs_answer(tmp_path):
         encoding="utf-8")
     result = run_pick(photo, run=FakeCodex())
     assert [p["verdict"] for p in result["picks"]] == ["none", "none"]
+
+
+def test_parse_picks_rejects_a_match_whose_candidate_id_is_not_a_string():
+    _, candidates = merged_and_candidates()
+    for bad in ([], {}, 7, ["nkcr:cnb001"]):
+        raw = answer({"item": 0, "verdict": "match", "candidate_id": bad, "reason": "x"},
+                     {"item": 2, "verdict": "match", "candidate_id": "ndl:000111", "reason": "Same."})
+        picks = parse_picks(raw, candidates)["picks"]
+        assert [(p["verdict"], p["candidate_id"]) for p in picks] == [("none", None), ("match", "ndl:000111")]
+        assert "rejected" in picks[0]["reason"]
+
+
+def test_parse_picks_gives_none_for_every_book_when_the_answer_nests_too_deeply():
+    _, candidates = merged_and_candidates()
+    raw = '{"picks":' + "[" * 1100 + "0" + "]" * 1100 + "}"
+    picks = parse_picks(raw, candidates)["picks"]
+    assert [(p["item"], p["verdict"]) for p in picks] == [(0, "none"), (2, "none")]
