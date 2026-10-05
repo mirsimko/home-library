@@ -41,3 +41,31 @@ def test_a_japanese_title_is_searched_in_ndl_and_the_step_is_recorded(fixture_by
         "ndl:000009209109", "ndl:025053389", "ndl:000011170599",
     ]
     assert len(fetch.urls) == 1
+
+
+def test_a_valid_isbn_is_tried_first_in_ndl_and_then_in_openbd_and_the_ladder_stops(fixture_bytes):
+    fetch = Router(
+        fixture_bytes,
+        **{"ndlsearch.ndl.go.jp": "ndl_isbn_9784893094315.xml", "api.openbd.jp": "openbd_9784001111118.json"},
+    )
+
+    result = find_candidates(
+        "だるまさんが", "ja", author="かがくいひろし", isbn="978-4-89309-431-5", fetch=fetch, run_yaz=no_yaz
+    )
+
+    assert result["queries"] == [
+        {"source": "ndl", "step": "isbn", "status": "ok", "count": 2},
+        {"source": "openbd", "step": "isbn", "status": "ok", "count": 1},
+    ]
+    assert [c["source"] for c in result["candidates"]] == ["ndl", "ndl", "openbd"]
+    assert len(fetch.urls) == 2
+    assert fetch.params(0)["isbn"] == "9784893094315"
+    assert fetch.params(1)["isbn"] == "9784893094315"
+
+
+def test_an_invalid_isbn_is_not_used(fixture_bytes):
+    fetch = Router(fixture_bytes, **{"ndlsearch.ndl.go.jp": "ndl_search_daruma.xml"})
+
+    result = find_candidates("だるまさんが", "ja", isbn="9784893094316", fetch=fetch, run_yaz=no_yaz)
+
+    assert [q["step"] for q in result["queries"]] == ["title"]
