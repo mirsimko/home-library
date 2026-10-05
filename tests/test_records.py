@@ -1,4 +1,7 @@
-from home_library.records import COLUMNS, build_records
+import csv
+import json
+
+from home_library.records import COLUMNS, build_records, write_records
 
 
 def reading(read_id, n, title, **over):
@@ -174,3 +177,23 @@ def test_unreadable_entries_of_the_first_read_follow_the_items():
     assert first["needs_review"] is True and first["candidate_count"] == 0
     assert first["notes"] == "Could not be read from the shelf photo; needs a cover photo."
     assert set(first) == set(COLUMNS)
+
+
+def czech_japanese_records():
+    cz = agreed()
+    jp = item("agreed", "あかいふうせん", [reading("a-sol", 2, "あかいふうせん", language="ja", other_text="青空社, \"絵本\""),
+                                          reading("b-spark", 3, "あかいふうせん", language="ja")], language="ja")
+    return build_records(merged_of([cz, jp]), location="Dětský pokoj")
+
+
+def test_write_records_round_trips_czech_and_japanese_text_through_the_csv(tmp_path):
+    records = czech_japanese_records()
+    write_records(tmp_path, records)
+    with open(tmp_path / "records.csv", encoding="utf-8-sig", newline="") as f:
+        rows = list(csv.DictReader(f))
+    assert list(rows[0]) == COLUMNS
+    assert [r["title"] for r in rows] == ["Zelený drak", "あかいふうせん"]
+    assert rows[1]["other_text"] == '青空社, "絵本"'
+    assert rows[0]["location"] == "Dětský pokoj"
+    assert rows[0]["needs_review"] == "true"
+    assert rows[0]["candidate_count"] == "0"
