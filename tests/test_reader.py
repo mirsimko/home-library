@@ -94,7 +94,7 @@ def test_codex_answer_comes_from_the_last_agent_message_and_the_stream_is_kept(t
     work, _ = cut_small_photo(tmp_path)
     early = {"type": "item.completed", "item": {"id": "item_1", "type": "agent_message", "text": "Looking now."}}
     reasoning = {"type": "item.completed", "item": {"id": "item_0", "type": "reasoning", "text": "hmm"}}
-    stdout = "not json at all\n" + codex_stream(extra=[reasoning, early])
+    stdout = "\n" + codex_stream(extra=[reasoning, early]) + "  \n"  # blank lines are not events
     run = FakeRun(stdout=stdout)
 
     run_read(work, "a-sol", "codex-exec", run=run)
@@ -160,15 +160,20 @@ def test_run_json_records_how_the_codex_read_was_run(tmp_path):
     }
 
 
-def test_usage_is_null_when_the_stream_has_no_turn_completed(tmp_path):
+def test_a_codex_stream_without_turn_completed_fails_the_read_and_leaves_usage_null(tmp_path):
     work, _ = cut_small_photo(tmp_path)
     message = {"type": "item.completed", "item": {"id": "item_0", "type": "agent_message", "text": ANSWER}}
-    run = FakeRun(stdout=json.dumps(message) + "\n")
+    stdout = json.dumps(message) + "\n"
+    run = FakeRun(stdout=stdout)
 
-    run_read(work, "a-sol", "codex-exec", run=run)
+    with pytest.raises(ReadError, match="turn.completed"):
+        run_read(work, "a-sol", "codex-exec", run=run)
 
-    info = json.loads((work / "reads" / "a-sol" / "run.json").read_text(encoding="utf-8"))
-    assert info["usage"] is None
+    read_dir = read_dir_of(work, "a-sol")
+    assert not (read_dir / "read.json").exists()
+    assert (read_dir / "raw.txt").read_text(encoding="utf-8") == ANSWER
+    assert (read_dir / "events.jsonl").read_text(encoding="utf-8") == stdout
+    assert json.loads((read_dir / "run.json").read_text(encoding="utf-8"))["usage"] is None
 
 
 def test_a_codex_read_that_ran_a_command_is_rejected_and_leaves_no_read_json(tmp_path):
@@ -594,3 +599,46 @@ def test_an_answer_with_an_empty_books_list_is_a_valid_read_of_an_empty_shelf(tm
     assert read["books"] == []
     assert read["complete"] is True
     assert (read_dir_of(work, "b-spark") / "read.json").exists()
+
+
+@pytest.mark.parametrize("line", ["not json at all", '{"type": "item.started", "item": {"id": "item_1", "ty', "[1, 2]", "42"])
+def test_a_line_of_the_codex_stream_that_is_not_a_json_object_fails_the_read(tmp_path, line):
+    work, _ = cut_small_photo(tmp_path)
+    stdout = codex_stream().replace("\n", "\n" + line + "\n", 1)
+    run = FakeRun(stdout=stdout)
+
+    with pytest.raises(ReadError, match="not a JSON object"):
+        run_read(work, "a-sol", "codex-exec", run=run)
+
+    read_dir = read_dir_of(work, "a-sol")
+    assert not (read_dir / "read.json").exists()
+    assert (read_dir / "raw.txt").read_text(encoding="utf-8") == ANSWER
+    assert (read_dir / "events.jsonl").read_text(encoding="utf-8") == stdout
+    assert (read_dir / "run.json").exists()
+
+
+@pytest.mark.parametrize("kind", ["turn.failed", "error"])
+def test_a_codex_stream_with_a_failure_event_fails_the_read_even_after_an_answer(tmp_path, kind):
+    work, _ = cut_small_photo(tmp_path)
+    run = FakeRun(stdout=codex_stream(extra=[{"type": kind, "message": "boom"}]))
+
+    with pytest.raises(ReadError, match=f"'{kind}' event"):
+        run_read(work, "a-sol", "codex-exec", run=run)
+
+    read_dir = read_dir_of(work, "a-sol")
+    assert not (read_dir / "read.json").exists()
+    assert (read_dir / "raw.txt").read_text(encoding="utf-8") == ANSWER
+    assert (read_dir / "events.jsonl").exists()
+    assert (read_dir / "run.json").exists()
+
+
+def test_an_item_without_a_type_counts_as_a_tool_call_named_unknown(tmp_path):
+    work, _ = cut_small_photo(tmp_path)
+    run = FakeRun(stdout=codex_stream(extra=[{"type": "item.started", "item": {"id": "item_1"}}]))
+
+    with pytest.raises(ReadError, match=r"used tools \(unknown\)"):
+        run_read(work, "a-sol", "codex-exec", run=run)
+
+    info = json.loads((read_dir_of(work, "a-sol") / "run.json").read_text(encoding="utf-8"))
+    assert info["tool_calls"] == ["unknown"]
+    assert not (read_dir_of(work, "a-sol") / "read.json").exists()
