@@ -102,7 +102,7 @@ def run_read(photo_dir, read_id, backend, *, run=subprocess.run, clock=time.mono
     """
     if backend not in BACKENDS:
         raise ReadError(f"unknown backend {backend!r}; choose one of {', '.join(BACKENDS)}")
-    photo_dir = Path(photo_dir)
+    photo_dir = Path(photo_dir).resolve()
     manifest = json.loads((photo_dir / "tiles.json").read_text(encoding="utf-8"))
     tiles_dir = photo_dir / "tiles"
     files = [tile["file"] for tile in manifest["tiles"]]
