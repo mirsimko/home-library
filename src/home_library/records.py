@@ -1,6 +1,8 @@
 """Stage 6: one record per book, as JSON and CSV."""
 from __future__ import annotations
 
+import re
+
 
 COLUMNS = ["title", "sort_key", "author", "illustrator", "publisher", "year", "language", "isbn", "series",
            "age_from", "age_to", "tags", "state", "location", "cover_photo", "source", "source_id",
@@ -36,6 +38,9 @@ def _fill_catalogue(record: dict, cand: dict) -> None:
     record.update(catalogue_title=cand["title"], author="; ".join(cand["authors"]), publisher=cand["publisher"],
                   year=cand["year"], isbn=cand["isbn"], series=cand["series"], source=cand["source"],
                   source_id=cand["source_id"])
+    ages = re.findall(r"\d+", cand["age_note"])
+    record["age_from"] = ages[0] if ages else ""
+    record["age_to"] = ages[1] if len(ages) > 1 else ""
     if cand["title_reading"]:
         record["sort_key"] = cand["title_reading"]
 
