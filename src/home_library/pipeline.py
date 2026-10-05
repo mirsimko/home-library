@@ -52,11 +52,14 @@ def lookup_photo(photo_dir, *, fetch=None, run_yaz=run_yaz_client):
     """Stage 5: fetch catalogue candidates for every fully read title and write candidates.json."""
     photo_dir = Path(photo_dir)
     merged = _load(photo_dir / "merged.json")
-    fetch = fetch or Fetcher(photo_dir / "lookup" / "cache")
-    books = []
+    fetch = fetch or Fetcher()
+    books, down = [], set()  # a source that could not be reached is not asked again for this photo
     for index, item in enumerate(merged["items"]):
         if item["reason"] in LOOKED_UP:
-            found = find_candidates(item["title"], item["language"], fetch=fetch, run_yaz=run_yaz)
+            found = find_candidates(item["title"], item["language"], fetch=fetch, run_yaz=run_yaz,
+                                    cache_dir=photo_dir / "lookup" / "cache", skip=down)
+            down.update(query["source"] for query in found["queries"]
+                        if query["status"] in ("unavailable", "rate_limited"))
             books.append({"item": index, "title": item["title"], "language": item["language"], **found})
     return _store(photo_dir / "lookup" / "candidates.json", {"file": merged["file"], "books": books})
 
@@ -147,6 +150,7 @@ def run_photos(photos, work_root=DEFAULT_WORK_ROOT, *, readers=READERS, location
     A photo that fails does not stop the others. `report` is called with each result as soon as it is final.
     """
     results = [None] * len(photos)
+    fetch = fetch or Fetcher()  # one for the whole run, so the pacing of a source holds across photos
 
     def finish(index, photo, photo_dir):
         try:
