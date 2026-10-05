@@ -353,3 +353,20 @@ def test_a_skipped_nkcr_does_not_run_yaz_client():
         "queries": [{"source": "nkcr", "step": "skipped", "status": "unavailable", "count": 0}],
         "candidates": [],
     }
+
+
+@pytest.mark.parametrize("language, source", [("JA", "ndl"), (" cs ", "nkcr"), ("En\n", "openlibrary")])
+def test_the_language_is_matched_ignoring_case_and_surrounding_whitespace(language, source):
+    def fetch(url):
+        raise FetchError("HTTP 500")
+
+    def run_yaz(commands):
+        raise FetchError("failed")
+
+    result = find_candidates("Zelený drak", language, fetch=fetch, run_yaz=run_yaz)
+
+    assert result["queries"][0]["source"] == source
+
+
+def test_a_language_that_is_not_ja_cs_or_en_still_gets_no_source_after_cleaning():
+    assert find_candidates("Zelený drak", " ZH ", fetch=no_http, run_yaz=no_yaz) == {"queries": [], "candidates": []}
