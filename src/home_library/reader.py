@@ -109,6 +109,7 @@ def run_read(photo_dir, read_id, backend, *, run=subprocess.run, clock=time.mono
     prompt = render_prompt(manifest)
     read_dir = photo_dir / "reads" / read_id
     read_dir.mkdir(parents=True, exist_ok=True)
+    (read_dir / "read.json").unlink(missing_ok=True)
     (read_dir / "prompt.txt").write_text(prompt, encoding="utf-8")
     if backend == "codex-exec":
         command = logged = _codex_command(tiles_dir, files)
