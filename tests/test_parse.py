@@ -204,3 +204,10 @@ def test_escaped_key_and_nested_metadata_do_not_hide_the_real_books_list():
     nested = parse_read('{"metadata":{"books":[{"title":"Fake"}]},"books":[{"title":"Real"}]}')
     assert [b["title"] for b in nested["books"]] == ["Real"]
     assert nested["complete"] is True
+
+
+def test_answer_cut_off_after_the_books_list_is_incomplete_and_keeps_the_books():
+    for raw in ('{"file":"s.jpg","books":[{"title":"A"}]', '{"books":[{"title":"A"}],"file":'):
+        read = parse_read(raw)
+        assert [b["title"] for b in read["books"]] == ["A"]
+        assert read["complete"] is False
