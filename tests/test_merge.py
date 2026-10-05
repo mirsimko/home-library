@@ -180,3 +180,17 @@ def test_an_empty_file_name_matches_the_other_reads_file():
     merged = merge_reads(read("a-sol", [], file=""), read("b-spark", [], file="shelf-2.jpg"))
     assert merged["file"] == "shelf-2.jpg"
     assert merge_reads(read("a-sol", [], file="shelf-1.jpg"), read("b-spark", [], file=""))["file"] == "shelf-1.jpg"
+
+
+def test_near_pairing_takes_the_best_pair_first_and_ignores_pairs_below_ninety_percent():
+    # Against "thebluekite": "thebluekitex" scores 22/23 = 0.957, "thebluekitten" 22/24 = 0.917.
+    # Listing the weaker one first must not let it take the only b entry.
+    a = read("a-sol", [book(1, "The Blue Kitten"), book(2, "The Blue Kitex")])
+    b = read("b-spark", [book(1, "The Blue Kite")])
+    items = merge_reads(a, b)["items"]
+    assert [(i["reason"], [(r["read_id"], r["n"]) for r in i["readings"]]) for i in items] == [
+        ("solo", [("a-sol", 1)]),
+        ("near", [("a-sol", 2), ("b-spark", 1)]),
+    ]
+    two_short = merge_reads(read("a-sol", [book(1, "ab")]), read("b-spark", [book(1, "ac")]))["items"]
+    assert [i["reason"] for i in two_short] == ["solo", "solo"]
