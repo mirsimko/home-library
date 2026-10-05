@@ -97,3 +97,13 @@ def test_answer_cut_off_between_entries_is_incomplete_without_an_error():
     assert [b["title"] for b in read["books"]] == ["A"]
     assert read["errors"] == []
     assert read["complete"] is False
+
+
+def test_missing_fields_are_filled_with_empty_strings_and_all_nine_are_present():
+    raw = '{"file": "shelf-1.jpg", "books": [{"n": 1, "title": "The Blue Kite", "readable": "yes"}]}'
+    book = parse_read(raw)["books"][0]
+    assert list(book) == FIELDS
+    assert book["title"] == "The Blue Kite"
+    assert book["where"] == ""
+    assert book["inferred"] == ""
+    assert book["confidence"] == ""
