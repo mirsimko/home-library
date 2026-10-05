@@ -1,5 +1,6 @@
 """Stage 5, look-up: candidate catalogue records for a title (docs/pipeline.md)."""
 from home_library.lookup import loc, ndl, nkcr, openbd, openlibrary
+from home_library.lookup.errors import RateLimited, Unavailable
 from home_library.lookup.isbn import normalize_isbn
 
 MAX_REQUESTS_PER_SOURCE = 3
@@ -35,7 +36,15 @@ def find_candidates(title, language, *, author=None, isbn=None, fetch, run_yaz, 
     for source in SOURCES.get(language, []):
         name = source.__name__.rsplit(".", 1)[-1]
         for step, run in _steps(source, title, author, isbn)[:MAX_REQUESTS_PER_SOURCE]:
-            found = run(run_yaz if source is nkcr else fetch)
+            try:
+                found = run(run_yaz if source is nkcr else fetch)
+            except (RateLimited, Unavailable) as failure:
+                status = "rate_limited" if isinstance(failure, RateLimited) else "unavailable"
+                queries.append({"source": name, "step": step, "status": status, "count": 0})
+                break  # asking the same source again would not help
+            except Exception:  # a failing source must never stop the run
+                queries.append({"source": name, "step": step, "status": "error", "count": 0})
+                continue
             status = "ok" if found else "no_match"
             queries.append({"source": name, "step": step, "status": status, "count": len(found)})
             candidates.extend(found)
