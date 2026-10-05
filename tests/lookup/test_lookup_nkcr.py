@@ -93,3 +93,34 @@ def test_nkcr_raises_when_the_server_refuses_the_search(fake_yaz, fixture_bytes)
 def test_nkcr_raises_when_yaz_client_printed_nothing_useful(fake_yaz):
     with pytest.raises(SourceError):
         nkcr.search("Krtek a zajíček", None, fake_yaz("Z> Connecting...Unable to connect\n"))
+
+
+def test_nkcr_reads_illustrator_primary_audience_year_in_brackets_and_subject_subdivisions(fake_yaz, fixture_bytes):
+    run = fake_yaz(fixture_bytes("nkcr_isbn_broucci.txt").decode("utf-8"))
+
+    [candidate] = nkcr.by_isbn("9788076392939", run)
+
+    assert candidate["title"] == "Broučci"
+    assert candidate["authors"] == ["Karafiát, Jan, 1846-1929", "Švejdová, Vlasta, 1946- (illustrator)"]
+    assert candidate["publisher"] == "Bookmedia s.r.o."
+    assert candidate["year"] == "2025"
+    assert candidate["isbn"] == "9788076392939"
+    assert candidate["audience"] == "primary"
+    assert candidate["language"] == "cs"
+    assert candidate["age_note"] == ""
+    assert candidate["subjects"] == [
+        "podzim", "světlušky -- pohádky", "české pohádky", "publikace pro děti",
+    ]
+
+
+def test_nkcr_reads_a_translation_without_taking_added_entries_for_authors(fake_yaz, fixture_bytes):
+    run = fake_yaz(fixture_bytes("nkcr_search_krtek_miler.txt").decode("utf-8"))
+
+    chinese = nkcr.search("Krtek a zajíček", "Miler", run)[2]
+
+    assert chinese["language"] == "zh"
+    assert chinese["title"] == "Yan shu de gu shi : jing dian ban"
+    assert chinese["authors"] == ["Miler, Zdeněk, 1921-2011 (author, illustrator)"]
+    assert chinese["isbn"] == "9787544825870"
+    assert chinese["year"] == ""
+    assert chinese["publisher"] == ""
