@@ -5,6 +5,11 @@ import pytest
 
 from home_library.records import COLUMNS, build_records, write_records
 
+CONTRACT_COLUMNS = (
+    "title, sort_key, author, illustrator, publisher, year, language, isbn, series, age_from, age_to, tags, "
+    "state, location, cover_photo, source, source_id, needs_review, notes, photo, read_status, other_reading, "
+    "catalogue_title, other_text, where, read_ids, pick_verdict, candidate_count").split(", ")
+
 
 def reading(read_id, n, title, **over):
     r = {"read_id": read_id, "n": n, "where": f"r1c1-r0.jpg, #{n}", "visible": "spine", "title": title,
@@ -30,7 +35,7 @@ def agreed():
 
 def test_an_agreed_item_without_lookup_data_becomes_a_record_to_review():
     (record,) = build_records(merged_of([agreed()]))
-    assert set(record) == set(COLUMNS)
+    assert list(record) == CONTRACT_COLUMNS
     assert record["title"] == "Zelený drak"
     assert record["language"] == "cs"
     assert record["read_status"] == "agreed"
@@ -178,7 +183,7 @@ def test_unreadable_entries_of_the_first_read_follow_the_items():
     assert first["location"] == "Hall"
     assert first["needs_review"] is True and first["candidate_count"] == 0
     assert first["notes"] == "Could not be read from the shelf photo; needs a cover photo."
-    assert set(first) == set(COLUMNS)
+    assert list(first) == CONTRACT_COLUMNS
 
 
 def czech_japanese_records():
@@ -193,7 +198,7 @@ def test_write_records_round_trips_czech_and_japanese_text_through_the_csv(tmp_p
     write_records(tmp_path, records)
     with open(tmp_path / "records.csv", encoding="utf-8-sig", newline="") as f:
         rows = list(csv.DictReader(f))
-    assert list(rows[0]) == COLUMNS
+    assert list(rows[0]) == CONTRACT_COLUMNS
     assert [r["title"] for r in rows] == ["Zelený drak", "あかいふうせん"]
     assert rows[1]["other_text"] == '青空社, "絵本"'
     assert rows[0]["location"] == "Dětský pokoj"
@@ -223,7 +228,7 @@ def test_records_json_is_a_list_of_typed_objects_with_every_column(tmp_path):
     text = (tmp_path / "records.json").read_text(encoding="utf-8")
     assert text.endswith("]\n") and "あかいふうせん" in text
     loaded = json.loads(text)
-    assert [list(r) for r in loaded] == [COLUMNS, COLUMNS]
+    assert [list(r) for r in loaded] == [CONTRACT_COLUMNS, CONTRACT_COLUMNS]
     assert loaded[0]["needs_review"] is True
     assert loaded[0]["candidate_count"] == 0 and isinstance(loaded[0]["candidate_count"], int)
     assert loaded[0]["title"] == "Zelený drak"
@@ -255,3 +260,7 @@ def test_write_records_refuses_a_directory_inside_a_git_checkout_and_writes_noth
     with pytest.raises(ValueError):
         write_records(tmp_path / "link", [])
     assert list(photo.iterdir()) == []
+
+
+def test_columns_are_the_contracts_columns_in_order():
+    assert COLUMNS == CONTRACT_COLUMNS
