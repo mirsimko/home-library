@@ -33,3 +33,26 @@ def by_isbn(isbn, fetch):
     params = {"bibkeys": "ISBN:" + isbn, "format": "json", "jscmd": "data"}
     answer = json.loads(fetch("https://openlibrary.org/api/books?" + urlencode(params)))
     return [_from_edition(record, isbn) for record in answer.values()]
+
+
+def _from_work(doc):
+    key = doc.get("key", "").rsplit("/", 1)[-1]
+    return new_candidate(
+        "openlibrary",
+        key,
+        url="https://openlibrary.org/works/" + key,
+        title=doc.get("title", ""),
+        authors=doc.get("author_name", []),
+        year=str(doc.get("first_publish_year", "")),
+        subjects=doc.get("subject", [])[:MAX_SUBJECTS],
+    )
+
+
+def search(title, author, fetch):
+    params = {"title": title}
+    if author:
+        params["author"] = author
+    params["limit"] = 10
+    params["fields"] = "key,title,author_name,first_publish_year,subject"
+    answer = json.loads(fetch("https://openlibrary.org/search.json?" + urlencode(params)))
+    return [_from_work(doc) for doc in answer.get("docs", [])]
