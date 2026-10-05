@@ -144,7 +144,8 @@ def test_a_photo_goes_from_tiles_to_review_records_in_one_call(tmp_path):
     summary = pipeline.run_photo(photo, tmp_path / "work", location="Box 3",
                                  run=programs, fetch=catalogues())
 
-    assert programs.started == ["codex read", "pi read", "codex pick"]
+    assert sorted(programs.started[:2]) == ["codex read", "pi read"]
+    assert programs.started[2:] == ["codex pick"]
     photo_dir = tmp_path / "work" / "shelf-9"
     with open(photo_dir / "records.csv", encoding="utf-8-sig", newline="") as handle:
         rows = list(csv.DictReader(handle))
@@ -195,12 +196,12 @@ def test_a_changed_photo_or_force_runs_everything_again(tmp_path):
 
     programs.started.clear()
     pipeline.run_photo(photo, tmp_path / "work", run=programs, fetch=catalogues(), force=True)
-    assert programs.started == ["codex read", "pi read", "codex pick"]
+    assert sorted(programs.started) == ["codex pick", "codex read", "pi read"]
 
     programs.started.clear()
     Image.new("RGB", (640, 480), "grey").save(photo)  # another photo under the same name
     pipeline.run_photo(photo, tmp_path / "work", run=programs, fetch=catalogues())
-    assert programs.started == ["codex read", "pi read", "codex pick"]
+    assert sorted(programs.started) == ["codex pick", "codex read", "pi read"]
 
 
 def test_the_summary_reports_how_long_each_read_took(tmp_path):
@@ -210,3 +211,76 @@ def test_the_summary_reports_how_long_each_read_took(tmp_path):
 
     assert sorted(summary["seconds"]) == ["a-sol", "b-spark"]
     assert all(isinstance(value, float) and value >= 0 for value in summary["seconds"].values())
+
+
+# --- speed: what may overlap, measured on the home uplink on 2026-10-05 ---
+
+import threading
+
+
+def test_the_two_reads_of_a_photo_run_at_the_same_time(tmp_path):
+    photo, programs = photo_and_programs(tmp_path)
+    second_read_started = threading.Event()
+
+    def run(command, **kwargs):
+        if command[0] == "pi":
+            second_read_started.set()
+        elif "-o" not in command:  # the first read does not finish until the second has started
+            assert second_read_started.wait(timeout=5), "the second read did not start while the first ran"
+        return programs(command, **kwargs)
+
+    summary = pipeline.run_photo(photo, tmp_path / "work", run=run, fetch=catalogues())
+
+    assert (summary["accepted"], summary["review"]) == (1, 1)
+
+
+def second_photo(tmp_path):
+    photo = tmp_path / "phone" / "shelf-10.jpg"
+    Image.new("RGB", (640, 480), "grey").save(photo)
+    return photo
+
+
+def test_photos_are_read_one_after_another_and_all_get_their_records(tmp_path):
+    first, programs = photo_and_programs(tmp_path)
+
+    results = pipeline.run_photos([first, second_photo(tmp_path)], tmp_path / "work", location="Box 3",
+                                  run=programs, fetch=catalogues())
+
+    assert [(r["photo"], r["accepted"], r["review"]) for r in results] == [
+        ("shelf-9.jpg", 1, 1), ("shelf-10.jpg", 1, 1)]
+    for stem in ("shelf-9", "shelf-10"):
+        assert (tmp_path / "work" / stem / "records.csv").exists()
+
+
+def test_a_photo_that_fails_does_not_stop_the_others(tmp_path):
+    first, programs = photo_and_programs(tmp_path)
+
+    results = pipeline.run_photos([tmp_path / "phone" / "missing.jpg", first], tmp_path / "work",
+                                  run=programs, fetch=catalogues())
+
+    assert results[0]["photo"] == "missing.jpg" and "error" in results[0]
+    assert (results[1]["photo"], results[1]["accepted"]) == ("shelf-9.jpg", 1)
+    assert "error" not in results[1]
+
+
+def test_the_look_ups_of_one_photo_run_while_the_next_photo_is_read(tmp_path):
+    # NDL takes 10 to 15 seconds for one title search, so look-ups must not hold up the next photo's reads.
+    first, programs = photo_and_programs(tmp_path)
+    next_photo_being_read = threading.Event()
+    fetch = catalogues()
+    reads_started = []
+
+    def run(command, **kwargs):
+        if command[0] == "pi":
+            reads_started.append(command)
+            if len(reads_started) == 2:
+                next_photo_being_read.set()
+        return programs(command, **kwargs)
+
+    def slow_fetch(url):  # the first photo's look-up does not finish until the second photo is being read
+        assert next_photo_being_read.wait(timeout=5), "the next photo was not read during the look-ups"
+        return fetch(url)
+
+    results = pipeline.run_photos([first, second_photo(tmp_path)], tmp_path / "work", run=run, fetch=slow_fetch)
+
+    assert [r["accepted"] for r in results] == [1, 1]
