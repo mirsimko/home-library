@@ -567,3 +567,30 @@ def test_read_json_records_the_hash_of_the_tiles_manifest_the_read_was_made_from
     assert read["photo_sha256"] == expected
     stored = json.loads((read_dir_of(work, "b-spark") / "read.json").read_text(encoding="utf-8"))
     assert stored["photo_sha256"] == expected
+
+
+@pytest.mark.parametrize("answer", [
+    "Error: 429 rate limit exceeded, try again later.",
+    '{"file": "shelf-1.jpg", "result": []}',
+])
+def test_an_answer_with_no_books_list_is_a_failed_read_that_keeps_raw_and_run_json(tmp_path, answer):
+    work, _ = cut_small_photo(tmp_path)
+    run = FakeRun(stdout=answer)
+
+    with pytest.raises(ReadError, match="no books list"):
+        run_read(work, "b-spark", "pi", run=run)
+
+    read_dir = read_dir_of(work, "b-spark")
+    assert not (read_dir / "read.json").exists()
+    assert (read_dir / "raw.txt").read_text(encoding="utf-8") == answer
+    assert json.loads((read_dir / "run.json").read_text(encoding="utf-8"))["returncode"] == 0
+
+
+def test_an_answer_with_an_empty_books_list_is_a_valid_read_of_an_empty_shelf(tmp_path):
+    work, _ = cut_small_photo(tmp_path)
+
+    read = run_read(work, "b-spark", "pi", run=FakeRun(stdout='{"file": "shelf-1.jpg", "books": []}'))
+
+    assert read["books"] == []
+    assert read["complete"] is True
+    assert (read_dir_of(work, "b-spark") / "read.json").exists()
