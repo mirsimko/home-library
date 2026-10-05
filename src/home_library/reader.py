@@ -5,6 +5,7 @@ import time
 from datetime import datetime
 from importlib import resources
 from pathlib import Path
+from types import SimpleNamespace
 
 from home_library.parse import parse_read
 
@@ -112,8 +113,13 @@ def run_read(photo_dir, read_id, backend, *, run=subprocess.run, clock=time.mono
         stdin = None
     started = now().isoformat()
     began = clock()
-    result = run(command, input=stdin, capture_output=True, text=True,
-                 encoding="utf-8", cwd=tiles_dir, timeout=timeout)
+    failure = None
+    try:
+        result = run(command, input=stdin, capture_output=True, text=True,
+                     encoding="utf-8", cwd=tiles_dir, timeout=timeout)
+    except subprocess.TimeoutExpired:
+        result = SimpleNamespace(returncode=None, stdout="")
+        failure = f"{command[0]} timed out after {timeout} seconds"
     seconds = clock() - began
     if backend == "codex-exec":
         events = _events(result.stdout)
@@ -127,10 +133,12 @@ def run_read(photo_dir, read_id, backend, *, run=subprocess.run, clock=time.mono
         (read_dir / "events.jsonl").write_text(stream, encoding="utf-8")
     (read_dir / "raw.txt").write_text(answer, encoding="utf-8")
     _write_json(read_dir / "run.json", info)
-    if result.returncode != 0:
-        raise ReadError(f"{command[0]} exited with return code {result.returncode}")
-    if info["tool_calls"]:
-        raise ReadError(f"the read used tools ({', '.join(info['tool_calls'])}) and is not blind")
+    if failure is None and result.returncode != 0:
+        failure = f"{command[0]} exited with return code {result.returncode}"
+    if failure is None and tool_calls:
+        failure = f"the read used tools ({', '.join(tool_calls)}) and is not blind"
+    if failure is not None:
+        raise ReadError(failure)
     read = parse_read(answer)
     read["read_id"] = read_id
     read["file"] = read["file"] or manifest["photo"]
