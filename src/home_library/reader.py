@@ -127,6 +127,8 @@ def run_read(photo_dir, read_id, backend, *, run=subprocess.run, clock=time.mono
         (read_dir / "events.jsonl").write_text(stream, encoding="utf-8")
     (read_dir / "raw.txt").write_text(answer, encoding="utf-8")
     _write_json(read_dir / "run.json", info)
+    if result.returncode != 0:
+        raise ReadError(f"{command[0]} exited with return code {result.returncode}")
     if info["tool_calls"]:
         raise ReadError(f"the read used tools ({', '.join(info['tool_calls'])}) and is not blind")
     read = parse_read(answer)
