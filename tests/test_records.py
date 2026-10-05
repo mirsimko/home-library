@@ -1,6 +1,8 @@
 import csv
 import json
 
+import pytest
+
 from home_library.records import COLUMNS, build_records, write_records
 
 
@@ -240,3 +242,16 @@ def test_an_unreadable_record_keeps_the_language_of_the_read():
     unreadable = [reading("a-sol", 9, "", language="ja", readable="no")]
     records = build_records(merged_of([agreed()], unreadable))
     assert records[1]["language"] == "ja"
+
+
+def test_write_records_refuses_a_directory_inside_a_git_checkout_and_writes_nothing(tmp_path):
+    (tmp_path / "repo" / ".git").mkdir(parents=True)
+    photo = tmp_path / "repo" / "work"
+    photo.mkdir()
+    with pytest.raises(ValueError):
+        write_records(photo, build_records(merged_of([agreed()])))
+    assert list(photo.iterdir()) == []
+    (tmp_path / "link").symlink_to(photo)
+    with pytest.raises(ValueError):
+        write_records(tmp_path / "link", [])
+    assert list(photo.iterdir()) == []
