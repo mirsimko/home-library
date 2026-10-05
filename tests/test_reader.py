@@ -153,3 +153,14 @@ def test_run_json_records_how_the_codex_read_was_run(tmp_path):
         "tool_calls": [],
         "usage": {"input_tokens": 19989, "cached_input_tokens": 7168, "output_tokens": 5},
     }
+
+
+def test_usage_is_null_when_the_stream_has_no_turn_completed(tmp_path):
+    work, _ = cut_small_photo(tmp_path)
+    message = {"type": "item.completed", "item": {"id": "item_0", "type": "agent_message", "text": ANSWER}}
+    run = FakeRun(stdout=json.dumps(message) + "\n")
+
+    run_read(work, "a-sol", "codex-exec", run=run)
+
+    info = json.loads((work / "reads" / "a-sol" / "run.json").read_text(encoding="utf-8"))
+    assert info["usage"] is None
