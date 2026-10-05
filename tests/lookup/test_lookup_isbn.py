@@ -26,3 +26,10 @@ def test_non_ascii_digits_are_rejected_without_raising():
     assert normalize_isbn("²" * 13) is None
     assert normalize_isbn("²" * 10) is None
     assert normalize_isbn("٩٧٨٤٨٩٣٠٩٤٣١٥") is None
+
+
+def test_spaces_are_stripped_alone_or_mixed_with_hyphens():
+    assert normalize_isbn("978 4 89309 431 5") == "9784893094315"
+    assert normalize_isbn(" 978-4 89309-431 5 ") == "9784893094315"
+    assert normalize_isbn("4 8340 0082 6") == "4834000826"
+    assert normalize_isbn("80 11-01711 x") == "801101711X"
