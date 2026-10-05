@@ -457,3 +457,19 @@ def test_a_look_up_without_an_injected_fetch_builds_the_real_one(tmp_path):
     candidates = pipeline.lookup_photo(tmp_path)
 
     assert candidates["books"] == [{"item": 0, "title": "鵝媽媽", "language": "zh", "queries": [], "candidates": []}]
+
+
+def test_a_read_made_from_other_tiles_is_made_again(tmp_path):
+    # Review council: after `hl tiles` on a retaken photo, the old reads looked current.
+    from home_library.tiles import cut_tiles
+    photo, programs = photo_and_programs(tmp_path)
+    run_one(photo, tmp_path / "work", run=programs, fetch=catalogues())
+    Image.new("RGB", (640, 480), "grey").save(photo)
+    cut_tiles(photo, tmp_path / "work" / "shelf-9")  # what `hl tiles` does
+    programs.sol_answer = programs.spark_answer = answer(entry(1, "あかいふうせん", "ja"))
+    programs.started.clear()
+
+    run_one(photo, tmp_path / "work", run=programs, fetch=catalogues())
+
+    assert sorted(programs.started) == ["codex pick", "codex read", "pi read"]
+    assert [row["title"] for row in rows_of(tmp_path / "work" / "shelf-9")] == ["あかいふうせん"]

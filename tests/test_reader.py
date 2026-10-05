@@ -569,9 +569,9 @@ def test_read_json_records_the_hash_of_the_tiles_manifest_the_read_was_made_from
 
     expected = hashlib.sha256(manifest_bytes).hexdigest()
     assert len(expected) == 64
-    assert read["photo_sha256"] == expected
+    assert read["tiles_sha256"] == expected
     stored = json.loads((read_dir_of(work, "b-spark") / "read.json").read_text(encoding="utf-8"))
-    assert stored["photo_sha256"] == expected
+    assert stored["tiles_sha256"] == expected
 
 
 @pytest.mark.parametrize("answer", [
