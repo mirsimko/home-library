@@ -107,3 +107,10 @@ def test_parse_picks_turns_unknown_verdict_and_non_object_pick_into_none():
     assert "probably" in first["reason"]
     assert second == {"item": 2, "verdict": "none", "candidate_id": None,
                       "reason": second["reason"]} and second["reason"]
+
+
+def test_parse_picks_drops_candidate_id_unless_the_verdict_is_match():
+    _, candidates = merged_and_candidates()
+    raw = answer({"item": 0, "verdict": "ambiguous", "candidate_id": "nkcr:cnb001", "reason": "Editions."},
+                 {"item": 2, "verdict": "none", "candidate_id": "ndl:000111", "reason": "No."})
+    assert [p["candidate_id"] for p in parse_picks(raw, candidates)["picks"]] == [None, None]
