@@ -342,3 +342,28 @@ def test_a_relative_work_directory_gives_codex_an_absolute_tiles_directory(tmp_p
     tiles = (work / "tiles").resolve()
     assert args[args.index("-C") + 1] == str(tiles)
     assert kwargs["cwd"] == tiles
+
+
+@pytest.mark.parametrize("damage", ["extra", "missing"])
+def test_a_refused_retry_removes_the_read_json_of_an_earlier_run(tmp_path, damage):
+    work, _ = cut_small_photo(tmp_path)
+    run_read(work, "b-spark", "pi", run=FakeRun(stdout=ANSWER))
+    if damage == "extra":
+        (work / "tiles" / "notes.txt").write_text("not a tile", encoding="utf-8")
+    else:
+        (work / "tiles" / "r2c3-r180.jpg").unlink()
+
+    with pytest.raises(ReadError):
+        run_read(work, "b-spark", "pi", run=FakeRun(stdout=ANSWER))
+
+    assert not (read_dir_of(work, "b-spark") / "read.json").exists()
+
+
+def test_a_retry_with_an_unknown_backend_removes_the_read_json_of_an_earlier_run(tmp_path):
+    work, _ = cut_small_photo(tmp_path)
+    run_read(work, "b-spark", "pi", run=FakeRun(stdout=ANSWER))
+
+    with pytest.raises(ReadError, match="unknown backend"):
+        run_read(work, "b-spark", "gemini", run=FakeRun(stdout=ANSWER))
+
+    assert not (read_dir_of(work, "b-spark") / "read.json").exists()
