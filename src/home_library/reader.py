@@ -8,6 +8,11 @@ from pathlib import Path
 
 from home_library.parse import parse_read
 
+
+class ReadError(Exception):
+    """A read failed; raw.txt and run.json, where there were any, are left for inspection."""
+
+
 BACKENDS = {"codex-exec": "gpt-6.1-sol", "pi": "opencode-go/muse-spark-1.3-contributor"}
 
 
@@ -46,6 +51,16 @@ def _answer(events):
         if event.get("type") == "item.completed" and item.get("type") == "agent_message":
             answer = item.get("text", "")
     return answer
+
+
+def _tool_calls(events):
+    """The item type of every item that is neither reasoning nor an answer, once per item id."""
+    seen = {}
+    for event in events:
+        item = event.get("item")
+        if isinstance(item, dict) and item.get("type") not in ("agent_message", "reasoning"):
+            seen.setdefault(item.get("id"), item.get("type"))
+    return list(seen.values())
 
 
 def _usage(events):
@@ -91,11 +106,13 @@ def run_read(photo_dir, read_id, backend, *, run=subprocess.run, clock=time.mono
     events = _events(result.stdout)
     answer = _answer(events)
     info = {"read_id": read_id, "backend": backend, "model": BACKENDS[backend], "command": command,
-            "started": started, "seconds": seconds, "returncode": result.returncode, "tool_calls": [],
+            "started": started, "seconds": seconds, "returncode": result.returncode, "tool_calls": _tool_calls(events),
             "usage": _usage(events)}
-    _write_json(read_dir / "run.json", info)
     (read_dir / "events.jsonl").write_text(result.stdout, encoding="utf-8")
     (read_dir / "raw.txt").write_text(answer, encoding="utf-8")
+    _write_json(read_dir / "run.json", info)
+    if info["tool_calls"]:
+        raise ReadError(f"the read used tools ({', '.join(info['tool_calls'])}) and is not blind")
     read = parse_read(answer)
     read["read_id"] = read_id
     read["file"] = read["file"] or manifest["photo"]
