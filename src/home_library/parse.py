@@ -94,8 +94,11 @@ def _scan_entries(raw: str, pos: int):
         if reason is None and not isinstance(value, dict):
             reason = "Entry is not an object"
         if reason is None:
-            books.append(_normalise(value, position))
-        else:
+            try:
+                books.append(_normalise(value, position))
+            except Exception as exc:  # e.g. RecursionError from json.dumps on a deeply nested title
+                reason = str(exc) or type(exc).__name__
+        if reason is not None:
             errors.append({"position": position, "offset": pos, "reason": reason, "raw": span})
         pos = _skip_space(raw, end)
         after_comma = raw[pos:pos + 1] == ","
