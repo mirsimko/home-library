@@ -149,3 +149,34 @@ def test_near_titles_where_one_is_partial_are_reported_as_partial():
     b = read("b-spark", [book(1, "The Blue Kito")])
     items = merge_reads(a, b)["items"]
     assert [(i["reason"], len(i["readings"])) for i in items] == [("partial", 2)]
+
+
+def test_entries_without_a_title_are_listed_unreadable_with_their_read_id_and_not_compared():
+    blank_a = book(2, "", readable="no")
+    blank_b = book(3, "", readable="no")
+    a = read("a-sol", [book(1, "A Tale"), blank_a])
+    b = read("b-spark", [blank_b, book(1, "A Tale"), book(4, " ・! ", readable="partial")])
+    merged = merge_reads(a, b)
+    assert [i["title"] for i in merged["items"]] == ["A Tale"]
+    assert merged["items"][0]["status"] == "accepted"
+    assert merged["unreadable"] == [
+        reading("a-sol", blank_a), reading("b-spark", blank_b), reading("b-spark", book(4, " ・! ", readable="partial"))
+    ]
+
+
+def test_parse_errors_of_both_reads_are_carried_with_their_read_id():
+    err_a = {"position": 3, "offset": 812, "reason": "Expecting ',' delimiter", "raw": "{\"n\": 3, ..."}
+    err_b = {"position": 1, "offset": 40, "reason": "Entry is not an object", "raw": "42"}
+    merged = merge_reads(read("a-sol", [], errors=[err_a]), read("b-spark", [], errors=[err_b]))
+    assert merged["parse_errors"] == [{"read_id": "a-sol", **err_a}, {"read_id": "b-spark", **err_b}]
+
+
+def test_reads_of_different_photo_files_cannot_be_merged():
+    with pytest.raises(ValueError):
+        merge_reads(read("a-sol", [], file="shelf-1.jpg"), read("b-spark", [], file="shelf-2.jpg"))
+
+
+def test_an_empty_file_name_matches_the_other_reads_file():
+    merged = merge_reads(read("a-sol", [], file=""), read("b-spark", [], file="shelf-2.jpg"))
+    assert merged["file"] == "shelf-2.jpg"
+    assert merge_reads(read("a-sol", [], file="shelf-1.jpg"), read("b-spark", [], file=""))["file"] == "shelf-1.jpg"
