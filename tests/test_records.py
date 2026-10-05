@@ -197,3 +197,31 @@ def test_write_records_round_trips_czech_and_japanese_text_through_the_csv(tmp_p
     assert rows[0]["location"] == "Dětský pokoj"
     assert rows[0]["needs_review"] == "true"
     assert rows[0]["candidate_count"] == "0"
+
+
+def test_the_csv_starts_with_a_byte_order_mark(tmp_path):
+    write_records(tmp_path, czech_japanese_records())
+    assert (tmp_path / "records.csv").read_bytes().startswith(b"\xef\xbb\xbftitle,")
+
+
+def test_cells_that_look_like_formulas_get_a_leading_quote_in_the_csv_only(tmp_path):
+    tricky = [item("solo", title, [reading("a-sol", n, title)], exact=False)
+              for n, title in enumerate(["=SUM(A1)", "-5 Minutes", "+420 Praha", "@home", "Plain = fine"])]
+    records = build_records(merged_of(tricky))
+    write_records(tmp_path, records)
+    with open(tmp_path / "records.csv", encoding="utf-8-sig", newline="") as f:
+        rows = list(csv.DictReader(f))
+    assert [r["title"] for r in rows] == ["'=SUM(A1)", "'-5 Minutes", "'+420 Praha", "'@home", "Plain = fine"]
+    assert [r["sort_key"] for r in rows][0] == "'=SUM(A1)"
+    assert json.loads((tmp_path / "records.json").read_text(encoding="utf-8"))[0]["title"] == "=SUM(A1)"
+
+
+def test_records_json_is_a_list_of_typed_objects_with_every_column(tmp_path):
+    write_records(tmp_path, czech_japanese_records())
+    text = (tmp_path / "records.json").read_text(encoding="utf-8")
+    assert text.endswith("]\n") and "あかいふうせん" in text
+    loaded = json.loads(text)
+    assert [list(r) for r in loaded] == [COLUMNS, COLUMNS]
+    assert loaded[0]["needs_review"] is True
+    assert loaded[0]["candidate_count"] == 0 and isinstance(loaded[0]["candidate_count"], int)
+    assert loaded[0]["title"] == "Zelený drak"
