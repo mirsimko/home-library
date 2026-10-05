@@ -1,5 +1,6 @@
 import json
 import subprocess
+from pathlib import Path
 from datetime import datetime, timedelta, timezone
 from types import SimpleNamespace
 
@@ -328,3 +329,16 @@ def test_an_unknown_backend_is_refused_before_anything_runs(tmp_path):
 
 def test_the_backends_have_their_default_models():
     assert BACKENDS == {"codex-exec": "gpt-6.1-sol", "pi": "opencode-go/muse-spark-1.3-contributor"}
+
+
+def test_a_relative_work_directory_gives_codex_an_absolute_tiles_directory(tmp_path, monkeypatch):
+    work, _ = cut_small_photo(tmp_path)
+    monkeypatch.chdir(tmp_path)
+    run = FakeRun(stdout=codex_stream())
+
+    run_read(Path("work") / "shelf-1", "a-sol", "codex-exec", run=run)
+
+    (args, kwargs), = run.calls
+    tiles = (work / "tiles").resolve()
+    assert args[args.index("-C") + 1] == str(tiles)
+    assert kwargs["cwd"] == tiles
