@@ -150,3 +150,9 @@ def test_notes_give_the_reason_of_an_ambiguous_match_and_the_audience_of_a_match
     assert matched["notes"] == "Catalogue audience: Děti. Catalogue age note: Pro děti od 3 let."
     unmatched = build_records(merged_of([agreed()]), candidates, picks_of("none"))
     assert unmatched[0]["notes"] == ""
+
+
+def test_location_is_passed_through_to_every_record():
+    records = build_records(merged_of([agreed(), near_item()]), location="Kids room, shelf 2")
+    assert [r["location"] for r in records] == ["Kids room, shelf 2"] * 2
+    assert build_records(merged_of([agreed()]))[0]["location"] == ""
