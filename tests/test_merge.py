@@ -155,13 +155,12 @@ def test_entries_without_a_title_are_listed_unreadable_with_their_read_id_and_no
     blank_a = book(2, "", readable="no")
     blank_b = book(3, "", readable="no")
     a = read("a-sol", [book(1, "A Tale"), blank_a])
-    b = read("b-spark", [blank_b, book(1, "A Tale"), book(4, " ・! ", readable="partial")])
+    b = read("b-spark", [blank_b, book(1, "A Tale")])
     merged = merge_reads(a, b)
     assert [i["title"] for i in merged["items"]] == ["A Tale"]
     assert merged["items"][0]["status"] == "accepted"
     assert merged["unreadable"] == [
-        reading("a-sol", blank_a), reading("b-spark", blank_b), reading("b-spark", book(4, " ・! ", readable="partial"))
-    ]
+        reading("a-sol", blank_a), reading("b-spark", blank_b)]
 
 
 def test_parse_errors_of_both_reads_are_carried_with_their_read_id():
@@ -194,3 +193,14 @@ def test_near_pairing_takes_the_best_pair_first_and_ignores_pairs_below_ninety_p
     ]
     two_short = merge_reads(read("a-sol", [book(1, "ab")]), read("b-spark", [book(1, "ac")]))["items"]
     assert [i["reason"] for i in two_short] == ["solo", "solo"]
+
+
+def test_title_with_only_punctuation_goes_to_review_as_partial_not_to_unreadable():
+    a = read("a-sol", [book(1, "---")])
+    b = read("b-spark", [book(1, "---")])
+    merged = merge_reads(a, b)
+    assert merged["unreadable"] == []
+    assert [(i["status"], i["reason"], i["title"], len(i["readings"])) for i in merged["items"]] == [
+        ("review", "partial", "---", 1),
+        ("review", "partial", "---", 1),
+    ]
