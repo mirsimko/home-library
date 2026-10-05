@@ -63,12 +63,15 @@ def _failure_status(failure):
 
 
 def find_candidates(
-    title, language, *, author=None, isbn=None, fetch, run_yaz, max_per_source=10, cache_dir=None
+    title, language, *, author=None, isbn=None, fetch, run_yaz, max_per_source=10, cache_dir=None, skip=()
 ):
     isbn = normalize_isbn(isbn) if isbn else None
     queries, candidates = [], []
     for source in SOURCES.get(language, []):
         name = source.__name__.rsplit(".", 1)[-1]
+        if name in skip:
+            queries.append({"source": name, "step": "skipped", "status": "unavailable", "count": 0})
+            continue
         for step, values, run in _steps(source, title, author, isbn)[:MAX_REQUESTS_PER_SOURCE]:
             path = _cache_path(cache_dir, name, step, values) if cache_dir is not None else None
             try:
