@@ -4,7 +4,8 @@ from __future__ import annotations
 import csv
 import json
 import re
-from pathlib import Path
+
+from home_library.workspace import refuse_inside_checkout
 
 
 COLUMNS = ["title", "sort_key", "author", "illustrator", "publisher", "year", "language", "isbn", "series",
@@ -112,7 +113,7 @@ def _cell(value) -> str:
 
 
 def write_records(photo_dir, records: list) -> None:
-    photo_dir = Path(photo_dir)
+    photo_dir = refuse_inside_checkout(photo_dir)
     (photo_dir / "records.json").write_text(
         json.dumps(records, indent=2, ensure_ascii=False) + "\n", encoding="utf-8")
     with open(photo_dir / "records.csv", "w", encoding="utf-8-sig", newline="") as f:
