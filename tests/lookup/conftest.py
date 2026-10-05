@@ -33,3 +33,25 @@ def fixture_bytes():
 @pytest.fixture
 def fake_fetch():
     return FakeFetch
+
+
+class FakeYaz:
+    """A stand-in for the yaz-client runner: returns canned output and remembers the scripts."""
+
+    def __init__(self, output):
+        self.output = output
+        self.scripts = []
+
+    def __call__(self, commands):
+        self.scripts.append(commands)
+        if isinstance(self.output, Exception):
+            raise self.output
+        return self.output
+
+    def lines(self, index=-1):
+        return self.scripts[index].splitlines()
+
+
+@pytest.fixture
+def fake_yaz():
+    return FakeYaz
