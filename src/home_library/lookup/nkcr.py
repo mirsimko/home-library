@@ -5,6 +5,7 @@ script to yaz-client and returns what it printed.
 """
 import re
 
+from home_library.lookup.errors import SourceError
 from home_library.lookup.marc import candidate_from_marc
 
 DATABASE = "aleph.nkp.cz:9991/NKC-UTF"
@@ -36,6 +37,8 @@ def _parse_field(line):
 
 
 def _parse(output):
+    if "Search was a success" not in output:
+        raise SourceError("yaz-client: the search did not succeed")
     records = []
     record = None
     for line in output.splitlines():
