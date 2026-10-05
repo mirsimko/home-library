@@ -205,3 +205,22 @@ def test_tiles_of_both_rotations_carry_no_jpeg_comment(tmp_path):
         with Image.open(out / "tiles" / name) as tile:
             assert "comment" not in tile.info
         assert b"private note" not in (out / "tiles" / name).read_bytes()
+
+
+def test_a_tile_no_wider_than_its_minimum_overlap_is_refused(tmp_path):
+    with pytest.raises(ValueError):
+        plan_layout(2000, 800, tile_width=200)
+    with pytest.raises(ValueError):
+        plan_layout(2000, 800, tile_width=300)
+
+
+def test_an_impossible_layout_leaves_an_earlier_run_untouched(tmp_path):
+    photo = make_photo(tmp_path / "shelf-1.jpg", (2000, 800))
+    out = tmp_path / "out"
+    cut_tiles(photo, out)
+    before = sorted(p.name for p in (out / "tiles").iterdir())
+
+    with pytest.raises(ValueError):
+        cut_tiles(photo, out, tile_width=200)
+
+    assert before and sorted(p.name for p in (out / "tiles").iterdir()) == before
