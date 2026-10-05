@@ -162,3 +162,18 @@ def test_tiles_carry_no_exif_and_an_exif_rotated_photo_gives_upright_tiles(tmp_p
         assert "exif" not in tile.info
         assert close(tile.getpixel((790, 10)), RED)
         assert close(tile.getpixel((10, 10)), BLUE)
+
+
+def test_a_second_run_with_another_layout_leaves_only_the_new_tiles(tmp_path):
+    photo = make_photo(tmp_path / "shelf-1.jpg", (4080, 3072))
+    out = tmp_path / "out"
+    cut_tiles(photo, out)
+    (out / "tiles" / "notes.txt").write_text("stray")
+
+    manifest = cut_tiles(photo, out, tile_width=2100, min_overlap_x=300)
+
+    # 4080 wide, tile 2100, step at most 1800 -> 2 columns; rows as before -> 2
+    expected = sorted(f["file"] for f in manifest["tiles"])
+    assert expected == sorted(
+        f"r{r}c{c}-r{rot}.jpg" for r in (1, 2) for c in (1, 2) for rot in (0, 180))
+    assert sorted(p.name for p in (out / "tiles").iterdir()) == expected
