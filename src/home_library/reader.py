@@ -138,6 +138,8 @@ def run_read(photo_dir, read_id, backend, *, run=subprocess.run, clock=time.mono
     _write_json(read_dir / "run.json", info)
     if failure is None and result.returncode != 0:
         failure = f"{command[0]} exited with return code {result.returncode}"
+    if failure is None and not answer.strip():
+        failure = f"empty answer from {command[0]}"
     if failure is None and tool_calls:
         failure = f"the read used tools ({', '.join(tool_calls)}) and is not blind"
     if failure is not None:
