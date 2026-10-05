@@ -120,3 +120,10 @@ def test_missing_n_is_replaced_by_the_position_in_the_list():
     del e["n"]
     read = parse_read(answer(entry(1, "A"), e))
     assert [b["n"] for b in read["books"]] == [1, 2]
+
+
+def test_unknown_readable_value_becomes_partial_and_known_values_stay():
+    raw = answer(entry(1, "A", readable="yes"), entry(2, "B", readable="no"), entry(3, "C", readable="partial"),
+                 entry(4, "D", readable="mostly"), entry(5, "E", readable="Yes"), entry(6, "F", readable=True))
+    read = parse_read(raw)
+    assert [b["readable"] for b in read["books"]] == ["yes", "no", "partial", "partial", "partial", "partial"]
