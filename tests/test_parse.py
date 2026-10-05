@@ -107,3 +107,16 @@ def test_missing_fields_are_filled_with_empty_strings_and_all_nine_are_present()
     assert book["where"] == ""
     assert book["inferred"] == ""
     assert book["confidence"] == ""
+
+
+def test_unusable_n_is_replaced_by_the_position_in_the_list():
+    raw = answer(entry(1, "A"), entry("x", "B"), entry(None, "C"), entry(2.5, "D"), entry(True, "E"), entry(9, "F"))
+    read = parse_read(raw)
+    assert [b["n"] for b in read["books"]] == [1, 2, 3, 4, 5, 9]
+
+
+def test_missing_n_is_replaced_by_the_position_in_the_list():
+    e = entry(1, "B")
+    del e["n"]
+    read = parse_read(answer(entry(1, "A"), e))
+    assert [b["n"] for b in read["books"]] == [1, 2]
