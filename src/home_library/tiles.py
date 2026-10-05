@@ -14,8 +14,7 @@ def _starts(size, tile, min_overlap):
         return [0]
     span = size - tile
     gaps = -(-span // (tile - min_overlap))  # ceiling division
-    count = gaps + 1
-    return [(2 * i * span + gaps) // (2 * gaps) for i in range(count)]
+    return [(2 * i * span + gaps) // (2 * gaps) for i in range(gaps + 1)]  # round half up
 
 
 def plan_layout(width, height, *, tile_width=1560, tile_height=2000,
@@ -32,6 +31,15 @@ def plan_layout(width, height, *, tile_width=1560, tile_height=2000,
     }
 
 
+def _empty_directory(directory):
+    directory.mkdir(parents=True, exist_ok=True)
+    for entry in directory.iterdir():
+        if entry.is_dir():
+            shutil.rmtree(entry)
+        else:
+            entry.unlink()
+
+
 def cut_tiles(photo, out_dir, *, quality=88, **layout_options):
     photo = Path(photo)
     out_dir = refuse_inside_checkout(out_dir)
@@ -40,12 +48,7 @@ def cut_tiles(photo, out_dir, *, quality=88, **layout_options):
     width, height = image.size
     layout = plan_layout(width, height, **layout_options)
     tiles_dir = out_dir / "tiles"
-    tiles_dir.mkdir(parents=True, exist_ok=True)
-    for stale in tiles_dir.iterdir():
-        if stale.is_dir():
-            shutil.rmtree(stale)
-        else:
-            stale.unlink()
+    _empty_directory(tiles_dir)
     tiles = []
     for row, top in enumerate(layout["rows"], start=1):
         for column, left in enumerate(layout["columns"], start=1):
