@@ -97,3 +97,21 @@ def test_items_follow_the_first_read_then_entries_only_the_second_read_gave():
     b = read("b-spark", [book(1, "Zulu Story"), book(2, "Charlie Song"), book(3, "Alpha Book"), book(4, "Yankee Hill")])
     titles = [i["title"] for i in merge_reads(a, b)["items"]]
     assert titles == ["Alpha Book", "Bravo Tale", "Charlie Song", "Zulu Story", "Yankee Hill"]
+
+
+def test_duplicate_copies_pair_one_to_one_and_the_extra_copy_is_solo():
+    a = read("a-sol", [book(1, "The Blue Kite"), book(2, "The Blue Kite")])
+    b = read("b-spark", [book(1, "The Blue Kite")])
+    items = merge_reads(a, b)["items"]
+    assert [(i["status"], i["reason"]) for i in items] == [("accepted", "agreed"), ("review", "solo")]
+    assert [r["n"] for r in items[0]["readings"]] == [1, 1]
+    assert [r["read_id"] for r in items[1]["readings"]] == ["a-sol"]
+    assert [r["n"] for r in items[1]["readings"]] == [2]
+
+
+def test_two_copies_in_each_read_give_two_accepted_pairs():
+    a = read("a-sol", [book(1, "The Blue Kite"), book(2, "The Blue Kite")])
+    b = read("b-spark", [book(5, "The Blue Kite"), book(6, "The Blue Kite")])
+    items = merge_reads(a, b)["items"]
+    assert [i["reason"] for i in items] == ["agreed", "agreed"]
+    assert [[r["n"] for r in i["readings"]] for i in items] == [[1, 5], [2, 6]]
