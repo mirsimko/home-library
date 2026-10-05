@@ -18,10 +18,14 @@ RETRY_PAUSE = {"ndlsearch.ndl.go.jp": 25.0}
 DEFAULT_RETRY_PAUSE = 5.0
 
 
+def _urlopen(request, timeout):
+    return urllib.request.urlopen(request, timeout=timeout)
+
+
 class Fetcher:
-    def __init__(self, cache_dir=None, *, opener=urllib.request.urlopen, clock=time.monotonic, sleep=time.sleep):
+    def __init__(self, cache_dir=None, *, opener=None, clock=time.monotonic, sleep=time.sleep):
         self.cache_dir = Path(cache_dir) if cache_dir is not None else None
-        self.opener = opener
+        self.opener = opener or _urlopen
         self.clock = clock
         self.sleep = sleep
         self.last_request = {}  # host -> clock time of its last request
