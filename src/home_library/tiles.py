@@ -6,6 +6,8 @@ from pathlib import Path
 
 from PIL import Image, ImageOps
 
+from home_library.workspace import refuse_inside_checkout
+
 
 def _starts(size, tile, min_overlap):
     if tile >= size:
@@ -30,7 +32,7 @@ def plan_layout(width, height, *, tile_width=1560, tile_height=2000,
 
 def cut_tiles(photo, out_dir, *, quality=88, **layout_options):
     photo = Path(photo)
-    out_dir = Path(out_dir)
+    out_dir = refuse_inside_checkout(out_dir)
     tiles_dir = out_dir / "tiles"
     tiles_dir.mkdir(parents=True, exist_ok=True)
     for stale in tiles_dir.iterdir():
