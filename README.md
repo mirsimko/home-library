@@ -14,7 +14,7 @@ Early. As of 2026-10-05 the requirements are settled and the design is a draft w
 uv run hl run ~/photos/shelf-1.jpg --location "Box 3"
 ```
 
-This reads the photo twice with two different models, accepts the titles both give identically, looks them up in free library catalogues and writes `records.csv` under `~/home-library/work/`. What it needs and how each stage works is in [docs/pipeline.md](docs/pipeline.md). Tests run with `uv run pytest`.
+This reads the photo twice with two different models, accepts the titles both give alike (ignoring case, spacing and punctuation), looks them up in free library catalogues and writes `records.csv` under `~/home-library/work/`. What it needs and how each stage works is in [docs/pipeline.md](docs/pipeline.md). Tests run with `uv run pytest`.
 
 ## Contents
 
