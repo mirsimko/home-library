@@ -136,3 +136,29 @@ def test_non_object_entries_become_errors_and_neighbours_survive():
     assert [(e["position"], e["raw"]) for e in read["errors"]] == [(2, "42"), (3, '"text, ] }"')]
     assert read["errors"][0]["offset"] == 58
     assert read["complete"] is False
+
+
+def test_garbage_answer_gives_no_books_one_error_and_incomplete():
+    raw = "I am sorry, I could not look at the photos."
+    read = parse_read(raw)
+    assert read["books"] == []
+    assert len(read["errors"]) == 1
+    assert read["errors"][0]["raw"] == raw
+    assert read["errors"][0]["reason"] != ""
+    assert read["file"] == ""
+    assert read["complete"] is False
+
+
+def test_empty_answer_gives_no_books_and_incomplete():
+    read = parse_read("")
+    assert read["books"] == []
+    assert read["complete"] is False
+    assert len(read["errors"]) == 1
+
+
+def test_object_without_a_books_list_keeps_the_file_name_and_is_incomplete():
+    read = parse_read('{"file": "shelf-2.jpg", "result": []}')
+    assert read["file"] == "shelf-2.jpg"
+    assert read["books"] == []
+    assert read["complete"] is False
+    assert len(read["errors"]) == 1
