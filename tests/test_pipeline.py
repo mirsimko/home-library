@@ -407,3 +407,52 @@ def test_a_stage_refuses_to_write_inside_a_git_checkout(tmp_path):
     else:
         raise AssertionError("merged.json was written inside a git checkout")
     assert not (tmp_path / "shelf-1" / "merged.json").exists()
+
+
+# --- look-ups: cached answers, sources that are down, and the real fetcher ---
+
+from home_library.lookup.errors import Unavailable
+
+
+def czech_items(*titles):
+    return [item(title, "cs") for title in titles]
+
+
+def test_a_second_look_up_of_a_photo_asks_no_catalogue_again(tmp_path):
+    store_merged(tmp_path, czech_items("Zelený drak", "Modrý pes"))
+    no_czech_record = (FIXTURES / "nkcr_empty.txt").read_text(encoding="utf-8")
+    asked = []
+
+    def yaz(commands):
+        asked.append(commands)
+        return no_czech_record
+
+    first = pipeline.lookup_photo(tmp_path, fetch=None, run_yaz=yaz)
+    count = len(asked)
+    second = pipeline.lookup_photo(tmp_path, fetch=None, run_yaz=yaz)
+
+    assert count > 0 and len(asked) == count
+    assert second == first
+
+
+def test_a_catalogue_that_is_down_is_asked_once_per_photo_not_once_per_book(tmp_path):
+    store_merged(tmp_path, czech_items("Zelený drak", "Modrý pes", "Bílá sova"))
+    asked = []
+
+    def yaz(commands):
+        asked.append(commands)
+        raise Unavailable("aleph.nkp.cz could not be reached")
+
+    candidates = pipeline.lookup_photo(tmp_path, fetch=None, run_yaz=yaz)
+
+    assert len(asked) == 1
+    assert [[(q["step"], q["status"]) for q in book["queries"]] for book in candidates["books"]] == [
+        [("title", "unavailable")], [("skipped", "unavailable")], [("skipped", "unavailable")]]
+
+
+def test_a_look_up_without_an_injected_fetch_builds_the_real_one(tmp_path):
+    store_merged(tmp_path, [item("鵝媽媽", "zh")])  # no catalogue for the language, so nothing is fetched
+
+    candidates = pipeline.lookup_photo(tmp_path)
+
+    assert candidates["books"] == [{"item": 0, "title": "鵝媽媽", "language": "zh", "queries": [], "candidates": []}]
