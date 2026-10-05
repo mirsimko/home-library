@@ -242,3 +242,16 @@ def test_a_timeout_is_an_error_with_a_null_return_code(tmp_path):
     info = json.loads((read_dir / "run.json").read_text(encoding="utf-8"))
     assert info["returncode"] is None
     assert info["seconds"] == 600.0
+
+
+def test_a_program_that_is_not_installed_is_an_error_that_keeps_run_json(tmp_path):
+    work, _ = cut_small_photo(tmp_path)
+    run = FakeRun(raises=FileNotFoundError(2, "No such file or directory: 'codex'"))
+
+    with pytest.raises(ReadError, match="codex is not installed"):
+        run_read(work, "a-sol", "codex-exec", run=run)
+
+    read_dir = read_dir_of(work, "a-sol")
+    assert not (read_dir / "read.json").exists()
+    assert (read_dir / "raw.txt").read_text(encoding="utf-8") == ""
+    assert json.loads((read_dir / "run.json").read_text(encoding="utf-8"))["returncode"] is None
