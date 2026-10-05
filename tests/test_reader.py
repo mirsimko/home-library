@@ -367,3 +367,13 @@ def test_a_retry_with_an_unknown_backend_removes_the_read_json_of_an_earlier_run
         run_read(work, "b-spark", "gemini", run=FakeRun(stdout=ANSWER))
 
     assert not (read_dir_of(work, "b-spark") / "read.json").exists()
+
+
+def test_pi_rerun_of_a_codex_read_leaves_no_event_stream(tmp_path):
+    work, _ = cut_small_photo(tmp_path)
+    run_read(work, "a-sol", "codex-exec", run=FakeRun(stdout=codex_stream()))
+    assert (read_dir_of(work, "a-sol") / "events.jsonl").exists()
+
+    run_read(work, "a-sol", "pi", run=FakeRun(stdout=ANSWER))
+
+    assert not (read_dir_of(work, "a-sol") / "events.jsonl").exists()
