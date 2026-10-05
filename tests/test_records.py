@@ -142,6 +142,15 @@ def test_notes_say_why_a_read_status_needs_a_look():
         "Only b-spark gave this title.", "The two reads differ.", "Partly legible.", ""]
 
 
+def test_a_split_pair_shows_both_titles_and_says_how_the_reads_differ():
+    split = item("split", "Okno do světa Zvířata", [reading("a-sol", 1, "Okno do světa Zvířata"),
+                                                    reading("b-spark", 4, "Zvířata")], exact=False)
+    (record,) = build_records(merged_of([split]))
+    assert (record["title"], record["other_reading"], record["read_status"]) == (
+        "Okno do světa Zvířata", "Zvířata", "split")
+    assert record["notes"] == "The two reads agree on the words but not on which of them are the title."
+
+
 def test_notes_quote_the_first_guess_in_inferred():
     guessed = item("partial", "Zelený", [reading("a-sol", 2, "Zelený", readable="partial", inferred=""),
                                          reading("b-spark", 3, "Zelený", readable="partial", inferred="Zelený drak"),

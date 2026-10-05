@@ -53,6 +53,7 @@ def test_looking_up_a_photo_stores_candidates_for_each_fully_read_title(tmp_path
         item("だるまさんが", "ja"),
         item("Zelen", "cs", status="review", reason="partial"),
         item("Zelený drak", "cs", status="review", reason="solo"),
+        item("Okno do světa Zvířata", "cs", status="review", reason="split"),
     ])
     ndl_answer = (FIXTURES / "ndl_search_daruma.xml").read_bytes()
     no_czech_record = (FIXTURES / "nkcr_empty.txt").read_text(encoding="utf-8")
@@ -62,7 +63,8 @@ def test_looking_up_a_photo_stores_candidates_for_each_fully_read_title(tmp_path
 
     assert candidates == load(tmp_path / "lookup" / "candidates.json")
     assert candidates["file"] == "shelf-1.jpg"
-    daruma, drak = candidates["books"]  # the partly read title is not looked up
+    daruma, drak, okno = candidates["books"]  # the partly read title is not looked up
+    assert (okno["item"], okno["title"]) == (3, "Okno do světa Zvířata")
     assert (daruma["item"], daruma["title"], daruma["language"]) == (0, "だるまさんが", "ja")
     assert "ndl:000009209109" in [c["id"] for c in daruma["candidates"]]
     assert (drak["item"], drak["title"], drak["candidates"]) == (2, "Zelený drak", [])
