@@ -1,4 +1,5 @@
 import json
+import subprocess
 from datetime import datetime, timedelta, timezone
 from types import SimpleNamespace
 
@@ -226,3 +227,18 @@ def test_a_non_zero_return_code_is_an_error_that_keeps_raw_and_run_json(tmp_path
     assert not (read_dir / "read.json").exists()
     assert (read_dir / "raw.txt").read_text(encoding="utf-8") == ANSWER
     assert json.loads((read_dir / "run.json").read_text(encoding="utf-8"))["returncode"] == 2
+
+
+def test_a_timeout_is_an_error_with_a_null_return_code(tmp_path):
+    work, _ = cut_small_photo(tmp_path)
+    run = FakeRun(raises=subprocess.TimeoutExpired(cmd="pi", timeout=600))
+
+    with pytest.raises(ReadError, match="timed out after 600"):
+        run_read(work, "b-spark", "pi", run=run, clock=fixed_clock(5.0, 605.0))
+
+    read_dir = read_dir_of(work, "b-spark")
+    assert not (read_dir / "read.json").exists()
+    assert (read_dir / "raw.txt").read_text(encoding="utf-8") == ""
+    info = json.loads((read_dir / "run.json").read_text(encoding="utf-8"))
+    assert info["returncode"] is None
+    assert info["seconds"] == 600.0
