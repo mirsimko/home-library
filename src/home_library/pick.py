@@ -48,6 +48,8 @@ def _none(item: int, reason: str) -> dict:
 
 
 def _check(item: int, pick: dict, ids: set) -> dict:
+    if pick is None:
+        return _none(item, "The model gave no answer for this book.")
     if pick["verdict"] == "match" and pick["candidate_id"] not in ids:
         return _none(item, f"The model named candidate {pick['candidate_id']}, which was not fetched for this book; the answer was rejected.")
     return pick
@@ -60,5 +62,5 @@ def parse_picks(raw: str, candidates: dict) -> dict:
     for book in candidates["books"]:
         if book["candidates"]:
             ids = {c["id"] for c in book["candidates"]}
-            picks.append(_check(book["item"], by_item[book["item"]], ids))
+            picks.append(_check(book["item"], by_item.get(book["item"]), ids))
     return {"file": candidates["file"], "picks": picks}
