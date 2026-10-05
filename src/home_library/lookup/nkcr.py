@@ -55,6 +55,9 @@ def _parse(output):
             record["control"][tag] = indicators
         else:
             record["fields"].append((tag, indicators[0], indicators[1], subfields))
+    hits = re.search(r"Number of hits: (\d+)", output)
+    if hits and int(hits.group(1)) > 0 and not records:
+        raise SourceError("yaz-client: the search found records but they could not be retrieved")
     return records
 
 
