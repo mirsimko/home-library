@@ -15,8 +15,9 @@ AUDIENCES = {
 ROLES = {"aut": "author", "ill": "illustrator", "trl": "translator", "edt": "editor"}
 
 
-def _clean(text):
-    return text.strip().rstrip(" ,/:;.").strip()
+def _clean(text, dots=False):
+    """Drop the ISBD punctuation that ends a MARC subfield. A final full stop goes only when dots is true."""
+    return text.strip().rstrip(" ,/:;." if dots else " ,/:;").strip()
 
 
 def _fields(record, tag):
@@ -36,13 +37,13 @@ def _first(record, tag, *codes):
 
 
 def _name(field):
-    return _clean(" ".join(_subfields(field, "a", "d")))
+    return _clean(" ".join(_subfields(field, "a", "d")), dots=True)
 
 
 def _roles(field):
     roles = [ROLES.get(code, code) for code in _subfields(field, "4")]
     for word in _subfields(field, "e"):
-        word = _clean(word).lower()
+        word = _clean(word, dots=True).lower()
         roles.append(word)
     unique = []
     for role in roles:
@@ -54,6 +55,8 @@ def _roles(field):
 def _authors(record):
     authors = []
     for field in _fields(record, "100") + _fields(record, "700"):
+        if _subfields(field, "t"):  # an author-title added entry: a work, not an author of this book
+            continue
         name = _name(field)
         roles = _roles(field)
         if name and roles and roles != ["author"]:
@@ -66,7 +69,7 @@ def _authors(record):
 def _subjects(record):
     subjects = []
     for field in _fields(record, "650") + _fields(record, "655"):
-        parts = [_clean(v) for v in _subfields(field, "a", "v", "x", "y", "z")]
+        parts = [_clean(v, dots=True) for v in _subfields(field, "a", "v", "x", "y", "z")]
         subject = " -- ".join(p for p in parts if p)
         if subject and subject not in subjects:
             subjects.append(subject)
