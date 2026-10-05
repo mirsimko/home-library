@@ -35,6 +35,15 @@ def _next_decodable_object(raw: str, after: int) -> int:
     return -1
 
 
+_FIELDS = ["n", "where", "visible", "title", "other_text", "language", "readable", "confidence", "inferred"]
+
+
+def _normalise(entry: dict, position: int) -> dict:
+    book = {name: entry.get(name, "") for name in _FIELDS}
+    book["n"] = entry.get("n", position)
+    return book
+
+
 def _scan_entries(raw: str, start: int):
     books, errors = [], []
     pos = start
@@ -51,7 +60,7 @@ def _scan_entries(raw: str, start: int):
         position += 1
         try:
             value, end = _DECODER.raw_decode(raw, pos)
-            books.append(value)
+            books.append(_normalise(value, position))
             pos = end
         except ValueError as exc:
             nxt = _next_decodable_object(raw, pos + 1)
