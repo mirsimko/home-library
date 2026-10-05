@@ -49,7 +49,7 @@ def _none(item: int, reason: str) -> dict:
 
 def _check(item: int, pick: dict, ids: set) -> dict:
     if pick["verdict"] == "match" and pick["candidate_id"] not in ids:
-        return _none(item, f"Rejected: candidate id {pick['candidate_id']} was not fetched for this book.")
+        return _none(item, f"The model named candidate {pick['candidate_id']}, which was not fetched for this book; the answer was rejected.")
     return pick
 
 
