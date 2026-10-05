@@ -518,3 +518,12 @@ def test_the_rendered_prompt_is_the_exact_text_of_the_contract(tmp_path):
     _, manifest = cut_small_photo(tmp_path)
 
     assert render_prompt(manifest).rstrip("\n") == EXPECTED_PROMPT.rstrip("\n")
+
+
+def test_a_read_is_stored_under_the_photos_own_name_whatever_the_model_wrote(tmp_path):
+    work, manifest = cut_small_photo(tmp_path)
+    wrong_name = json.dumps({"file": "another-photo.jpg", "books": []})
+
+    read = run_read(work, "b-spark", "pi", run=FakeRun(stdout=wrong_name))
+
+    assert read["file"] == manifest["photo"] != "another-photo.jpg"
