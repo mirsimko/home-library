@@ -188,3 +188,11 @@ def test_braces_and_a_bracket_inside_a_malformed_title_keep_the_entry_whole():
     assert [b["title"] for b in read["books"]] == ["A", "C"]
     assert [b["n"] for b in read["books"]] == [1, 3]
     assert [(e["position"], e["raw"]) for e in read["errors"]] == [(2, '{"title":"x { } ] y" "z"}')]
+
+
+def test_invalid_escape_in_the_file_name_does_not_lose_the_books():
+    raw = '{"file":"shelf\\q.jpg","books":[{"title":"A"}]}'
+    read = parse_read(raw)
+    assert read["file"] == ""
+    assert [b["title"] for b in read["books"]] == ["A"]
+    assert read["complete"] is False
