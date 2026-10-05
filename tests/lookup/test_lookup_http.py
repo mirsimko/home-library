@@ -51,3 +51,24 @@ def test_fetcher_returns_the_body_and_identifies_itself_with_a_30_second_timeout
     assert url == NDL
     assert headers["User-agent"] == "home-library/0.1 (+https://github.com/mirsimko/home-library)"
     assert timeout == 30
+
+
+def test_a_repeated_call_is_answered_from_the_disk_cache_without_a_request(tmp_path):
+    first = FakeWorld(b"answer")
+    assert first.fetcher(tmp_path / "cache")(NDL) == b"answer"
+
+    second = FakeWorld(b"a different answer")
+    assert second.fetcher(tmp_path / "cache")(NDL) == b"answer"
+
+    assert len(first.requests) == 1
+    assert second.requests == []
+
+
+def test_different_urls_are_cached_separately(tmp_path):
+    world = FakeWorld(b"one", b"two")
+    fetch = world.fetcher(tmp_path)
+
+    assert fetch(NDL) == b"one"
+    assert fetch(NDL + "&cnt=2") == b"two"
+    assert fetch(NDL) == b"one"
+    assert len(world.requests) == 2
