@@ -166,3 +166,14 @@ def test_run_yaz_client_reports_a_timeout_as_a_source_error(monkeypatch):
 
     with pytest.raises(SourceError):
         nkcr.run_yaz_client("quit\n")
+
+
+def test_a_search_with_hits_whose_records_cannot_be_retrieved_is_a_source_error(fake_yaz):
+    output = (
+        "Z> Sent searchRequest.\nReceived SearchResponse.\nSearch was a success.\n"
+        "Number of hits: 1, setno 1\nrecords returned: 0\nZ> Sent presentRequest (1+10).\n"
+        "Target closed connection\n"
+    )
+
+    with pytest.raises(SourceError):
+        nkcr.by_isbn("9788024297217", fake_yaz(output))
