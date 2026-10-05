@@ -47,7 +47,21 @@ One run of `hl run` over the four test photos (4080x3072), from nothing, on the 
 
 "Alike" means equal match keys, as stage 4 defines them: case, spacing and punctuation are ignored, every letter and digit counts.
 
-The run was made before the review of 2026-10-05 changed some rules: split pairs now compare whole words, an incomplete event stream fails a read, and what a read lost gets rows of its own. A second run after those changes is recorded below the table if its numbers differ.
+A second run the same day, from nothing, after a code review had tightened several rules:
+
+| Measure | Second run |
+|---|---|
+| Time for all four photos, every stage | 426 seconds, about 107 seconds per photo |
+| GPT-6.1 Sol read | 80 to 151 seconds per photo; 43 of 46 key titles |
+| Muse Spark 1.3 read | 54 to 93 seconds per photo; 42 of 46 key titles |
+| Titles both reads gave alike (accepted) | 22, all of them in the key |
+| Titles sent to review | 30: 19 partly read, 8 given by one read only, 2 split pairs, 1 near pair |
+| Reads that used a tool; answers with a parse error | 0; 0 |
+| Catalogue picks for 30 titles with candidates | 14 matched, 8 ambiguous, 8 none |
+
+- **The reads vary from run to run.** Each model found about as many key titles in both runs, but how a model marks and divides a title changes, so 28 titles were accepted in one run and 22 in the other. In both runs every accepted title was in the key.
+- **The near pair was a real catch.** One read left a hook off a single Czech letter in a title both reads had given alike in the first run. The exact comparison sent it to review with both readings.
+- **Starting again repeated nothing.** Running the same command once more took 20 seconds and made one model call, a pick for the one photo whose merge had changed.
 
 What the run and the trials before it showed:
 

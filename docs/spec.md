@@ -138,7 +138,7 @@ These are not yet confirmed by the family.
 - Tiles are 1560x2000 pixels, two rows by three columns, so neighbouring rows overlap by 928 pixels. The tested layout overlapped by 408 and cut long spine titles in two. Taller tiles are not possible: Pi shrinks images above 2000 pixels, and in a measurement with small digits Codex lost detail on attached images much taller than that.
 - Sol reads in one Codex call with the twelve tiles attached, which takes 77 to 145 seconds per photo. Code checks that the read used no tools.
 - The second read is Muse Spark 1.3 through Pi, with tools switched off. The two reads run at the same time.
-- All stages together took about 115 seconds per photo. The 28 titles both reads gave alike (ignoring case, spacing and punctuation) were all in the provisional key; 29 more titles went to review.
+- All stages together took 107 to 115 seconds per photo in two runs. The titles both reads gave alike (ignoring case, spacing and punctuation) numbered 28 in one run and 22 in the other, and all were in the provisional key; 29 and 30 more titles went to review.
 
 **Open:**
 
