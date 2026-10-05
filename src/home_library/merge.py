@@ -54,7 +54,20 @@ def _pair_similar(keys_a: dict, keys_b: dict) -> dict:
 
 def merge_reads(read_a: dict, read_b: dict) -> dict:
     id_a, id_b = read_a["read_id"], read_b["read_id"]
-    books_a, books_b = read_a["books"], read_b["books"]
+    file_a, file_b = read_a["file"], read_b["file"]
+    if file_a and file_b and file_a != file_b:
+        raise ValueError(f"reads are of different photos: {file_a!r} and {file_b!r}")
+    unreadable = []
+    titled = []
+    for read_id, read in ((id_a, read_a), (id_b, read_b)):
+        titled_books = []
+        for entry in read["books"]:
+            if match_key(entry["title"]) == "":
+                unreadable.append(_reading(read_id, entry))
+            else:
+                titled_books.append(entry)
+        titled.append(titled_books)
+    books_a, books_b = titled
     keys_a = {i: match_key(e["title"]) for i, e in enumerate(books_a)}
     keys_b = {j: match_key(e["title"]) for j, e in enumerate(books_b)}
     pairs = _pair_equal_keys({i: k for i, k in keys_a.items() if _eligible(books_a[i])},
@@ -85,5 +98,7 @@ def merge_reads(read_a: dict, read_b: dict) -> dict:
     for j, entry in enumerate(books_b):
         if j not in paired_b:
             items.append(_solo(id_b, entry))
-    return {"file": read_a["file"], "reads": [id_a, id_b], "items": items,
-            "unreadable": [], "parse_errors": []}
+    parse_errors = [{"read_id": read_id, **error}
+                    for read_id, read in ((id_a, read_a), (id_b, read_b)) for error in read["errors"]]
+    return {"file": file_a or file_b, "reads": [id_a, id_b], "items": items,
+            "unreadable": unreadable, "parse_errors": parse_errors}
