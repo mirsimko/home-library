@@ -1,6 +1,7 @@
 """The real fetch for the HTTP sources: polite, paced, retrying and cached. Standard library only."""
 import hashlib
 import os
+import threading
 import time
 import urllib.error
 import urllib.request
@@ -24,9 +25,15 @@ class Fetcher:
         self.clock = clock
         self.sleep = sleep
         self.last_request = {}  # host -> clock time of its last request
+        self.locks = {}  # host -> lock held for the whole of one request, retry included
+        self.locks_guard = threading.Lock()
 
     def _cache_path(self, url):
         return self.cache_dir / hashlib.sha256(url.encode("utf-8")).hexdigest()
+
+    def _lock_for(self, host):
+        with self.locks_guard:
+            return self.locks.setdefault(host, threading.Lock())
 
     def _wait_for_turn(self, host):
         if host in self.last_request:
@@ -64,7 +71,8 @@ class Fetcher:
         if self.cache_dir is not None and self._cache_path(url).exists():
             return self._cache_path(url).read_bytes()
         host = urlparse(url).hostname
-        body = self._get(url, host, retry=True)
+        with self._lock_for(host):
+            body = self._get(url, host, retry=True)
         if self.cache_dir is not None:
             self.cache_dir.mkdir(parents=True, exist_ok=True)
             partial = self._cache_path(url).with_suffix(".part")
