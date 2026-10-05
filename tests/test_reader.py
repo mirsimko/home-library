@@ -199,7 +199,6 @@ def test_pi_gets_each_tile_as_an_argument_and_the_prompt_last_and_answers_on_std
         "--no-context-files", "--no-skills", "--no-prompt-templates", "--no-extensions", "--no-tools",
         "--no-session", *[f"@{name}" for name in SIX_TILE_FILES.split()], prompt]
     assert kwargs["cwd"] == work / "tiles"
-    assert kwargs.get("input") is None
     assert read["read_id"] == "b-spark"
     assert [b["title"] for b in read["books"]] == ["Zelený drak"]
     read_dir = work / "reads" / "b-spark"
@@ -212,6 +211,25 @@ def test_pi_gets_each_tile_as_an_argument_and_the_prompt_last_and_answers_on_std
     assert info["command"] == [*args[:-1], "<prompt>"]
     assert info["tool_calls"] == []
     assert info["usage"] is None
+
+
+def test_pi_runs_with_standard_input_closed(tmp_path):
+    # With an image attached, pi waits for standard input to end; left open, the read hangs until the timeout.
+    work, _ = cut_small_photo(tmp_path)
+    run = FakeRun(stdout=ANSWER)
+
+    run_read(work, "b-spark", "pi", run=run)
+
+    (_, kwargs), = run.calls
+    assert kwargs["input"] == ""
+
+
+def test_a_failed_run_reports_what_the_program_printed_on_standard_error(tmp_path):
+    work, _ = cut_small_photo(tmp_path)
+    run = FakeRun(stdout="", returncode=1, stderr="No API key found for opencode-go\n")
+
+    with pytest.raises(ReadError, match="No API key found for opencode-go"):
+        run_read(work, "b-spark", "pi", run=run)
 
 
 def read_dir_of(work, read_id):
