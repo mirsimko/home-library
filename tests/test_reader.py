@@ -290,3 +290,15 @@ def test_an_extra_file_in_tiles_is_refused_before_anything_runs(tmp_path):
 
     assert run.calls == []
     assert not (work / "reads").exists()
+
+
+def test_a_missing_tile_is_refused_before_anything_runs(tmp_path):
+    work, _ = cut_small_photo(tmp_path)
+    (work / "tiles" / "r2c3-r180.jpg").unlink()
+    run = FakeRun(stdout=ANSWER)
+
+    with pytest.raises(ReadError, match="r2c3-r180.jpg"):
+        run_read(work, "b-spark", "pi", run=run)
+
+    assert run.calls == []
+    assert not (work / "reads").exists()
