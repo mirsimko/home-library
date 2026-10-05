@@ -38,8 +38,14 @@ def _next_decodable_object(raw: str, after: int) -> int:
 _FIELDS = ["n", "where", "visible", "title", "other_text", "language", "readable", "confidence", "inferred"]
 
 
+def _text(value) -> str:
+    if value is None:
+        return ""
+    return value if isinstance(value, str) else json.dumps(value, ensure_ascii=False)
+
+
 def _normalise(entry: dict, position: int) -> dict:
-    book = {name: entry.get(name, "") for name in _FIELDS}
+    book = {name: _text(entry.get(name)) for name in _FIELDS}
     if book["readable"] not in ("yes", "partial", "no"):
         book["readable"] = "partial"
     n = entry.get("n")
