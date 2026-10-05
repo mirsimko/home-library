@@ -1,4 +1,7 @@
+import pytest
+
 from home_library.lookup import nkcr
+from home_library.lookup.errors import SourceError
 
 
 def test_nkcr_by_isbn_returns_the_candidate_in_the_contract_shape(fake_yaz, fixture_bytes):
@@ -78,3 +81,15 @@ def test_nkcr_quotes_the_title_so_it_cannot_inject_a_yaz_command(fake_yaz, fixtu
         'find @and @attr 1=4 "Say \\"Hi\\" open evil.example:210/x" @attr 1=1003 "Back\\\\slash"'
     )
     assert run.lines()[0] == "open aleph.nkp.cz:9991/NKC-UTF"
+
+
+def test_nkcr_raises_when_the_server_refuses_the_search(fake_yaz, fixture_bytes):
+    run = fake_yaz(fixture_bytes("nkcr_search_failed.txt").decode("utf-8"))
+
+    with pytest.raises(SourceError):
+        nkcr.by_isbn("9788024297217", run)
+
+
+def test_nkcr_raises_when_yaz_client_printed_nothing_useful(fake_yaz):
+    with pytest.raises(SourceError):
+        nkcr.search("Krtek a zajíček", None, fake_yaz("Z> Connecting...Unable to connect\n"))

@@ -1,0 +1,14 @@
+Z> Connecting...OK.
+Sent initrequest.
+Connection accepted by v3 target.
+Z> Z> Sent searchRequest.
+Received SearchResponse.
+Search was a bloomin' failure.
+Number of hits: 0, setno 1
+Result Set Status: none
+records returned: 0
+Diagnostic message(s) from database:
+    [100] Unspecified error -- v2 addinfo 'Aleph error. Service: C9902. Code: 31. Search is not supported.'
+Z> Sent presentRequest (1+1).
+Target closed connection
+Z> See you later, alligator.
