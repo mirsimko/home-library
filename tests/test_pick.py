@@ -65,3 +65,14 @@ def test_parse_picks_reads_a_clean_answer_in_candidates_order():
         {"item": 0, "verdict": "ambiguous", "candidate_id": None, "reason": "Two editions."},
         {"item": 2, "verdict": "match", "candidate_id": "ndl:000111", "reason": "Same title."},
     ]}
+
+
+def test_parse_picks_finds_the_object_in_a_fence_with_prose_around_it():
+    _, candidates = merged_and_candidates()
+    raw = ("Here is my answer.\n```json\n"
+           + answer({"item": 0, "verdict": "match", "candidate_id": "nkcr:cnb001", "reason": "Same."},
+                    {"item": 2, "verdict": "none", "candidate_id": None, "reason": "Different."})
+           + "\n```\nHope that helps {really}.")
+    picks = parse_picks(raw, candidates)["picks"]
+    assert [(p["item"], p["verdict"], p["candidate_id"]) for p in picks] == [
+        (0, "match", "nkcr:cnb001"), (2, "none", None)]
