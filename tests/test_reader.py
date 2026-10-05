@@ -1,4 +1,5 @@
 import json
+from datetime import datetime, timedelta, timezone
 from types import SimpleNamespace
 
 from PIL import Image
@@ -125,3 +126,30 @@ def test_an_empty_file_in_the_answer_is_filled_with_the_photo_name(tmp_path):
     assert read["file"] == "shelf-1.jpg"
     stored = json.loads((work / "reads" / "a-sol" / "read.json").read_text(encoding="utf-8"))
     assert stored["file"] == "shelf-1.jpg"
+
+
+def fixed_clock(*readings):
+    values = iter(readings)
+    return lambda: next(values)
+
+
+def test_run_json_records_how_the_codex_read_was_run(tmp_path):
+    work, _ = cut_small_photo(tmp_path)
+    run = FakeRun(stdout=codex_stream(usage={"input_tokens": 19989, "cached_input_tokens": 7168,
+                                             "output_tokens": 5}))
+    start = datetime(2026, 10, 5, 19, 40, 1, tzinfo=timezone(timedelta(hours=9)))
+
+    run_read(work, "a-sol", "codex-exec", run=run, clock=fixed_clock(1000.0, 1113.25), now=lambda: start)
+
+    info = json.loads((work / "reads" / "a-sol" / "run.json").read_text(encoding="utf-8"))
+    assert info == {
+        "read_id": "a-sol",
+        "backend": "codex-exec",
+        "model": "gpt-6.1-sol",
+        "command": run.calls[0][0],
+        "started": "2026-10-05T19:40:01+09:00",
+        "seconds": 113.25,
+        "returncode": 0,
+        "tool_calls": [],
+        "usage": {"input_tokens": 19989, "cached_input_tokens": 7168, "output_tokens": 5},
+    }
