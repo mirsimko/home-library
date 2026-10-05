@@ -527,3 +527,29 @@ def test_a_read_is_stored_under_the_photos_own_name_whatever_the_model_wrote(tmp
     read = run_read(work, "b-spark", "pi", run=FakeRun(stdout=wrong_name))
 
     assert read["file"] == manifest["photo"] != "another-photo.jpg"
+
+
+@pytest.mark.parametrize("read_id", ["ELSEWHERE", "../escape", "a/b", "a..b/c", "..", ".hidden", "-x", "", "a b"])
+def test_a_read_id_that_is_not_a_plain_name_is_refused_before_anything_is_written(tmp_path, read_id):
+    work, _ = cut_small_photo(tmp_path)
+    if read_id == "ELSEWHERE":
+        read_id = str(tmp_path / "place")  # an absolute path replaces the reads directory when joined
+    run_read(work, "a-sol", "pi", run=FakeRun(stdout=ANSWER))
+    run = FakeRun(stdout=ANSWER)
+
+    with pytest.raises(ReadError, match="read id"):
+        run_read(work, read_id, "pi", run=run)
+
+    assert run.calls == []
+    assert (read_dir_of(work, "a-sol") / "read.json").exists()
+    assert sorted(path.name for path in (work / "reads").iterdir()) == ["a-sol"]
+    assert not (tmp_path / "place").exists()
+    assert not (work / "escape").exists()
+
+
+def test_a_read_id_with_dots_and_dashes_inside_a_plain_name_is_accepted(tmp_path):
+    work, _ = cut_small_photo(tmp_path)
+
+    read = run_read(work, "b-spark_2.v1", "pi", run=FakeRun(stdout=ANSWER))
+
+    assert read["read_id"] == "b-spark_2.v1"
