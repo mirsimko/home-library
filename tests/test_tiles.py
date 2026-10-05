@@ -90,3 +90,11 @@ def test_manifest_bytes_match_the_files_on_disk(tmp_path):
         assert tile["bytes"] == (out / "tiles" / tile["file"]).stat().st_size
     assert manifest["total_bytes"] == sum(
         p.stat().st_size for p in (out / "tiles").iterdir())
+
+
+def test_manifest_sha256_is_the_hash_of_the_photo_file(tmp_path):
+    photo = make_photo(tmp_path / "shelf-1.jpg", (1200, 900))
+
+    manifest = cut_tiles(photo, tmp_path / "out")
+
+    assert manifest["sha256"] == hashlib.sha256(photo.read_bytes()).hexdigest()
