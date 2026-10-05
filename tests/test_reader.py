@@ -113,3 +113,15 @@ def test_read_json_holds_the_parsed_books_and_the_read_id(tmp_path):
     assert read["complete"] is True
     assert read["errors"] == []
     assert [(b["n"], b["title"], b["language"]) for b in read["books"]] == [(1, "Zelený drak", "cs")]
+
+
+def test_an_empty_file_in_the_answer_is_filled_with_the_photo_name(tmp_path):
+    work, _ = cut_small_photo(tmp_path)
+    answer = json.dumps({"file": "", "books": []})
+    run = FakeRun(stdout=codex_stream(answer))
+
+    read = run_read(work, "a-sol", "codex-exec", run=run)
+
+    assert read["file"] == "shelf-1.jpg"
+    stored = json.loads((work / "reads" / "a-sol" / "read.json").read_text(encoding="utf-8"))
+    assert stored["file"] == "shelf-1.jpg"
