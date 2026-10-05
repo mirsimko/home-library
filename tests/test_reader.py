@@ -302,3 +302,14 @@ def test_a_missing_tile_is_refused_before_anything_runs(tmp_path):
 
     assert run.calls == []
     assert not (work / "reads").exists()
+
+
+def test_a_failed_run_removes_the_read_json_of_an_earlier_run_of_the_same_read(tmp_path):
+    work, _ = cut_small_photo(tmp_path)
+    run_read(work, "b-spark", "pi", run=FakeRun(stdout=ANSWER))
+    assert (read_dir_of(work, "b-spark") / "read.json").exists()
+
+    with pytest.raises(ReadError):
+        run_read(work, "b-spark", "pi", run=FakeRun(stdout="", returncode=1))
+
+    assert not (read_dir_of(work, "b-spark") / "read.json").exists()
