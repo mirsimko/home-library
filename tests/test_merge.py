@@ -66,3 +66,15 @@ def test_exact_is_true_only_for_titles_equal_after_nfc_and_trimming():
         item = only_item("Zelený drak", other)
         assert item["status"] == "accepted"
         assert item["exact"] is False, other
+
+
+def test_a_one_character_difference_is_not_accepted_and_goes_to_review_as_near():
+    a = read("a-sol", [book(1, "The Blue Kite", language="en")])
+    b = read("b-spark", [book(2, "The Blue Kito", language="en")])
+    items = merge_reads(a, b)["items"]
+    assert len(items) == 1
+    item = items[0]
+    assert (item["status"], item["reason"], item["exact"]) == ("review", "near", False)
+    assert item["title"] == "The Blue Kite"
+    assert [r["read_id"] for r in item["readings"]] == ["a-sol", "b-spark"]
+    assert [r["title"] for r in item["readings"]] == ["The Blue Kite", "The Blue Kito"]
