@@ -44,6 +44,12 @@ def _codex_command(tiles_dir, files):
             "-C", str(tiles_dir), "-i", ",".join(files), "--json", "-"]
 
 
+def _pi_command(files, prompt):
+    return ["pi", "-p", "--model", BACKENDS["pi"], "--thinking", "medium", "--no-context-files", "--no-skills",
+            "--no-prompt-templates", "--no-extensions", "--no-tools", "--no-session",
+            *[f"@{name}" for name in files], prompt]
+
+
 def _answer(events):
     answer = ""
     for event in events:
@@ -97,18 +103,28 @@ def run_read(photo_dir, read_id, backend, *, run=subprocess.run, clock=time.mono
     read_dir = photo_dir / "reads" / read_id
     read_dir.mkdir(parents=True, exist_ok=True)
     (read_dir / "prompt.txt").write_text(prompt, encoding="utf-8")
-    command = _codex_command(tiles_dir, files)
+    if backend == "codex-exec":
+        command = logged = _codex_command(tiles_dir, files)
+        stdin = prompt
+    else:
+        command = _pi_command(files, prompt)
+        logged = [*command[:-1], "<prompt>"]
+        stdin = None
     started = now().isoformat()
     began = clock()
-    result = run(command, input=prompt, capture_output=True, text=True,
+    result = run(command, input=stdin, capture_output=True, text=True,
                  encoding="utf-8", cwd=tiles_dir, timeout=timeout)
     seconds = clock() - began
-    events = _events(result.stdout)
-    answer = _answer(events)
-    info = {"read_id": read_id, "backend": backend, "model": BACKENDS[backend], "command": command,
-            "started": started, "seconds": seconds, "returncode": result.returncode, "tool_calls": _tool_calls(events),
-            "usage": _usage(events)}
-    (read_dir / "events.jsonl").write_text(result.stdout, encoding="utf-8")
+    if backend == "codex-exec":
+        events = _events(result.stdout)
+        answer, tool_calls, usage, stream = _answer(events), _tool_calls(events), _usage(events), result.stdout
+    else:
+        answer, tool_calls, usage, stream = result.stdout, [], None, None
+    info = {"read_id": read_id, "backend": backend, "model": BACKENDS[backend], "command": logged,
+            "started": started, "seconds": seconds, "returncode": result.returncode, "tool_calls": tool_calls,
+            "usage": usage}
+    if stream is not None:
+        (read_dir / "events.jsonl").write_text(stream, encoding="utf-8")
     (read_dir / "raw.txt").write_text(answer, encoding="utf-8")
     _write_json(read_dir / "run.json", info)
     if info["tool_calls"]:
