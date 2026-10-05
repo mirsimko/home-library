@@ -2,6 +2,8 @@ import json
 import subprocess
 from pathlib import Path
 
+import pytest
+
 from home_library.pick import build_prompt, parse_picks, run_pick
 
 
@@ -243,3 +245,25 @@ def test_run_pick_given_a_relative_photo_directory_passes_absolute_paths_to_code
     assert args[args.index("-C") + 1] == lookup
     assert args[args.index("-o") + 1] == lookup + "/picks.raw.txt"
     assert kwargs["cwd"] == lookup
+
+
+def test_run_pick_in_a_directory_inside_a_git_checkout_is_refused_and_runs_nothing(tmp_path):
+    (tmp_path / "repo" / ".git").mkdir(parents=True)
+    photo = tmp_path / "repo" / "work" / "shelf-1"
+    photo.mkdir(parents=True)
+    photo_dir_with_lookup(photo)
+    fake = FakeCodex(reply=answer())
+    with pytest.raises(ValueError):
+        run_pick(photo, run=fake)
+    assert fake.calls == []
+    assert not (photo / "lookup" / "picks.json").exists()
+
+
+def test_run_pick_refuses_a_symlink_into_a_git_checkout(tmp_path):
+    (tmp_path / "repo" / ".git").mkdir(parents=True)
+    (tmp_path / "repo" / "work").mkdir()
+    photo_dir_with_lookup(tmp_path / "repo" / "work")
+    link = tmp_path / "link"
+    link.symlink_to(tmp_path / "repo" / "work")
+    with pytest.raises(ValueError):
+        run_pick(link, run=FakeCodex(reply=answer()))

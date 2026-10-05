@@ -3,6 +3,8 @@ import json
 import subprocess
 from pathlib import Path
 
+from home_library.workspace import refuse_inside_checkout
+
 _FIELDS = ("title", "title_reading", "authors", "publisher", "year", "series", "isbn")
 
 
@@ -99,7 +101,7 @@ def _failed(lookup_dir: Path, candidates: dict, why: str) -> dict:
 
 
 def run_pick(photo_dir, *, run=subprocess.run, timeout=300) -> dict:
-    photo_dir = Path(photo_dir)
+    photo_dir = refuse_inside_checkout(photo_dir)
     lookup_dir = photo_dir / "lookup"
     merged = json.loads((photo_dir / "merged.json").read_text(encoding="utf-8"))
     candidates = json.loads((lookup_dir / "candidates.json").read_text(encoding="utf-8"))
