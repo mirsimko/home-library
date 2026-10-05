@@ -97,6 +97,15 @@ def run_pick(photo_dir, *, run=subprocess.run, timeout=300) -> dict:
     lookup_dir = photo_dir / "lookup"
     merged = json.loads((photo_dir / "merged.json").read_text(encoding="utf-8"))
     candidates = json.loads((lookup_dir / "candidates.json").read_text(encoding="utf-8"))
-    picks = {"file": candidates["file"], "picks": []}
+    if not books_with_candidates(candidates):
+        picks = {"file": candidates["file"], "picks": []}
+    else:
+        raw_file = lookup_dir / "picks.raw.txt"
+        command = ["codex", "exec", "--ignore-user-config", "-m", "gpt-6.1-sol",
+                   "-c", 'model_reasoning_effort="low"', "-s", "read-only", "--skip-git-repo-check",
+                   "--ephemeral", "-C", str(lookup_dir), "-o", str(raw_file), "-"]
+        run(command, input=build_prompt(merged, candidates), cwd=str(lookup_dir), timeout=timeout,
+            capture_output=True, text=True, encoding="utf-8")
+        picks = parse_picks(raw_file.read_text(encoding="utf-8"), candidates)
     _write_picks(lookup_dir, picks)
     return picks
