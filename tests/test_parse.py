@@ -31,3 +31,23 @@ def test_answer_in_code_fence_with_prose_is_read():
     assert [b["title"] for b in read["books"]] == ["The Blue Kite"]
     assert read["file"] == "shelf-1.jpg"
     assert read["complete"] is True
+
+
+def test_entry_with_a_missing_quote_is_reported_and_its_neighbours_survive():
+    raw = (
+        '{"file": "shelf-1.jpg", "books": [\n'
+        '{"n": 1, "title": "A"},\n'
+        '{"n": 2, "title": B"},\n'
+        '{"n": 3, "title": "C"}\n'
+        ']}'
+    )
+    read = parse_read(raw)
+    assert [b["title"] for b in read["books"]] == ["A", "C"]
+    assert [b["n"] for b in read["books"]] == [1, 3]
+    assert len(read["errors"]) == 1
+    error = read["errors"][0]
+    assert error["position"] == 2
+    assert error["offset"] == 59  # 35 chars of header and newline, 22 of entry 1, comma and newline
+    assert error["raw"] == '{"n": 2, "title": B"}'
+    assert error["reason"] != ""
+    assert read["complete"] is False
