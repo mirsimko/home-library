@@ -1,9 +1,3 @@
-import io
-import threading
-import time
-import urllib.error
-import urllib.request
-
 import urllib.error
 import urllib.request
 
@@ -46,8 +40,8 @@ class FakeWorld:
             raise step
         return Response(step)
 
-    def fetcher(self, cache_dir=None):
-        return Fetcher(cache_dir, opener=self.opener, clock=self.clock, sleep=self.sleep)
+    def fetcher(self):
+        return Fetcher(opener=self.opener, clock=self.clock, sleep=self.sleep)
 
 
 def test_fetcher_returns_the_body_and_identifies_itself_with_a_30_second_timeout():
@@ -60,27 +54,6 @@ def test_fetcher_returns_the_body_and_identifies_itself_with_a_30_second_timeout
     assert url == NDL
     assert headers["User-agent"] == "home-library/0.1 (+https://github.com/mirsimko/home-library)"
     assert timeout == 30
-
-
-def test_a_repeated_call_is_answered_from_the_disk_cache_without_a_request(tmp_path):
-    first = FakeWorld(b"answer")
-    assert first.fetcher(tmp_path / "cache")(NDL) == b"answer"
-
-    second = FakeWorld(b"a different answer")
-    assert second.fetcher(tmp_path / "cache")(NDL) == b"answer"
-
-    assert len(first.requests) == 1
-    assert second.requests == []
-
-
-def test_different_urls_are_cached_separately(tmp_path):
-    world = FakeWorld(b"one", b"two")
-    fetch = world.fetcher(tmp_path)
-
-    assert fetch(NDL) == b"one"
-    assert fetch(NDL + "&cnt=2") == b"two"
-    assert fetch(NDL) == b"one"
-    assert len(world.requests) == 2
 
 
 @pytest.mark.parametrize(
@@ -172,78 +145,6 @@ def test_other_failures_are_fetch_errors_without_a_retry(failure):
 
     assert not isinstance(caught.value, RateLimited)
     assert len(world.requests) == 1
-
-
-def test_a_failed_request_is_not_cached(tmp_path):
-    world = FakeWorld(http_error(500), b"ok")
-    fetch = world.fetcher(tmp_path)
-
-    with pytest.raises(FetchError):
-        fetch(NDL)
-
-    assert fetch(NDL) == b"ok"
-
-
-def test_threads_asking_the_same_host_are_served_one_request_at_a_time():
-    in_flight, most, opened = [0], [0], [0]
-    guard = threading.Lock()
-
-    def slow_opener(request, timeout):
-        with guard:
-            in_flight[0] += 1
-            opened[0] += 1
-            most[0] = max(most[0], in_flight[0])
-        time.sleep(0.02)  # a real pause inside the fake network, so that overlapping requests would show
-        with guard:
-            in_flight[0] -= 1
-        return Response(b"ok")
-
-    fetch = Fetcher(opener=slow_opener, clock=lambda: 0.0, sleep=lambda seconds: None)
-    results, errors = [], []
-
-    def worker(n):
-        try:
-            results.append(fetch(NDL + "&n=%d" % n))
-        except Exception as error:  # collected, because join() does not propagate it
-            errors.append(error)
-
-    threads = [threading.Thread(target=worker, args=(n,)) for n in range(4)]
-    for thread in threads:
-        thread.start()
-    for thread in threads:
-        thread.join()
-
-    assert errors == []
-    assert results == [b"ok"] * 4
-    assert opened[0] == 4
-    assert most[0] == 1
-
-
-def test_threads_asking_for_the_same_uncached_url_make_one_request_and_all_succeed(tmp_path):
-    calls, results, errors = [], [], []
-
-    def slow_opener(request, timeout):
-        calls.append(request.full_url)
-        time.sleep(0.05)
-        return Response(b"shared")
-
-    fetch = Fetcher(tmp_path, opener=slow_opener, clock=lambda: 0.0, sleep=lambda seconds: None)
-
-    def worker():
-        try:
-            results.append(fetch(NDL))
-        except Exception as error:  # collected, because join() does not propagate it
-            errors.append(error)
-
-    threads = [threading.Thread(target=worker) for _ in range(4)]
-    for thread in threads:
-        thread.start()
-    for thread in threads:
-        thread.join()
-
-    assert errors == []
-    assert results == [b"shared"] * 4
-    assert len(calls) == 1
 
 
 def test_the_default_opener_calls_urlopen_with_the_timeout_and_no_request_body(monkeypatch):

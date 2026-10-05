@@ -1,11 +1,7 @@
-"""The real fetch for the HTTP sources: polite, paced, retrying and cached. Standard library only."""
-import hashlib
-import os
-import threading
+"""The real fetch for the HTTP sources: polite, paced and retrying. Standard library only."""
 import time
 import urllib.error
 import urllib.request
-from pathlib import Path
 from urllib.parse import urlparse
 
 from home_library.lookup.errors import FetchError, RateLimited
@@ -23,21 +19,11 @@ def _urlopen(request, timeout):
 
 
 class Fetcher:
-    def __init__(self, cache_dir=None, *, opener=None, clock=time.monotonic, sleep=time.sleep):
-        self.cache_dir = Path(cache_dir) if cache_dir is not None else None
+    def __init__(self, *, opener=None, clock=time.monotonic, sleep=time.sleep):
         self.opener = opener or _urlopen
         self.clock = clock
         self.sleep = sleep
         self.last_request = {}  # host -> clock time of its last request
-        self.locks = {}  # host -> lock held for the whole of one request, retry included
-        self.locks_guard = threading.Lock()
-
-    def _cache_path(self, url):
-        return self.cache_dir / hashlib.sha256(url.encode("utf-8")).hexdigest()
-
-    def _lock_for(self, host):
-        with self.locks_guard:
-            return self.locks.setdefault(host, threading.Lock())
 
     def _wait_for_turn(self, host):
         if host in self.last_request:
@@ -72,17 +58,4 @@ class Fetcher:
             self.last_request[host] = self.clock()
 
     def __call__(self, url):
-        if self.cache_dir is not None and self._cache_path(url).exists():
-            return self._cache_path(url).read_bytes()
-        host = urlparse(url).hostname
-        with self._lock_for(host):
-            # Another thread may have fetched this URL while we waited for the host.
-            if self.cache_dir is not None and self._cache_path(url).exists():
-                return self._cache_path(url).read_bytes()
-            body = self._get(url, host, retry=True)
-            if self.cache_dir is not None:
-                self.cache_dir.mkdir(parents=True, exist_ok=True)
-                partial = self._cache_path(url).with_suffix(".part")
-                partial.write_bytes(body)
-                os.replace(partial, self._cache_path(url))
-        return body
+        return self._get(url, urlparse(url).hostname, retry=True)

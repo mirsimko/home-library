@@ -1,4 +1,9 @@
 """Stage 5, look-up: candidate catalogue records for a title (docs/pipeline.md)."""
+import hashlib
+import json
+import os
+from pathlib import Path
+
 from home_library.lookup import loc, ndl, nkcr, openbd, openlibrary
 from home_library.lookup.errors import RateLimited, Unavailable
 from home_library.lookup.isbn import normalize_isbn
@@ -28,25 +33,45 @@ def _short_title(title):
 def _steps(source, title, author, isbn):
     steps = []
     if isbn:
-        steps.append(("isbn", lambda fetch: source.by_isbn(isbn, fetch)))
+        steps.append(("isbn", [isbn], lambda fetch: source.by_isbn(isbn, fetch)))
     if hasattr(source, "search"):
         if author:
-            steps.append(("title+author", lambda fetch: source.search(title, author, fetch)))
-        steps.append(("title", lambda fetch: source.search(title, None, fetch)))
+            steps.append(("title+author", [title, author], lambda fetch: source.search(title, author, fetch)))
+        steps.append(("title", [title], lambda fetch: source.search(title, None, fetch)))
         short_title = _short_title(title)
         if short_title:
-            steps.append(("short-title", lambda fetch: source.search(short_title, None, fetch)))
+            steps.append(("short-title", [short_title], lambda fetch: source.search(short_title, None, fetch)))
     return steps
 
 
-def find_candidates(title, language, *, author=None, isbn=None, fetch, run_yaz, max_per_source=10):
+def _cache_path(cache_dir, name, step, values):
+    key = json.dumps([name, step, values], ensure_ascii=False)
+    return Path(cache_dir) / (hashlib.sha256(key.encode("utf-8")).hexdigest() + ".json")
+
+
+def _write_cache(path, found):
+    path.parent.mkdir(parents=True, exist_ok=True)
+    partial = path.with_suffix(".part")
+    partial.write_text(json.dumps(found, ensure_ascii=False), encoding="utf-8")
+    os.replace(partial, path)
+
+
+def find_candidates(
+    title, language, *, author=None, isbn=None, fetch, run_yaz, max_per_source=10, cache_dir=None
+):
     isbn = normalize_isbn(isbn) if isbn else None
     queries, candidates = [], []
     for source in SOURCES.get(language, []):
         name = source.__name__.rsplit(".", 1)[-1]
-        for step, run in _steps(source, title, author, isbn)[:MAX_REQUESTS_PER_SOURCE]:
+        for step, values, run in _steps(source, title, author, isbn)[:MAX_REQUESTS_PER_SOURCE]:
+            path = _cache_path(cache_dir, name, step, values) if cache_dir is not None else None
             try:
-                found = run(run_yaz if source is nkcr else fetch)
+                if path is not None and path.exists():
+                    found = json.loads(path.read_text(encoding="utf-8"))
+                else:
+                    found = run(run_yaz if source is nkcr else fetch)
+                    if path is not None:
+                        _write_cache(path, found)
             except (RateLimited, Unavailable) as failure:
                 status = "rate_limited" if isinstance(failure, RateLimited) else "unavailable"
                 queries.append({"source": name, "step": step, "status": status, "count": 0})
