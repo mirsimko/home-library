@@ -1,4 +1,5 @@
 """Stage 6: pick the catalogue candidate that is the book."""
+import json
 from pathlib import Path
 
 _FIELDS = ("title", "title_reading", "authors", "publisher", "year", "series", "isbn")
@@ -27,3 +28,13 @@ def build_prompt(merged: dict, candidates: dict) -> str:
             lines.extend(_candidate_lines(cand))
         parts.append("\n".join(lines) + "\n")
     return "\n".join(parts)
+
+
+def parse_picks(raw: str, candidates: dict) -> dict:
+    answer = json.loads(raw)
+    by_item = {pick["item"]: pick for pick in answer["picks"]}
+    picks = []
+    for book in candidates["books"]:
+        if book["candidates"]:
+            picks.append(by_item[book["item"]])
+    return {"file": candidates["file"], "picks": picks}
