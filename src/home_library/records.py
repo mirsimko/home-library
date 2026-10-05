@@ -28,6 +28,14 @@ def _item_record(photo: str, item: dict, location: str) -> dict:
     return record
 
 
+def _unreadable_record(photo: str, entry: dict, location: str) -> dict:
+    record = _empty()
+    record.update(photo=photo, location=location, read_status="unreadable", other_text=entry["other_text"],
+                  where=entry["where"], read_ids=entry["read_id"],
+                  notes="Could not be read from the shelf photo; needs a cover photo.")
+    return record
+
+
 def _find(candidates: dict | None, picks: dict | None, index: int):
     """The book's candidate list and its pick, or empty values."""
     books = (candidates or {}).get("books", [])
@@ -85,4 +93,8 @@ def build_records(merged: dict, candidates: dict | None = None, picks: dict | No
             matched = None
         record["notes"] = _notes(item, pick, matched)
         records.append(record)
+    first_read = merged["reads"][0] if merged["reads"] else None
+    for entry in merged["unreadable"]:
+        if entry["read_id"] == first_read:
+            records.append(_unreadable_record(merged["file"], entry, location))
     return records
