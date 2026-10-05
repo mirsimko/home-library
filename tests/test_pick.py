@@ -86,3 +86,13 @@ def test_parse_picks_rejects_a_match_naming_another_books_candidate():
     assert first["verdict"] == "none" and first["candidate_id"] is None
     assert "rejected" in first["reason"] and "ndl:000111" in first["reason"]
     assert second["verdict"] == "match"
+
+
+def test_parse_picks_gives_none_for_a_book_the_answer_skips_and_ignores_unknown_items():
+    _, candidates = merged_and_candidates()
+    raw = answer({"item": 2, "verdict": "match", "candidate_id": "ndl:000111", "reason": "Same."},
+                 {"item": 1, "verdict": "match", "candidate_id": "x:1", "reason": "No candidates here."})
+    picks = parse_picks(raw, candidates)["picks"]
+    assert [p["item"] for p in picks] == [0, 2]
+    assert picks[0]["verdict"] == "none" and picks[0]["candidate_id"] is None
+    assert picks[0]["reason"] != ""
