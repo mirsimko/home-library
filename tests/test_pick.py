@@ -96,3 +96,14 @@ def test_parse_picks_gives_none_for_a_book_the_answer_skips_and_ignores_unknown_
     assert [p["item"] for p in picks] == [0, 2]
     assert picks[0]["verdict"] == "none" and picks[0]["candidate_id"] is None
     assert picks[0]["reason"] != ""
+
+
+def test_parse_picks_turns_unknown_verdict_and_non_object_pick_into_none():
+    _, candidates = merged_and_candidates()
+    raw = json.dumps({"picks": [{"item": 0, "verdict": "probably", "candidate_id": "nkcr:cnb001", "reason": 5},
+                                "item 2 is fine"]})
+    first, second = parse_picks(raw, candidates)["picks"]
+    assert first["verdict"] == "none" and first["candidate_id"] is None
+    assert "probably" in first["reason"]
+    assert second == {"item": 2, "verdict": "none", "candidate_id": None,
+                      "reason": second["reason"]} and second["reason"]
