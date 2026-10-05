@@ -213,3 +213,14 @@ def test_titles_exactly_ninety_percent_similar_form_one_near_pair():
     assert [(i["status"], i["reason"], i["exact"]) for i in items] == [("review", "near", False)]
     assert [r["read_id"] for r in items[0]["readings"]] == ["a-sol", "b-spark"]
     assert [r["title"] for r in items[0]["readings"]] == ["abcdefghij", "abcdefghix"]
+
+
+def test_match_key_ignores_trademark_and_copyright_signs():
+    assert match_key("Blue Kite™ Stories") == match_key("Blue Kite Stories") == "bluekitestories"
+    assert match_key("Zelený drak®") == match_key("Zelený drak")
+    assert match_key("© The Blue Kite") == match_key("The Blue Kite")
+
+
+def test_reads_that_differ_only_by_a_trademark_sign_agree():
+    item = only_item("Blue Kite™ Stories", "Blue Kite Stories")
+    assert (item["status"], item["reason"], item["exact"]) == ("accepted", "agreed", False)
