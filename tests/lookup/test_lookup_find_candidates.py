@@ -160,3 +160,18 @@ def test_the_short_title_step_follows_the_word_and_character_rule(fixture_bytes,
         assert fetch.params(0)["title"] == title
         assert fetch.params(1)["title"] == short_title
         assert result["queries"][1] == {"source": "ndl", "step": "short-title", "status": "no_match", "count": 0}
+
+
+def test_at_most_three_requests_are_made_to_one_source_for_one_book(fixture_bytes):
+    fetch = Router(
+        fixture_bytes, **{"ndlsearch.ndl.go.jp": "ndl_empty.xml", "api.openbd.jp": "openbd_null.json"}
+    )
+
+    result = find_candidates(
+        "あかいふうせんのたび", "ja", author="山田花子", isbn="9784001111118", fetch=fetch, run_yaz=no_yaz
+    )
+
+    ndl_steps = [q["step"] for q in result["queries"] if q["source"] == "ndl"]
+    assert ndl_steps == ["isbn", "title+author", "title"]
+    assert [q["status"] for q in result["queries"]] == ["no_match"] * 4
+    assert len([u for u in fetch.urls if "ndlsearch" in u]) == 3
