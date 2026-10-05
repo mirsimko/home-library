@@ -56,6 +56,12 @@ def _write_cache(path, found):
     os.replace(partial, path)
 
 
+def _failure_status(failure):
+    if isinstance(failure, RateLimited):
+        return "rate_limited"
+    return "unavailable" if isinstance(failure, Unavailable) else "error"
+
+
 def find_candidates(
     title, language, *, author=None, isbn=None, fetch, run_yaz, max_per_source=10, cache_dir=None
 ):
@@ -72,13 +78,10 @@ def find_candidates(
                     found = run(run_yaz if source is nkcr else fetch)
                     if path is not None:
                         _write_cache(path, found)
-            except (RateLimited, Unavailable) as failure:
-                status = "rate_limited" if isinstance(failure, RateLimited) else "unavailable"
+            except Exception as failure:  # a failing source must never stop the run
+                status = _failure_status(failure)
                 queries.append({"source": name, "step": step, "status": status, "count": 0})
                 break  # asking the same source again would not help
-            except Exception:  # a failing source must never stop the run
-                queries.append({"source": name, "step": step, "status": "error", "count": 0})
-                continue
             found = _unique(found)[:max_per_source]
             status = "ok" if found else "no_match"
             queries.append({"source": name, "step": step, "status": status, "count": len(found)})
