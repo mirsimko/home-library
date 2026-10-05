@@ -121,3 +121,32 @@ def test_other_reading_holds_the_second_title_of_a_near_pair_only():
     assert near["other_reading"] == "The Blue Kyte"
     assert near["read_status"] == "near"
     assert same["other_reading"] == ""
+
+
+def test_notes_say_why_a_read_status_needs_a_look():
+    solo = item("solo", "The Blue Kite", [reading("b-spark", 7, "The Blue Kite", language="en")], language="en",
+                exact=False)
+    partial = item("partial", "Zelený", [reading("a-sol", 2, "Zelený", readable="partial")], exact=False)
+    records = build_records(merged_of([solo, near_item(), partial, agreed()]))
+    assert [r["notes"] for r in records] == [
+        "Only b-spark gave this title.", "The two reads differ.", "Partly legible.", ""]
+
+
+def test_notes_quote_the_first_guess_in_inferred():
+    guessed = item("partial", "Zelený", [reading("a-sol", 2, "Zelený", readable="partial", inferred=""),
+                                         reading("b-spark", 3, "Zelený", readable="partial", inferred="Zelený drak"),
+                                         ], exact=False)
+    (record,) = build_records(merged_of([guessed]))
+    assert record["notes"] == "Partly legible. Guess: Zelený drak."
+
+
+def test_notes_give_the_reason_of_an_ambiguous_match_and_the_audience_of_a_matched_candidate():
+    ambiguous = build_records(
+        merged_of([agreed()]), candidates_of(cand("nkcr:cnb001", "Zelený drak")),
+        picks_of("ambiguous", reason="Two editions with the same publisher."))
+    assert ambiguous[0]["notes"] == "Catalogue match ambiguous: Two editions with the same publisher."
+    candidates = candidates_of(cand("nkcr:cnb001", "Zelený drak", audience="Děti", age_note="Pro děti od 3 let"))
+    (matched,) = build_records(merged_of([agreed()]), candidates, picks_of("match", "nkcr:cnb001"))
+    assert matched["notes"] == "Catalogue audience: Děti. Catalogue age note: Pro děti od 3 let."
+    unmatched = build_records(merged_of([agreed()]), candidates, picks_of("none"))
+    assert unmatched[0]["notes"] == ""
