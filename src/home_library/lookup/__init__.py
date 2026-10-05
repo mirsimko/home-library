@@ -7,6 +7,15 @@ MAX_REQUESTS_PER_SOURCE = 3
 SOURCES = {"ja": [ndl, openbd], "cs": [nkcr], "en": [openlibrary, loc]}
 
 
+def _unique(candidates):
+    seen, unique = set(), []
+    for candidate in candidates:
+        if candidate["id"] not in seen:
+            seen.add(candidate["id"])
+            unique.append(candidate)
+    return unique
+
+
 def _short_title(title):
     words = title.split()
     if len(words) > 3:
@@ -45,6 +54,7 @@ def find_candidates(title, language, *, author=None, isbn=None, fetch, run_yaz, 
             except Exception:  # a failing source must never stop the run
                 queries.append({"source": name, "step": step, "status": "error", "count": 0})
                 continue
+            found = _unique(found)[:max_per_source]
             status = "ok" if found else "no_match"
             queries.append({"source": name, "step": step, "status": status, "count": len(found)})
             candidates.extend(found)
