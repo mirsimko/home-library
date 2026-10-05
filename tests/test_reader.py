@@ -1,8 +1,9 @@
 import json
+from types import SimpleNamespace
 
 from PIL import Image
 
-from home_library.reader import render_prompt
+from home_library.reader import render_prompt, run_read
 from home_library.tiles import cut_tiles
 
 SIX_TILE_FILES = (
@@ -31,3 +32,53 @@ def test_prompt_for_a_two_by_three_manifest_names_every_tile_and_the_counts(tmp_
     assert "(2 rows by 3 columns)" in prompt
     assert '{"file": "shelf-1.jpg", "books": [' in prompt
     assert "<<" not in prompt
+
+
+ANSWER = json.dumps(
+    {"file": "shelf-1.jpg", "books": [
+        {"n": 1, "where": "r1c1-r0.jpg, left", "visible": "spine", "title": "Zelený drak", "other_text": "",
+         "language": "cs", "readable": "yes", "confidence": "high", "inferred": ""}]},
+    ensure_ascii=False)
+
+
+def codex_stream(answer=ANSWER, *, extra=(), usage=None):
+    events = [{"type": "thread.started", "thread_id": "t-1"}, {"type": "turn.started"}, *extra,
+              {"type": "item.completed", "item": {"id": "item_9", "type": "agent_message", "text": answer}},
+              {"type": "turn.completed",
+               "usage": usage or {"input_tokens": 100, "cached_input_tokens": 10, "output_tokens": 5}}]
+    return "".join(json.dumps(event) + "\n" for event in events)
+
+
+class FakeRun:
+    """Stands in for subprocess.run: records each call and returns a canned result."""
+
+    def __init__(self, stdout="", returncode=0, stderr="", raises=None):
+        self.calls = []
+        self.result = SimpleNamespace(returncode=returncode, stdout=stdout, stderr=stderr)
+        self.raises = raises
+
+    def __call__(self, args, **kwargs):
+        self.calls.append((args, kwargs))
+        if self.raises:
+            raise self.raises
+        return self.result
+
+
+def test_codex_exec_runs_in_the_tiles_directory_with_the_prompt_on_standard_input(tmp_path):
+    work, manifest = cut_small_photo(tmp_path)
+    run = FakeRun(stdout=codex_stream())
+
+    run_read(work, "a-sol", "codex-exec", run=run)
+
+    (args, kwargs), = run.calls
+    assert args == [
+        "codex", "exec", "--ignore-user-config", "-m", "gpt-6.1-sol", "-c", 'model_reasoning_effort="low"',
+        "-s", "read-only", "--skip-git-repo-check", "--ephemeral", "-C", str(work / "tiles"),
+        "-i", ",".join(SIX_TILE_FILES.split()), "--json", "-"]
+    assert kwargs["cwd"] == work / "tiles"
+    assert kwargs["input"] == render_prompt(manifest)
+    assert kwargs["capture_output"] is True
+    assert kwargs["text"] is True
+    assert kwargs["encoding"] == "utf-8"
+    assert kwargs["timeout"] == 600
+    assert (work / "reads" / "a-sol" / "prompt.txt").read_text(encoding="utf-8") == render_prompt(manifest)
