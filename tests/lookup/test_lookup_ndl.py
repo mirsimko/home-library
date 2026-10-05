@@ -1,4 +1,7 @@
+import pytest
+
 from home_library.lookup import ndl
+from home_library.lookup.errors import SourceError
 
 
 def test_ndl_by_isbn_returns_the_candidate_in_the_contract_shape(fake_fetch, fixture_bytes):
@@ -72,3 +75,10 @@ def test_ndl_with_no_hits_gives_an_empty_list(fake_fetch, fixture_bytes):
 
     assert ndl.by_isbn("9784893094315", fetch) == []
     assert ndl.search("ぐりとぐろ", "中川李枝子", fetch) == []
+
+
+def test_ndl_well_formed_html_error_page_is_a_source_error(fake_fetch):
+    page = b"<html><body><h1>Service Unavailable</h1></body></html>"
+
+    with pytest.raises(SourceError):
+        ndl.search("あかいふうせん", None, fake_fetch(page))

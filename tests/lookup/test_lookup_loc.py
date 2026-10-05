@@ -1,4 +1,7 @@
+import pytest
+
 from home_library.lookup import loc
+from home_library.lookup.errors import SourceError
 
 
 def test_loc_by_isbn_returns_the_candidate_in_the_contract_shape(fake_fetch, fixture_bytes):
@@ -62,3 +65,23 @@ def test_loc_with_no_hits_gives_an_empty_list(fake_fetch, fixture_bytes):
 
     assert loc.by_isbn("9780123456786", fetch) == []
     assert loc.search("Zelený drak", None, fetch) == []
+
+
+LOC_DIAGNOSTIC = b"""<?xml version="1.0"?>
+<zs:searchRetrieveResponse xmlns:zs="http://www.loc.gov/zing/srw/">
+<zs:version>1.1</zs:version><zs:numberOfRecords>0</zs:numberOfRecords>
+<zs:diagnostics><diag:diagnostic xmlns:diag="http://www.loc.gov/zing/srw/diagnostic/">
+<diag:uri>info:srw/diagnostic/1/1</diag:uri><diag:message>General system error</diag:message>
+</diag:diagnostic></zs:diagnostics></zs:searchRetrieveResponse>"""
+
+
+def test_loc_sru_diagnostic_is_a_source_error_and_not_an_empty_result(fake_fetch):
+    with pytest.raises(SourceError):
+        loc.by_isbn("9780123456786", fake_fetch(LOC_DIAGNOSTIC))
+
+
+def test_loc_well_formed_html_error_page_is_a_source_error(fake_fetch):
+    page = b"<html><body><h1>503 Service Unavailable</h1></body></html>"
+
+    with pytest.raises(SourceError):
+        loc.search("The Blue Kite", None, fake_fetch(page))
