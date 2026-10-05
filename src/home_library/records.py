@@ -24,6 +24,33 @@ def _item_record(photo: str, item: dict) -> dict:
     return record
 
 
+def _find(candidates: dict | None, picks: dict | None, index: int):
+    """The book's candidate list and its pick, or empty values."""
+    books = (candidates or {}).get("books", [])
+    book = next((b for b in books if b["item"] == index), None)
+    pick = next((p for p in (picks or {}).get("picks", []) if p["item"] == index), None)
+    return (book["candidates"] if book else []), pick
+
+
+def _fill_catalogue(record: dict, cand: dict) -> None:
+    record.update(catalogue_title=cand["title"], author="; ".join(cand["authors"]), publisher=cand["publisher"],
+                  year=cand["year"], isbn=cand["isbn"], series=cand["series"], source=cand["source"],
+                  source_id=cand["source_id"])
+    if cand["title_reading"]:
+        record["sort_key"] = cand["title_reading"]
+
+
 def build_records(merged: dict, candidates: dict | None = None, picks: dict | None = None, *,
                   location: str = "") -> list:
-    return [_item_record(merged["file"], item) for item in merged["items"]]
+    records = []
+    for index, item in enumerate(merged["items"]):
+        record = _item_record(merged["file"], item)
+        cands, pick = _find(candidates, picks, index)
+        record["candidate_count"] = len(cands)
+        if pick:
+            record["pick_verdict"] = pick["verdict"]
+            matched = next((c for c in cands if c["id"] == pick["candidate_id"]), None)
+            if pick["verdict"] == "match" and matched:
+                _fill_catalogue(record, matched)
+        records.append(record)
+    return records
