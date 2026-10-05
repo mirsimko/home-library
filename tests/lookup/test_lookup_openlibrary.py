@@ -52,3 +52,17 @@ def test_open_library_search_sends_title_and_author_and_returns_works(fake_fetch
     assert first["subjects"] == ["Caldecott Medal", "Dreams", "Fantasy", "Fantasy fiction", "Fiction", "Imagination"]
     assert first["isbn"] == ""
     assert first["publisher"] == ""
+
+
+def test_open_library_search_without_an_author_sends_the_title_alone(fake_fetch, fixture_bytes):
+    fetch = fake_fetch(fixture_bytes("openlibrary_search_wild_things.json"))
+
+    openlibrary.search("The Blue Kite", None, fetch)
+
+    assert fetch.query()["title"] == "The Blue Kite"
+    assert "author" not in fetch.query()
+
+
+def test_open_library_with_no_hits_gives_an_empty_list(fake_fetch, fixture_bytes):
+    assert openlibrary.by_isbn("9788024297217", fake_fetch(fixture_bytes("openlibrary_empty.json"))) == []
+    assert openlibrary.search("Zelený drak", None, fake_fetch(fixture_bytes("openlibrary_search_empty.json"))) == []
