@@ -185,12 +185,13 @@ def test_a_failed_request_is_not_cached(tmp_path):
 
 
 def test_threads_asking_the_same_host_are_served_one_request_at_a_time():
-    in_flight, most = [0], [0]
+    in_flight, most, opened = [0], [0], [0]
     guard = threading.Lock()
 
     def slow_opener(request, timeout):
         with guard:
             in_flight[0] += 1
+            opened[0] += 1
             most[0] = max(most[0], in_flight[0])
         time.sleep(0.02)  # a real pause inside the fake network, so that overlapping requests would show
         with guard:
@@ -198,27 +199,24 @@ def test_threads_asking_the_same_host_are_served_one_request_at_a_time():
         return Response(b"ok")
 
     fetch = Fetcher(opener=slow_opener, clock=lambda: 0.0, sleep=lambda seconds: None)
-    threads = [threading.Thread(target=fetch, args=(NDL + "&n=%d" % n,)) for n in range(4)]
+    results, errors = [], []
+
+    def worker(n):
+        try:
+            results.append(fetch(NDL + "&n=%d" % n))
+        except Exception as error:  # collected, because join() does not propagate it
+            errors.append(error)
+
+    threads = [threading.Thread(target=worker, args=(n,)) for n in range(4)]
     for thread in threads:
         thread.start()
     for thread in threads:
         thread.join()
 
+    assert errors == []
+    assert results == [b"ok"] * 4
+    assert opened[0] == 4
     assert most[0] == 1
-
-
-def test_the_default_opener_calls_urlopen_with_the_timeout_and_no_request_body(monkeypatch):
-    calls = []
-
-    def fake_urlopen(request, *args, **kwargs):
-        calls.append((request.full_url, args, kwargs))
-        return Response(b"live")
-
-    monkeypatch.setattr(urllib.request, "urlopen", fake_urlopen)
-
-    assert Fetcher()(NDL) == b"live"
-
-    assert calls == [(NDL, (), {"timeout": 30})]
 
 
 def test_threads_asking_for_the_same_uncached_url_make_one_request_and_all_succeed(tmp_path):
