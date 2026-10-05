@@ -79,6 +79,8 @@ def _pair_same_words(books_a: dict, books_b: dict) -> dict:
 
 def merge_reads(read_a: dict, read_b: dict) -> dict:
     id_a, id_b = read_a["read_id"], read_b["read_id"]
+    if id_a == id_b:
+        raise ValueError(f"cannot merge read {id_a!r} with itself: one read agreeing with itself is not two reads")
     file_a, file_b = read_a["file"], read_b["file"]
     if file_a and file_b and file_a != file_b:
         raise ValueError(f"reads are of different photos: {file_a!r} and {file_b!r}")
