@@ -1,4 +1,6 @@
 import io
+import threading
+import time
 import urllib.error
 
 import urllib.error
@@ -178,3 +180,26 @@ def test_a_failed_request_is_not_cached(tmp_path):
         fetch(NDL)
 
     assert fetch(NDL) == b"ok"
+
+
+def test_threads_asking_the_same_host_are_served_one_request_at_a_time():
+    in_flight, most = [0], [0]
+    guard = threading.Lock()
+
+    def slow_opener(request, timeout):
+        with guard:
+            in_flight[0] += 1
+            most[0] = max(most[0], in_flight[0])
+        time.sleep(0.02)  # a real pause inside the fake network, so that overlapping requests would show
+        with guard:
+            in_flight[0] -= 1
+        return Response(b"ok")
+
+    fetch = Fetcher(opener=slow_opener, clock=lambda: 0.0, sleep=lambda seconds: None)
+    threads = [threading.Thread(target=fetch, args=(NDL + "&n=%d" % n,)) for n in range(4)]
+    for thread in threads:
+        thread.start()
+    for thread in threads:
+        thread.join()
+
+    assert most[0] == 1
