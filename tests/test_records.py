@@ -108,3 +108,16 @@ def test_age_from_and_age_to_come_from_the_matched_candidates_age_note():
         candidates = candidates_of(cand("nkcr:cnb001", "Zelený drak", age_note=note))
         (record,) = build_records(merged_of([agreed()]), candidates, picks_of("match", "nkcr:cnb001"))
         assert (record["age_from"], record["age_to"]) == (low, high), note
+
+
+def near_item():
+    return item("near", "The Blue Kite", [reading("a-sol", 3, "The Blue Kite", language="en"),
+                                          reading("b-spark", 5, "The Blue Kyte", language="en")],
+                language="en", exact=False)
+
+
+def test_other_reading_holds_the_second_title_of_a_near_pair_only():
+    near, same = build_records(merged_of([near_item(), agreed()]))
+    assert near["other_reading"] == "The Blue Kyte"
+    assert near["read_status"] == "near"
+    assert same["other_reading"] == ""
