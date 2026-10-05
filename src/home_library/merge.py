@@ -16,8 +16,12 @@ def _reading(read_id: str, entry: dict) -> dict:
     return {"read_id": read_id, **entry}
 
 
+def _eligible(entry: dict) -> bool:
+    return entry["readable"] == "yes" and match_key(entry["title"]) != "" and entry["inferred"] == ""
+
+
 def _solo(read_id: str, entry: dict) -> dict:
-    return {"status": "review", "reason": "solo", "title": entry["title"], "language": entry["language"],
+    return {"status": "review", "reason": "solo" if _eligible(entry) else "partial", "title": entry["title"], "language": entry["language"],
             "exact": False, "readings": [_reading(read_id, entry)]}
 
 
@@ -53,7 +57,8 @@ def merge_reads(read_a: dict, read_b: dict) -> dict:
     books_a, books_b = read_a["books"], read_b["books"]
     keys_a = {i: match_key(e["title"]) for i, e in enumerate(books_a)}
     keys_b = {j: match_key(e["title"]) for j, e in enumerate(books_b)}
-    pairs = _pair_equal_keys(keys_a, keys_b)
+    pairs = _pair_equal_keys({i: k for i, k in keys_a.items() if _eligible(books_a[i])},
+                             {j: k for j, k in keys_b.items() if _eligible(books_b[j])})
     left_a = {i: k for i, k in keys_a.items() if i not in pairs}
     left_b = {j: k for j, k in keys_b.items() if j not in pairs.values()}
     near = _pair_similar(left_a, left_b)
@@ -69,8 +74,9 @@ def merge_reads(read_a: dict, read_b: dict) -> dict:
         elif i in near:
             other = books_b[near[i]]
             items.append({
-                "status": "review", "reason": "near", "title": entry["title"],
-                "language": entry["language"], "exact": False,
+                "status": "review", "reason": "near" if _eligible(entry) and _eligible(other) else "partial",
+                "title": entry["title"], "language": entry["language"],
+                "exact": _exact(entry["title"], other["title"]),
                 "readings": [_reading(id_a, entry), _reading(id_b, other)],
             })
         else:
