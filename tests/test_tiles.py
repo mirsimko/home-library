@@ -98,3 +98,45 @@ def test_manifest_sha256_is_the_hash_of_the_photo_file(tmp_path):
     manifest = cut_tiles(photo, tmp_path / "out")
 
     assert manifest["sha256"] == hashlib.sha256(photo.read_bytes()).hexdigest()
+
+
+RED, GREEN, BLUE, YELLOW = (230, 20, 20), (20, 200, 20), (20, 20, 230), (240, 230, 20)
+
+
+def make_corner_photo(path, size=(1000, 800)):
+    """Four flat quadrants: red top-left, green top-right, blue bottom-left, yellow bottom-right."""
+    width, height = size
+    image = Image.new("RGB", size, RED)
+    image.paste(GREEN, (width // 2, 0, width, height // 2))
+    image.paste(BLUE, (0, height // 2, width // 2, height))
+    image.paste(YELLOW, (width // 2, height // 2, width, height))
+    image.save(path, "JPEG", quality=95)
+    return path
+
+
+def close(pixel, color, tolerance=25):
+    return all(abs(a - b) <= tolerance for a, b in zip(pixel, color))
+
+
+def test_r0_tile_is_as_photographed_and_r180_is_its_exact_half_turn(tmp_path):
+    photo = make_corner_photo(tmp_path / "shelf-1.jpg")
+    out = tmp_path / "out"
+
+    cut_tiles(photo, out)
+
+    with Image.open(out / "tiles" / "r1c1-r0.jpg") as r0, \
+            Image.open(out / "tiles" / "r1c1-r180.jpg") as r180:
+        r0.load(), r180.load()
+        assert r0.size == r180.size == (1000, 800)
+        # r0 keeps the photographed layout
+        assert close(r0.getpixel((10, 10)), RED)
+        assert close(r0.getpixel((990, 790)), YELLOW)
+        # r180 is r0 turned by half a turn, pixel for pixel up to JPEG noise
+        turned = r0.rotate(180)
+        total = sum(
+            abs(a - b)
+            for a, b in zip(turned.tobytes(), r180.tobytes())
+        )
+        assert total / (1000 * 800 * 3) < 3
+        assert close(r180.getpixel((10, 10)), YELLOW)
+        assert close(r180.getpixel((990, 790)), RED)
