@@ -51,21 +51,20 @@ def _parser():
     return parser
 
 
+def _report(result):
+    if "error" in result:
+        print(f"{result['photo']}: {result['error']}", file=sys.stderr, flush=True)
+        return
+    seconds = ", ".join(f"{read_id} {value:.0f} s" for read_id, value in result["seconds"].items())
+    print(f"{result['photo']}: {result['accepted']} accepted, {result['review']} to review, "
+          f"{result['unreadable']} unreadable ({seconds}) -> {result['directory']}/records.csv", flush=True)
+
+
 def _run(args):
     readers = (pipeline.READERS[0], (SECOND_READ_ID[args.second_reader], args.second_reader))
-    failed = False
-    for photo in args.photos:
-        try:
-            summary = pipeline.run_photo(photo, args.work_root, readers=readers, location=args.location,
-                                         force=args.force)
-        except Exception as failure:  # one photo must not stop the others
-            print(f"{photo}: {type(failure).__name__}: {failure}", file=sys.stderr)
-            failed = True
-            continue
-        seconds = ", ".join(f"{read_id} {value:.0f} s" for read_id, value in summary["seconds"].items())
-        print(f"{summary['photo']}: {summary['accepted']} accepted, {summary['review']} to review, "
-              f"{summary['unreadable']} unreadable ({seconds}) -> {summary['directory']}/records.csv")
-    return 1 if failed else 0
+    results = pipeline.run_photos(args.photos, args.work_root, readers=readers, location=args.location,
+                                  force=args.force, report=_report)
+    return 1 if any("error" in result for result in results) else 0
 
 
 def _stage(args):

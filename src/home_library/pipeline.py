@@ -3,6 +3,7 @@ import hashlib
 import json
 import shutil
 import subprocess
+from concurrent.futures import ThreadPoolExecutor
 from pathlib import Path
 
 from home_library.lookup import find_candidates
@@ -73,9 +74,8 @@ def _already_cut(photo, photo_dir):
     return manifest.exists() and _load(manifest)["sha256"] == hashlib.sha256(Path(photo).read_bytes()).hexdigest()
 
 
-def run_photo(photo, work_root=DEFAULT_WORK_ROOT, *, readers=READERS, location="", force=False,
-              run=subprocess.run, fetch=None, run_yaz=run_yaz_client):
-    """Every stage for one photo, the two reads one after the other. Returns a short summary.
+def read_photo(photo, work_root=DEFAULT_WORK_ROOT, *, readers=READERS, force=False, run=subprocess.run):
+    """Stages 1 to 4 for one photo: tiles, the reads (at the same time) and the merge. Returns its directory.
 
     A read that is already stored is not repeated, so a run that failed half way can simply be started again.
     A changed photo, or force, starts from nothing.
@@ -84,15 +84,26 @@ def run_photo(photo, work_root=DEFAULT_WORK_ROOT, *, readers=READERS, location="
     picks = photo_dir / "lookup" / "picks.json"
     if force or not _already_cut(photo, photo_dir):
         shutil.rmtree(photo_dir / "reads", ignore_errors=True)  # reads of other tiles must not be reused
-        picks.unlink(missing_ok=True)
         cut_tiles(photo, photo_dir)
-    for read_id, backend in readers:
-        if not (photo_dir / "reads" / read_id / "read.json").exists():
-            run_read(photo_dir, read_id, backend, run=run)
-            picks.unlink(missing_ok=True)  # a pick made for other readings is stale
-    merged = merge_photo(photo_dir, [read_id for read_id, _ in readers])
+    missing = [reader for reader in readers if not (photo_dir / "reads" / reader[0] / "read.json").exists()]
+    if missing:
+        picks.unlink(missing_ok=True)  # a pick made for other readings is stale
+    # Both reads at once: measured on the home uplink, this took no longer than the slower read alone.
+    with ThreadPoolExecutor(max_workers=len(readers)) as pool:
+        reads = [pool.submit(run_read, photo_dir, read_id, backend, run=run) for read_id, backend in missing]
+    for read in reads:
+        read.result()  # raises the read's failure, after every read has ended
+    merge_photo(photo_dir, [read_id for read_id, _ in readers])
+    return photo_dir
+
+
+def finish_photo(photo_dir, *, readers=READERS, location="", run=subprocess.run, fetch=None,
+                 run_yaz=run_yaz_client):
+    """Stages 5 and 6 for one photo: look-up, pick and records. Returns a short summary."""
+    photo_dir = Path(photo_dir)
+    merged = _load(photo_dir / "merged.json")
     lookup_photo(photo_dir, fetch=fetch, run_yaz=run_yaz)
-    if not picks.exists():
+    if not (photo_dir / "lookup" / "picks.json").exists():
         run_pick(photo_dir, run=run)
     export_photo(photo_dir, location=location)
     statuses = [item["status"] for item in merged["items"]]
@@ -101,3 +112,44 @@ def run_photo(photo, work_root=DEFAULT_WORK_ROOT, *, readers=READERS, location="
             "unreadable": sum(1 for entry in merged["unreadable"] if entry["read_id"] == readers[0][0]),
             "seconds": {read_id: float(_load(photo_dir / "reads" / read_id / "run.json")["seconds"])
                         for read_id, _ in readers}}
+
+
+def run_photo(photo, work_root=DEFAULT_WORK_ROOT, *, readers=READERS, location="", force=False,
+              run=subprocess.run, fetch=None, run_yaz=run_yaz_client):
+    """Every stage for one photo."""
+    photo_dir = read_photo(photo, work_root, readers=readers, force=force, run=run)
+    return finish_photo(photo_dir, readers=readers, location=location, run=run, fetch=fetch, run_yaz=run_yaz)
+
+
+def _failure(photo, failure):
+    return {"photo": Path(photo).name, "error": f"{type(failure).__name__}: {failure}"}
+
+
+def run_photos(photos, work_root=DEFAULT_WORK_ROOT, *, readers=READERS, location="", force=False,
+               run=subprocess.run, fetch=None, run_yaz=run_yaz_client, report=lambda result: None):
+    """Every stage for several photos. Returns one summary per photo, or its error.
+
+    Photos are read one after another, because the uplink carries one photo's images at a time. The look-ups
+    of a photo run in the background while the next photo is read: one NDL title search takes 10 to 15 seconds.
+    A photo that fails does not stop the others. `report` is called with each result as soon as it is final.
+    """
+    results = [None] * len(photos)
+
+    def finish(index, photo, photo_dir):
+        try:
+            results[index] = finish_photo(photo_dir, readers=readers, location=location, run=run,
+                                          fetch=fetch, run_yaz=run_yaz)
+        except Exception as failure:
+            results[index] = _failure(photo, failure)
+        report(results[index])
+
+    with ThreadPoolExecutor(max_workers=1) as background:  # one look-up at a time: the sources are paced
+        for index, photo in enumerate(photos):
+            try:
+                photo_dir = read_photo(photo, work_root, readers=readers, force=force, run=run)
+            except Exception as failure:
+                results[index] = _failure(photo, failure)
+                report(results[index])
+                continue
+            background.submit(finish, index, photo, photo_dir)
+    return results
