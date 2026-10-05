@@ -181,3 +181,31 @@ def test_a_codex_read_that_ran_a_command_is_rejected_and_leaves_no_read_json(tmp
     assert not (read_dir / "read.json").exists()
     assert (read_dir / "raw.txt").read_text(encoding="utf-8") == ANSWER
     assert json.loads((read_dir / "run.json").read_text(encoding="utf-8"))["tool_calls"] == ["command_execution"]
+
+
+def test_pi_gets_each_tile_as_an_argument_and_the_prompt_last_and_answers_on_stdout(tmp_path):
+    work, manifest = cut_small_photo(tmp_path)
+    run = FakeRun(stdout=ANSWER)
+
+    read = run_read(work, "b-spark", "pi", run=run)
+
+    prompt = render_prompt(manifest)
+    (args, kwargs), = run.calls
+    assert args == [
+        "pi", "-p", "--model", "opencode-go/muse-spark-1.3-contributor", "--thinking", "medium",
+        "--no-context-files", "--no-skills", "--no-prompt-templates", "--no-extensions", "--no-tools",
+        "--no-session", *[f"@{name}" for name in SIX_TILE_FILES.split()], prompt]
+    assert kwargs["cwd"] == work / "tiles"
+    assert kwargs.get("input") is None
+    assert read["read_id"] == "b-spark"
+    assert [b["title"] for b in read["books"]] == ["Zelený drak"]
+    read_dir = work / "reads" / "b-spark"
+    assert (read_dir / "prompt.txt").read_text(encoding="utf-8") == prompt
+    assert (read_dir / "raw.txt").read_text(encoding="utf-8") == ANSWER
+    assert not (read_dir / "events.jsonl").exists()
+    info = json.loads((read_dir / "run.json").read_text(encoding="utf-8"))
+    assert info["backend"] == "pi"
+    assert info["model"] == "opencode-go/muse-spark-1.3-contributor"
+    assert info["command"] == [*args[:-1], "<prompt>"]
+    assert info["tool_calls"] == []
+    assert info["usage"] is None
