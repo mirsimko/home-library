@@ -230,3 +230,16 @@ def test_parse_picks_gives_none_for_every_book_when_the_answer_nests_too_deeply(
     raw = '{"picks":' + "[" * 1100 + "0" + "]" * 1100 + "}"
     picks = parse_picks(raw, candidates)["picks"]
     assert [(p["item"], p["verdict"]) for p in picks] == [(0, "none"), (2, "none")]
+
+
+def test_run_pick_given_a_relative_photo_directory_passes_absolute_paths_to_codex(tmp_path, monkeypatch):
+    (tmp_path / "shelf-1").mkdir()
+    photo_dir_with_lookup(tmp_path / "shelf-1")
+    monkeypatch.chdir(tmp_path)
+    fake = FakeCodex(reply=answer())
+    run_pick("shelf-1", run=fake)
+    (args, kwargs), = fake.calls
+    lookup = str((tmp_path / "shelf-1" / "lookup").resolve())
+    assert args[args.index("-C") + 1] == lookup
+    assert args[args.index("-o") + 1] == lookup + "/picks.raw.txt"
+    assert kwargs["cwd"] == lookup
