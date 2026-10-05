@@ -52,3 +52,11 @@ def _parse(body):
 
 def by_isbn(isbn, fetch):
     return _parse(fetch(BASE + "?" + urlencode({"isbn": isbn, "dpid": "iss-ndl-opac", "cnt": 10})))
+
+
+def search(title, author, fetch):
+    params = {"title": title}
+    if author:
+        params["creator"] = author
+    params.update({"dpid": "iss-ndl-opac", "cnt": 10})
+    return _parse(fetch(BASE + "?" + urlencode(params)))
