@@ -73,6 +73,9 @@ def run_read(photo_dir, read_id, backend, *, run=subprocess.run, clock=time.mono
     (read_dir / "prompt.txt").write_text(prompt, encoding="utf-8")
     result = run(_codex_command(tiles_dir, files), input=prompt, capture_output=True, text=True,
                  encoding="utf-8", cwd=tiles_dir, timeout=timeout)
-    read = parse_read(_answer(_events(result.stdout)))
+    answer = _answer(_events(result.stdout))
+    (read_dir / "events.jsonl").write_text(result.stdout, encoding="utf-8")
+    (read_dir / "raw.txt").write_text(answer, encoding="utf-8")
+    read = parse_read(answer)
     read["read_id"] = read_id
     return read
