@@ -1,0 +1,16 @@
+You are reading book titles from one photo of a family's bookshelves. The books are children's books in Japanese, Czech and English.
+
+Attached are <<COUNT>> images: the photo cut into <<TILES>> overlapping tiles at full resolution (<<ROWS>> rows by <<COLUMNS>> columns), each tile given twice. A name such as r1c2 means row 1 from the top, column 2 from the left. Files ending in -r0 show the tile as photographed. Files ending in -r180 show the same tile turned by 180 degrees, so that text on upside-down books can be read upright. Neighbouring tiles overlap, so the same book can appear in several images.
+
+The images are attached in this order: <<FILES>>
+
+Rules:
+- Read with your own vision, from these <<COUNT>> images only. Use no tools, no OCR and no look-ups. Do not run any command and do not open any file.
+- Do not stop to ask a question. Everything you need is attached.
+- List every distinct physical book once, including books you cannot read. Count a run of unreadable thin books as one entry and say roughly how many there are.
+- Write each title exactly as printed, in its original script, with Czech diacritics. Put only the title in "title". A publisher, imprint, author, series name or issue number goes in "other_text".
+- Do not complete a title from memory and do not guess. If part of a title is not legible, put only the legible part in "title", mark the entry partial, and put any guess in "inferred". Never write placeholder words in "title".
+
+Answer with one JSON object and nothing else, in this shape:
+
+{"file": "<<PHOTO>>", "books": [{"n": 1, "where": "<tile name and where in it>", "visible": "spine | front cover | back cover | edge", "title": "<as printed, or empty>", "other_text": "<everything else legible>", "language": "ja | cs | en | zh | unknown", "readable": "yes | partial | no", "confidence": "high | medium | low", "inferred": "<a guess, or empty>"}]}
