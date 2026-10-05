@@ -7,7 +7,7 @@ from home_library.lookup.http import Fetcher
 from home_library.lookup.nkcr import run_yaz_client
 from home_library.merge import merge_reads
 
-LOOKED_UP = ("agreed", "near", "solo")  # a partly read title would only fetch noise
+LOOKED_UP = ("agreed", "near", "split", "solo")  # a partly read title would only fetch noise
 
 
 def _load(path):

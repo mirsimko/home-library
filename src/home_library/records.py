@@ -66,6 +66,8 @@ def _notes(item: dict, pick: dict | None, matched: dict | None) -> str:
         sentences.append(f"Only {item['readings'][0]['read_id']} gave this title.")
     elif item["reason"] == "near":
         sentences.append("The two reads differ.")
+    elif item["reason"] == "split":
+        sentences.append("The two reads agree on the words but not on which of them are the title.")
     elif item["reason"] == "partial":
         sentences.append("Partly legible.")
     guess = next((r["inferred"] for r in item["readings"] if r["inferred"]), "")
