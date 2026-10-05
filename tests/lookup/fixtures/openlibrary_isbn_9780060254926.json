@@ -1,0 +1,88 @@
+{
+ "ISBN:9780060254926": {
+  "url": "http://openlibrary.org/books/OL46918311M/Where_The_Wild_Things_Are_by_Maurice_Sendak_(Special_Edition_1_Jan_1967)_Hardcover",
+  "key": "/books/OL46918311M",
+  "title": "Where The Wild Things Are by Maurice Sendak (Special Edition, 1 Jan 1967) Hardcover",
+  "authors": [
+   {
+    "url": "http://openlibrary.org/authors/OL366346A/Maurice_Sendak",
+    "name": "Maurice Sendak"
+   }
+  ],
+  "identifiers": {
+   "isbn_10": [
+    "0060254920"
+   ],
+   "isbn_13": [
+    "9780060254926"
+   ],
+   "openlibrary": [
+    "OL46918311M"
+   ]
+  },
+  "publishers": [
+   {
+    "name": "Bodley Head"
+   },
+   {
+    "name": "The 50th Anniversary edition edition (1 Jan. 1967)"
+   }
+  ],
+  "publish_date": "1967",
+  "subjects": [
+   {
+    "name": "Caldecott Medal",
+    "url": "https://openlibrary.org/subjects/caldecott_medal"
+   },
+   {
+    "name": "Dreams",
+    "url": "https://openlibrary.org/subjects/dreams"
+   },
+   {
+    "name": "Fantasy",
+    "url": "https://openlibrary.org/subjects/fantasy"
+   },
+   {
+    "name": "Fantasy fiction",
+    "url": "https://openlibrary.org/subjects/fantasy_fiction"
+   },
+   {
+    "name": "Fiction",
+    "url": "https://openlibrary.org/subjects/fiction"
+   },
+   {
+    "name": "Imagination",
+    "url": "https://openlibrary.org/subjects/imagination"
+   },
+   {
+    "name": "Juvenile fiction",
+    "url": "https://openlibrary.org/subjects/juvenile_fiction"
+   },
+   {
+    "name": "Miniature books",
+    "url": "https://openlibrary.org/subjects/miniature_books"
+   },
+   {
+    "name": "Monsters",
+    "url": "https://openlibrary.org/subjects/monsters"
+   },
+   {
+    "name": "Specimens",
+    "url": "https://openlibrary.org/subjects/specimens"
+   },
+   {
+    "name": "Fantasty",
+    "url": "https://openlibrary.org/subjects/fantasty"
+   },
+   {
+    "name": "Monstruos",
+    "url": "https://openlibrary.org/subjects/monstruos"
+   }
+  ],
+  "cover": {
+   "small": "https://covers.openlibrary.org/b/id/14827178-S.jpg",
+   "medium": "https://covers.openlibrary.org/b/id/14827178-M.jpg",
+   "large": "https://covers.openlibrary.org/b/id/14827178-L.jpg"
+  }
+ }
+}
