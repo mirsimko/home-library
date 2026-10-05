@@ -106,7 +106,7 @@ These are not yet confirmed by the family.
 
 ### 2.4 Capture
 
-**Settled:** vision-capable LLMs do the reading (R1), and the cover image is the family's own photo (R5).
+**Settled:** vision-capable LLMs do the reading (R1), and the cover image is the family's own photo (R5). The reader is GPT-6.1 Sol, chosen by the family on 2026-10-05 after the test below.
 
 **Proposed:** three ways for a book to enter the catalog.
 
@@ -128,8 +128,8 @@ These are not yet confirmed by the family.
 
 - Code cuts each shelf photo into overlapping full-resolution tiles and adds a copy of each turned by 180 degrees. The model does no cropping.
 - Each photo is one short call with no tools and no session carried over. In the test this took between one and two minutes per photo.
-- Each photo is read twice, by two different models that cannot see each other's answer. Code compares the two: a title both give identically is accepted, and anything else goes to review.
-- The readers are Muse Spark 1.3 and GPT-6.1 Sol, both on existing subscriptions. Muse Spark runs in Pi, which was the faster harness in the one clean comparison and can run with tools switched off.
+- Each photo is read twice, in two sessions that cannot see each other's answer. Code compares the two: a title both give identically is accepted, and anything else goes to review.
+- Sol runs in Codex, on an existing subscription.
 - The model may not complete a title from memory. A partial reading or a guess goes into its own field and marks the record for review.
 - Requests stay small, and few run at once.
 
@@ -137,6 +137,7 @@ These are not yet confirmed by the family.
 
 - The mix of the three ways in. Cover photos and barcode photos are not tested yet (section 3).
 - A tile layout that does not cut long spine titles in two.
+- Whether the second, checking read is another Sol session or Muse Spark 1.3. A different model catches a misreading that one model repeats, and Muse Spark read as reliably as Sol in the test.
 
 ### 2.5 Matching a photo to a catalogue record
 
