@@ -41,3 +41,14 @@ def _query(cql, fetch):
 
 def by_isbn(isbn, fetch):
     return _query("bath.isbn=" + isbn, fetch)
+
+
+def _quote(text):
+    return '"' + text.replace("\\", "\\\\").replace('"', '\\"') + '"'
+
+
+def search(title, author, fetch):
+    cql = "bath.title=" + _quote(title)
+    if author:
+        cql += " and bath.author=" + _quote(author)
+    return _query(cql, fetch)
