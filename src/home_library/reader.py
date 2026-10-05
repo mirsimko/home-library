@@ -71,7 +71,8 @@ def _tool_calls(events):
     for event in events:
         item = event.get("item")
         if isinstance(item, dict) and item.get("type") not in ("agent_message", "reasoning"):
-            seen.setdefault(item.get("id"), item.get("type"))
+            kind = item.get("type")
+            seen.setdefault(item.get("id"), kind if isinstance(kind, str) else "unknown")
     return list(seen.values())
 
 
@@ -87,15 +88,33 @@ def _write_json(path, value):
 
 
 def _events(stdout):
-    events = []
+    """The JSON objects of the stream, and how many non-blank lines were not one."""
+    events, unreadable = [], 0
     for line in stdout.splitlines():
+        if not line.strip():
+            continue
         try:
             event = json.loads(line)
-        except ValueError:
-            continue
+        except (ValueError, RecursionError):
+            event = None
         if isinstance(event, dict):
             events.append(event)
-    return events
+        else:
+            unreadable += 1
+    return events, unreadable
+
+
+def _stream_problem(events, unreadable):
+    """Why the stream cannot vouch that the model used no tools, or None."""
+    types = {event.get("type") for event in events}
+    if unreadable:
+        return f"{unreadable} line(s) of the event stream are not a JSON object, so tool use cannot be ruled out"
+    for kind in ("turn.failed", "error"):
+        if kind in types:
+            return f"the event stream holds a {kind!r} event"
+    if "turn.completed" not in types:
+        return "the event stream has no turn.completed event, so it is incomplete"
+    return None
 
 
 def _check_tiles(tiles_dir, files):
@@ -128,7 +147,8 @@ def run_read(photo_dir, read_id, backend, *, run=subprocess.run, clock=time.mono
     """Run one read of the photo in photo_dir and return the stored read.
 
     Raises ReadError for a read id that is not a plain name, a work directory inside a git checkout, an unknown backend, a tiles directory that
-    does not match the manifest, and any failed run. Any attempt, failed or refused, first removes the read.json
+    does not match the manifest, and any failed run: a non-zero exit, a timeout, no answer, an answer with no
+    books list, a codex event stream that is incomplete or unreadable, or a use of tools. Any attempt, failed or refused, first removes the read.json
     and events.jsonl of an earlier run of the same read. A failed run leaves raw.txt and run.json, never read.json.
     """
     if not _READ_ID.fullmatch(read_id):
@@ -162,11 +182,11 @@ def run_read(photo_dir, read_id, backend, *, run=subprocess.run, clock=time.mono
     result, failure = _execute(command, stdin, tiles_dir, run, timeout)
     seconds = clock() - began
     if backend == "codex-exec":
-        events = _events(result.stdout)
+        events, unreadable = _events(result.stdout)
         answer, tool_calls, usage = _answer(events), _tool_calls(events), _usage(events)
         (read_dir / "events.jsonl").write_text(result.stdout, encoding="utf-8")
     else:
-        answer, tool_calls, usage = result.stdout, [], None
+        answer, tool_calls, usage, unreadable = result.stdout, [], None, 0
     (read_dir / "raw.txt").write_text(answer, encoding="utf-8")
     _write_json(read_dir / "run.json", {
         "read_id": read_id, "backend": backend, "model": BACKENDS[backend], "command": logged,
@@ -177,6 +197,8 @@ def run_read(photo_dir, read_id, backend, *, run=subprocess.run, clock=time.mono
         failure = f"{command[0]} exited with return code {result.returncode}: {said}"
     if failure is None and not answer.strip():
         failure = f"empty answer from {command[0]}"
+    if failure is None and backend == "codex-exec":
+        failure = _stream_problem(events, unreadable)
     if failure is None and tool_calls:
         failure = f"the read used tools ({', '.join(tool_calls)}) and is not blind"
     if failure is not None:
