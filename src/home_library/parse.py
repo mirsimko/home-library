@@ -71,15 +71,21 @@ def _scan_entries(raw: str, pos: int):
     """Entries of the list whose '[' just ended at `pos`. Returns (books, errors, end, closed)."""
     books, errors = [], []
     position = 0
+    after_comma = False
     while True:
         pos = _skip_space(raw, pos)
-        while pos < len(raw) and raw[pos] == ",":
-            pos = _skip_space(raw, pos + 1)
         if pos >= len(raw):
             return books, errors, pos, False
-        if raw[pos] == "]":
+        if raw[pos] == "]" and not after_comma:
             return books, errors, pos + 1, True
         position += 1
+        if raw[pos] in ",]":  # no entry between the delimiters: one was lost
+            errors.append({"position": position, "offset": pos, "reason": "Empty entry", "raw": ""})
+            if raw[pos] == "]":
+                return books, errors, pos + 1, True
+            pos += 1
+            after_comma = True
+            continue
         end = _skip_value(raw, pos, ",]")
         span = raw[pos:end].rstrip(_WHITESPACE + ",")
         value, used, reason = _decode(span, 0)
@@ -91,7 +97,9 @@ def _scan_entries(raw: str, pos: int):
             books.append(_normalise(value, position))
         else:
             errors.append({"position": position, "offset": pos, "reason": reason, "raw": span})
-        pos = end
+        pos = _skip_space(raw, end)
+        after_comma = raw[pos:pos + 1] == ","
+        pos += after_comma
 
 
 def _no_books(raw: str, file_name: str) -> dict:
