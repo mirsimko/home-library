@@ -66,3 +66,15 @@ def test_nkcr_search_without_an_author_searches_the_title_alone(fake_yaz, fixtur
     nkcr.search("Krtek a zajíček", None, run)
 
     assert run.lines()[2] == 'find @attr 1=4 "Krtek a zajíček"'
+
+
+def test_nkcr_quotes_the_title_so_it_cannot_inject_a_yaz_command(fake_yaz, fixture_bytes):
+    run = fake_yaz(fixture_bytes("nkcr_empty.txt").decode("utf-8"))
+
+    nkcr.search('Say "Hi"\nopen evil.example:210/x', 'Back\\slash', run)
+
+    assert len(run.lines()) == 5
+    assert run.lines()[2] == (
+        'find @and @attr 1=4 "Say \\"Hi\\" open evil.example:210/x" @attr 1=1003 "Back\\\\slash"'
+    )
+    assert run.lines()[0] == "open aleph.nkp.cz:9991/NKC-UTF"
