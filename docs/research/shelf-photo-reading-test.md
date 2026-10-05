@@ -146,7 +146,7 @@ Titles found, out of 46:
 
 | Model and harness | Whole photos | Tiles | Zooming, simple prompt | Zooming, procedural prompt | Fast method |
 |---|---|---|---|---|---|
-| GPT-6.1 Sol, low effort, Codex | 36 | 40 | 44 | 45 | not run |
+| GPT-6.1 Sol, low effort, Codex | 36 | 40 | 44 | 45 | 43 |
 | Muse Spark 1.3, OpenCode | 37 | 38 | no answer | not run | 41 |
 | Muse Spark 1.3, Pi | 36 | not run | no answer | not run | 39 |
 | GPT-6 Luna, xhigh, Codex | 19 | 23 | 33 | failed twice | not run |
@@ -162,6 +162,7 @@ Time for the runs that finished cleanly:
 | Luna at xhigh, zooming with the simple prompt | about 11 minutes for four photos |
 | Muse Spark, fast method, Pi | 62 to 91 seconds per photo |
 | Muse Spark, fast method, OpenCode | 91 to 113 seconds per photo |
+| Sol, fast method, Codex | 151 to 199 seconds per photo |
 
 ### What the follow-up shows
 
@@ -175,7 +176,7 @@ Time for the runs that finished cleanly:
 
 **Blind agreement between two independent reads is a strong check.** A model re-reading within one session still has its first answer in front of it. Two reads in separate sessions, compared by code, do not have that problem. Across eleven pairs of runs, titles that both reads marked fully readable were in the key in all but a handful of cases, and those were one-character slips; the wrong titles collected among those only one read gave. One model repeated the same misreading in two separate runs, so the two reads should come from different models, and the comparison should require an exact match.
 
-**The fast method is the practical one.** At roughly a minute and a quarter to a minute and three quarters per photo it found 39 and 41 titles, gave no wrong title as certain, and read two of the four upside-down titles. Its two runs agreed on 28 titles, all of them in the key. It has two faults to fix: a long spine title cut by a tile edge came back as a partial reading, and one answer was malformed JSON by a single character, so the pipeline should parse entry by entry.
+**The fast method is the practical one.** At roughly a minute and a quarter to a minute and three quarters per photo it found 39 and 41 titles, gave no wrong title as certain, and read two of the four upside-down titles. Its two runs agreed on 28 titles, all of them in the key. Sol on the same images found 43 titles, including three of the four upside-down ones, and agreed with Muse Spark on 31 titles, all in the key. Through Codex it was slower, about three minutes per photo, because it opens the twelve images one at a time inside an agent session instead of receiving them in one call. The method has two faults to fix: a long spine title cut by a tile edge came back as a partial reading, and one answer was malformed JSON by a single character, so the pipeline should parse entry by entry.
 
 **The two harnesses read equally well; Pi was faster.** Reading quality differed by one or two titles in either direction. In the one clean comparison, identical requests run back to back, Pi took about 74 seconds per photo and OpenCode about 102. Pi can also run with tools switched off, which makes a blind read certain. Both shrink any image larger than 2000 pixels on a side.
 
