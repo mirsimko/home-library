@@ -1,7 +1,7 @@
 import json
 import subprocess
 
-from home_library.pick import build_prompt, parse_picks
+from home_library.pick import build_prompt, parse_picks, run_pick
 
 
 def reading(read_id, n, title, other_text=""):
@@ -125,3 +125,37 @@ def test_parse_picks_gives_none_for_every_book_when_the_answer_cannot_be_read():
         assert [(p["item"], p["verdict"], p["candidate_id"]) for p in result["picks"]] == [
             (0, "none", None), (2, "none", None)]
         assert all(isinstance(p["reason"], str) and p["reason"] for p in result["picks"])
+
+
+def photo_dir_with_lookup(tmp_path, candidates=None):
+    merged, default = merged_and_candidates()
+    (tmp_path / "lookup").mkdir()
+    (tmp_path / "merged.json").write_text(json.dumps(merged, ensure_ascii=False), encoding="utf-8")
+    (tmp_path / "lookup" / "candidates.json").write_text(
+        json.dumps(candidates or default, ensure_ascii=False), encoding="utf-8")
+    return tmp_path
+
+
+class FakeCodex:
+    def __init__(self, reply=None, returncode=0, error=None):
+        self.reply, self.returncode, self.error, self.calls = reply, returncode, error, []
+
+    def __call__(self, args, **kwargs):
+        self.calls.append((args, kwargs))
+        if self.error:
+            raise self.error
+        if self.reply is not None:
+            args[args.index("-o") + 1:][0] and open(args[args.index("-o") + 1], "w", encoding="utf-8").write(self.reply)
+        return subprocess.CompletedProcess(args, self.returncode, "", "boom")
+
+
+def test_run_pick_calls_no_model_when_no_book_has_candidates(tmp_path):
+    _, candidates = merged_and_candidates()
+    for book in candidates["books"]:
+        book["candidates"] = []
+    photo = photo_dir_with_lookup(tmp_path, candidates)
+    fake = FakeCodex()
+    result = run_pick(photo, run=fake)
+    assert fake.calls == []
+    assert result == {"file": "shelf-1.jpg", "picks": []}
+    assert json.loads((photo / "lookup" / "picks.json").read_text(encoding="utf-8")) == result
