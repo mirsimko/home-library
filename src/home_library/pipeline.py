@@ -106,8 +106,9 @@ def read_photo(photo, work_root=DEFAULT_WORK_ROOT, *, readers=READERS, force=Fal
             (photo_dir / name).unlink(missing_ok=True)
     if manifest is None or not all((photo_dir / "tiles" / tile["file"]).is_file() for tile in manifest["tiles"]):
         cut_tiles(photo, photo_dir)
-    missing = [reader for reader in readers
-               if _load_or_none(photo_dir / "reads" / reader[0] / "read.json") is None]
+    tiles = hashlib.sha256((photo_dir / "tiles.json").read_bytes()).hexdigest()
+    missing = [reader for reader in readers  # not stored, cut short, or made from other tiles
+               if (_load_or_none(photo_dir / "reads" / reader[0] / "read.json") or {}).get("tiles_sha256") != tiles]
     # Both reads at once: measured on the home uplink, this took no longer than the slower read alone.
     with ThreadPoolExecutor(max_workers=len(readers)) as pool:
         reads = [pool.submit(run_read, photo_dir, read_id, backend, run=run) for read_id, backend in missing]

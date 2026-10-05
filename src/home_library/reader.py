@@ -209,6 +209,6 @@ def run_read(photo_dir, read_id, backend, *, run=subprocess.run, clock=time.mono
         raise ReadError(f"the answer from {command[0]} has no books list")
     read["read_id"] = read_id
     read["file"] = manifest["photo"]  # the model only echoes the name; the manifest knows it
-    read["photo_sha256"] = hashlib.sha256(manifest_bytes).hexdigest()
+    read["tiles_sha256"] = hashlib.sha256(manifest_bytes).hexdigest()
     _write_json(read_dir / "read.json", read)
     return read
