@@ -265,3 +265,10 @@ def test_a_split_pair_with_a_partly_read_title_is_reported_as_partial():
     merged = merge_reads(read("a-sol", [a]), read("b-spark", [b]))
 
     assert [(i["reason"], len(i["readings"])) for i in merged["items"]] == [("partial", 2)]
+
+
+def test_a_read_cannot_be_merged_with_itself():
+    same = read("a-sol", [book(1, "Zelený drak")])
+
+    with pytest.raises(ValueError, match="a-sol"):
+        merge_reads(same, read("a-sol", [book(1, "Zelený drak")]))
