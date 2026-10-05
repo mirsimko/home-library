@@ -78,3 +78,15 @@ def test_cutting_a_4080_by_3072_photo_writes_twelve_named_tiles_and_a_manifest(t
     assert boxes["r1c1-r0.jpg"] == [0, 0, 1560, 2000]
     assert boxes["r2c3-r180.jpg"] == [2520, 1072, 4080, 3072]
     assert boxes["r2c2-r0.jpg"] == boxes["r2c2-r180.jpg"] == [1260, 1072, 2820, 3072]
+
+
+def test_manifest_bytes_match_the_files_on_disk(tmp_path):
+    photo = make_photo(tmp_path / "shelf-1.jpg", (2000, 2400))
+    out = tmp_path / "out"
+
+    manifest = cut_tiles(photo, out)
+
+    for tile in manifest["tiles"]:
+        assert tile["bytes"] == (out / "tiles" / tile["file"]).stat().st_size
+    assert manifest["total_bytes"] == sum(
+        p.stat().st_size for p in (out / "tiles").iterdir())
