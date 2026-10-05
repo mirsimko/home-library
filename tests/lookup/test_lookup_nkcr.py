@@ -1,7 +1,9 @@
+import subprocess
+
 import pytest
 
 from home_library.lookup import nkcr
-from home_library.lookup.errors import SourceError
+from home_library.lookup.errors import SourceError, Unavailable
 
 
 def test_nkcr_by_isbn_returns_the_candidate_in_the_contract_shape(fake_yaz, fixture_bytes):
@@ -124,3 +126,43 @@ def test_nkcr_reads_a_translation_without_taking_added_entries_for_authors(fake_
     assert chinese["isbn"] == "9787544825870"
     assert chinese["year"] == ""
     assert chinese["publisher"] == ""
+
+
+class FakeSubprocess:
+    """Replaces subprocess.run, the boundary to the yaz-client program."""
+
+    def __init__(self, result=None, error=None):
+        self.result, self.error, self.calls = result, error, []
+
+    def __call__(self, args, **kwargs):
+        self.calls.append((args, kwargs))
+        if self.error:
+            raise self.error
+        return subprocess.CompletedProcess(args, 0, stdout=self.result, stderr="")
+
+
+def test_run_yaz_client_feeds_the_commands_to_yaz_client_and_returns_its_output(monkeypatch):
+    fake = FakeSubprocess(result="Z> Connecting...OK.\n")
+    monkeypatch.setattr(subprocess, "run", fake)
+
+    output = nkcr.run_yaz_client("open x\nquit\n")
+
+    assert output == "Z> Connecting...OK.\n"
+    args, kwargs = fake.calls[0]
+    assert args == ["yaz-client"]
+    assert kwargs["input"] == "open x\nquit\n"
+    assert kwargs["timeout"] > 0
+
+
+def test_run_yaz_client_reports_a_missing_program_as_unavailable(monkeypatch):
+    monkeypatch.setattr(subprocess, "run", FakeSubprocess(error=FileNotFoundError("yaz-client")))
+
+    with pytest.raises(Unavailable):
+        nkcr.run_yaz_client("quit\n")
+
+
+def test_run_yaz_client_reports_a_timeout_as_a_source_error(monkeypatch):
+    monkeypatch.setattr(subprocess, "run", FakeSubprocess(error=subprocess.TimeoutExpired("yaz-client", 60)))
+
+    with pytest.raises(SourceError):
+        nkcr.run_yaz_client("quit\n")
