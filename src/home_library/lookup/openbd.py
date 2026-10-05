@@ -20,18 +20,18 @@ def _get(record, *path):
 def _candidate(record):
     summary = record.get("summary") or {}
     onix = record.get("onix") or {}
-    isbn = summary.get("isbn", "")
+    isbn = summary.get("isbn") or ""
     return new_candidate(
         "openbd",
         isbn,
         url=BASE + "?" + urlencode({"isbn": isbn}),
-        title=summary.get("title", ""),
+        title=summary.get("title"),
         title_reading=_get(onix, "DescriptiveDetail", "TitleDetail", "TitleElement", "TitleText", "collationkey"),
-        authors=summary.get("author", "").split(),
-        publisher=summary.get("publisher", ""),
-        year=summary.get("pubdate", "")[:4],
+        authors=(summary.get("author") or "").split(),
+        publisher=summary.get("publisher"),
+        year=(summary.get("pubdate") or "")[:4],
         isbn=isbn,
-        series=summary.get("series", ""),
+        series=summary.get("series"),
         language="ja",
         summary=_get(onix, "CollateralDetail", "TextContent", "Text"),
     )
