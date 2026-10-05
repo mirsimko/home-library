@@ -7,6 +7,10 @@ def match_key(title: str) -> str:
     return "".join(ch for ch in folded if ch.isalnum())
 
 
+def _exact(title_a: str, title_b: str) -> bool:
+    return unicodedata.normalize("NFC", title_a).strip() == unicodedata.normalize("NFC", title_b).strip()
+
+
 def _reading(read_id: str, entry: dict) -> dict:
     return {"read_id": read_id, **entry}
 
@@ -21,7 +25,7 @@ def merge_reads(read_a: dict, read_b: dict) -> dict:
                 entries_b.remove(other)
                 items.append({
                     "status": "accepted", "reason": "agreed", "title": entry["title"],
-                    "language": entry["language"], "exact": True,
+                    "language": entry["language"], "exact": _exact(entry["title"], other["title"]),
                     "readings": [_reading(read_a["read_id"], entry), _reading(read_b["read_id"], other)],
                 })
                 break
