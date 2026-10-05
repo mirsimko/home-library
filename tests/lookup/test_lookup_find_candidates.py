@@ -228,7 +228,7 @@ def test_a_failed_request_is_recorded_as_an_error_and_the_next_step_still_runs(f
 
 
 def test_an_answer_that_cannot_be_read_is_an_error_and_never_raises():
-    result = find_candidates("だるまさんが", "ja", fetch=lambda url: b"<html>not what we asked for", run_yaz=no_yaz)
+    result = find_candidates("だるま", "ja", fetch=lambda url: b"<html>not what we asked for", run_yaz=no_yaz)
 
     assert [q["status"] for q in result["queries"]] == ["error"]
     assert result["candidates"] == []
