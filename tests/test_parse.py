@@ -66,3 +66,17 @@ def test_entry_with_a_missing_comma_is_reported_with_its_raw_text():
     assert read["errors"][0]["position"] == 2
     assert read["errors"][0]["raw"] == '{"n": 2 "title": "B"}'
     assert "delimiter" in read["errors"][0]["reason"]
+
+
+def test_braces_brackets_and_escaped_quotes_inside_a_title_do_not_split_entries():
+    raw = (
+        '{"file": "shelf-1.jpg", "books": [\n'
+        '{"n": 1, "title": "Kite } ] { [ \\"Blue\\""},\n'
+        '{"n": 2, "title": "Broken {x} \\"q\\"" "other_text": "}"},\n'
+        '{"n": 3, "title": "C"}\n'
+        ']}'
+    )
+    read = parse_read(raw)
+    assert [b["title"] for b in read["books"]] == ['Kite } ] { [ "Blue"', "C"]
+    assert len(read["errors"]) == 1
+    assert read["errors"][0]["raw"] == '{"n": 2, "title": "Broken {x} \\"q\\"" "other_text": "}"}'
