@@ -33,3 +33,22 @@ def test_open_library_by_isbn_returns_the_candidate_in_the_contract_shape(fake_f
     assert fetch.query()["bibkeys"] == "ISBN:9780060254926"
     assert fetch.query()["jscmd"] == "data"
     assert fetch.query()["format"] == "json"
+
+
+def test_open_library_search_sends_title_and_author_and_returns_works(fake_fetch, fixture_bytes):
+    fetch = fake_fetch(fixture_bytes("openlibrary_search_wild_things.json"))
+
+    candidates = openlibrary.search("Where the Wild Things Are", "Sendak", fetch)
+
+    assert fetch.urls[0].startswith("https://openlibrary.org/search.json?")
+    assert fetch.query()["title"] == "Where the Wild Things Are"
+    assert fetch.query()["author"] == "Sendak"
+    assert [c["id"] for c in candidates] == ["openlibrary:OL2568879W", "openlibrary:OL2568793W"]
+    first = candidates[0]
+    assert first["url"] == "https://openlibrary.org/works/OL2568879W"
+    assert first["title"] == "Where the Wild Things Are"
+    assert first["authors"] == ["Maurice Sendak"]
+    assert first["year"] == "1963"
+    assert first["subjects"] == ["Caldecott Medal", "Dreams", "Fantasy", "Fantasy fiction", "Fiction", "Imagination"]
+    assert first["isbn"] == ""
+    assert first["publisher"] == ""
