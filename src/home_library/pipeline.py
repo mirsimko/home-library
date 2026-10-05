@@ -2,7 +2,12 @@
 import json
 from pathlib import Path
 
+from home_library.lookup import find_candidates
+from home_library.lookup.http import Fetcher
+from home_library.lookup.nkcr import run_yaz_client
 from home_library.merge import merge_reads
+
+LOOKED_UP = ("agreed", "near", "solo")  # a partly read title would only fetch noise
 
 
 def _load(path):
@@ -21,3 +26,16 @@ def merge_photo(photo_dir, read_ids):
     photo_dir = Path(photo_dir)
     first, second = (_load(photo_dir / "reads" / read_id / "read.json") for read_id in read_ids)
     return _store(photo_dir / "merged.json", merge_reads(first, second))
+
+
+def lookup_photo(photo_dir, *, fetch=None, run_yaz=run_yaz_client):
+    """Stage 5: fetch catalogue candidates for every fully read title and write candidates.json."""
+    photo_dir = Path(photo_dir)
+    merged = _load(photo_dir / "merged.json")
+    fetch = fetch or Fetcher(photo_dir / "lookup" / "cache")
+    books = []
+    for index, item in enumerate(merged["items"]):
+        if item["reason"] in LOOKED_UP:
+            found = find_candidates(item["title"], item["language"], fetch=fetch, run_yaz=run_yaz)
+            books.append({"item": index, "title": item["title"], "language": item["language"], **found})
+    return _store(photo_dir / "lookup" / "candidates.json", {"file": merged["file"], "books": books})
