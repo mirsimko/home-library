@@ -113,10 +113,10 @@ def _execute(command, stdin, cwd, run, timeout):
         partial = expired.stdout or ""
         if isinstance(partial, bytes):
             partial = partial.decode("utf-8", errors="replace")
-        return (SimpleNamespace(returncode=None, stdout=partial),
+        return (SimpleNamespace(returncode=None, stdout=partial, stderr=""),
                 f"{command[0]} timed out after {timeout} seconds")
     except FileNotFoundError:
-        return SimpleNamespace(returncode=None, stdout=""), f"{command[0]} is not installed"
+        return SimpleNamespace(returncode=None, stdout="", stderr=""), f"{command[0]} is not installed"
 
 
 def run_read(photo_dir, read_id, backend, *, run=subprocess.run, clock=time.monotonic,
@@ -149,7 +149,7 @@ def run_read(photo_dir, read_id, backend, *, run=subprocess.run, clock=time.mono
     else:
         command = _pi_command(files, prompt)
         logged = [*command[:-1], "<prompt>"]
-        stdin = None
+        stdin = ""  # closed at once: with an image attached, pi waits for standard input to end
     started = now().isoformat()
     began = clock()
     result, failure = _execute(command, stdin, tiles_dir, run, timeout)
@@ -166,7 +166,7 @@ def run_read(photo_dir, read_id, backend, *, run=subprocess.run, clock=time.mono
         "started": started, "seconds": seconds, "returncode": result.returncode, "tool_calls": tool_calls,
         "usage": usage})
     if failure is None and result.returncode != 0:
-        failure = f"{command[0]} exited with return code {result.returncode}"
+        failure = f"{command[0]} exited with return code {result.returncode}: {(result.stderr or '').strip()[-500:]}"
     if failure is None and not answer.strip():
         failure = f"empty answer from {command[0]}"
     if failure is None and tool_calls:
