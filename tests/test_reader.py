@@ -255,3 +255,16 @@ def test_a_program_that_is_not_installed_is_an_error_that_keeps_run_json(tmp_pat
     assert not (read_dir / "read.json").exists()
     assert (read_dir / "raw.txt").read_text(encoding="utf-8") == ""
     assert json.loads((read_dir / "run.json").read_text(encoding="utf-8"))["returncode"] is None
+
+
+def test_an_empty_answer_is_an_error_that_keeps_raw_and_run_json(tmp_path):
+    work, _ = cut_small_photo(tmp_path)
+    run = FakeRun(stdout="  \n")
+
+    with pytest.raises(ReadError, match="empty answer"):
+        run_read(work, "b-spark", "pi", run=run)
+
+    read_dir = read_dir_of(work, "b-spark")
+    assert not (read_dir / "read.json").exists()
+    assert (read_dir / "raw.txt").read_text(encoding="utf-8") == "  \n"
+    assert json.loads((read_dir / "run.json").read_text(encoding="utf-8"))["returncode"] == 0
