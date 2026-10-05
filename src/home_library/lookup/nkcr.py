@@ -11,6 +11,12 @@ DATABASE = "aleph.nkp.cz:9991/NKC-UTF"
 MAX_RECORDS = 10
 
 
+def _quote(text):
+    """A yaz query string: one line, in double quotes, with quote and backslash escaped."""
+    text = " ".join(text.split())
+    return '"' + text.replace("\\", "\\\\").replace('"', '\\"') + '"'
+
+
 def _script(query):
     return "\n".join(
         ["open " + DATABASE, "format usmarc", "find " + query, "show 1+%d" % MAX_RECORDS, "quit"]
@@ -48,13 +54,13 @@ def _parse(output):
 
 
 def by_isbn(isbn, run):
-    output = run(_script('@attr 1=7 "%s"' % isbn))
+    output = run(_script('@attr 1=7 ' + _quote(isbn)))
     return [candidate_from_marc("nkcr", record) for record in _parse(output)]
 
 
 def search(title, author, run):
-    query = '@attr 1=4 "%s"' % title
+    query = "@attr 1=4 " + _quote(title)
     if author:
-        query = '@and %s @attr 1=1003 "%s"' % (query, author)
+        query = "@and %s @attr 1=1003 %s" % (query, _quote(author))
     output = run(_script(query))
     return [candidate_from_marc("nkcr", record) for record in _parse(output)]
