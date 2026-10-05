@@ -162,3 +162,11 @@ def test_object_without_a_books_list_keeps_the_file_name_and_is_incomplete():
     assert read["books"] == []
     assert read["complete"] is False
     assert len(read["errors"]) == 1
+
+
+def test_non_string_field_values_become_strings():
+    raw = answer(entry(1, 2001, other_text=None, language=["ja"]))
+    book = parse_read(raw)["books"][0]
+    assert book["title"] == "2001"
+    assert book["other_text"] == ""
+    assert book["language"] == '["ja"]'
