@@ -2,6 +2,8 @@ from urllib.parse import parse_qs, urlparse
 
 import pytest
 
+from home_library.lookup.errors import FetchError, RateLimited, Unavailable
+
 from home_library.lookup import find_candidates
 
 
@@ -175,3 +177,58 @@ def test_at_most_three_requests_are_made_to_one_source_for_one_book(fixture_byte
     assert ndl_steps == ["isbn", "title+author", "title"]
     assert [q["status"] for q in result["queries"]] == ["no_match"] * 4
     assert len([u for u in fetch.urls if "ndlsearch" in u]) == 3
+
+
+def test_a_rate_limited_source_is_recorded_and_left_alone_and_the_next_source_still_runs(fixture_bytes):
+    def fetch(url):
+        if "ndlsearch" in url:
+            raise RateLimited("busy")
+        return fixture_bytes("openbd_9784001111118.json")
+
+    result = find_candidates(
+        "あかいふうせん", "ja", author="山田花子", isbn="9784001111118", fetch=fetch, run_yaz=no_yaz
+    )
+
+    assert result["queries"] == [
+        {"source": "ndl", "step": "isbn", "status": "rate_limited", "count": 0},
+        {"source": "openbd", "step": "isbn", "status": "ok", "count": 1},
+    ]
+    assert [c["id"] for c in result["candidates"]] == ["openbd:9784001111118"]
+
+
+def test_a_missing_yaz_client_is_recorded_as_unavailable_and_does_not_raise():
+    def run_yaz(commands):
+        raise Unavailable("yaz-client is not installed")
+
+    result = find_candidates(
+        "Krtek a zajíček", "cs", author="Miler", isbn="9788024297217", fetch=no_http, run_yaz=run_yaz
+    )
+
+    assert result == {
+        "queries": [{"source": "nkcr", "step": "isbn", "status": "unavailable", "count": 0}],
+        "candidates": [],
+    }
+
+
+def test_a_failed_request_is_recorded_as_an_error_and_the_next_step_still_runs(fixture_bytes):
+    answers = [FetchError("connection refused"), fixture_bytes("ndl_search_daruma.xml")]
+
+    def fetch(url):
+        answer = answers.pop(0)
+        if isinstance(answer, Exception):
+            raise answer
+        return answer
+
+    result = find_candidates("だるまさんが", "ja", author="かがくいひろし", fetch=fetch, run_yaz=no_yaz)
+
+    assert result["queries"] == [
+        {"source": "ndl", "step": "title+author", "status": "error", "count": 0},
+        {"source": "ndl", "step": "title", "status": "ok", "count": 3},
+    ]
+
+
+def test_an_answer_that_cannot_be_read_is_an_error_and_never_raises():
+    result = find_candidates("だるまさんが", "ja", fetch=lambda url: b"<html>not what we asked for", run_yaz=no_yaz)
+
+    assert [q["status"] for q in result["queries"]] == ["error"]
+    assert result["candidates"] == []
