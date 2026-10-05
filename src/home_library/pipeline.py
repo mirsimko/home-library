@@ -82,12 +82,11 @@ DERIVED = ("merged.json", "records.json", "records.csv", "lookup/candidates.json
            "lookup/picks.raw.txt")
 
 
-def _already_cut(photo, photo_dir):
-    """True when the tiles on disk are those of this very photo file."""
+def _manifest_of(photo, photo_dir):
+    """The stored tile manifest if it is of this very photo file, else None."""
     manifest = _load_or_none(photo_dir / "tiles.json")
-    return (manifest is not None
-            and manifest.get("sha256") == hashlib.sha256(Path(photo).read_bytes()).hexdigest()
-            and all((photo_dir / "tiles" / tile["file"]).is_file() for tile in manifest["tiles"]))
+    same = manifest is not None and manifest.get("sha256") == hashlib.sha256(Path(photo).read_bytes()).hexdigest()
+    return manifest if same else None
 
 
 def read_photo(photo, work_root=DEFAULT_WORK_ROOT, *, readers=READERS, force=False, run=subprocess.run):
@@ -97,11 +96,12 @@ def read_photo(photo, work_root=DEFAULT_WORK_ROOT, *, readers=READERS, force=Fal
     A changed photo, or force, starts from nothing: every file made from the old photo is removed first.
     """
     photo_dir = photo_dir_of(work_root, photo)
-    if force or _load_or_none(photo_dir / "tiles.json") is None or not _already_cut(photo, photo_dir):
-        if force or not _same_photo(photo, photo_dir):
-            shutil.rmtree(photo_dir / "reads", ignore_errors=True)
-            for name in DERIVED:
-                (photo_dir / name).unlink(missing_ok=True)
+    manifest = None if force else _manifest_of(photo, photo_dir)
+    if manifest is None:
+        shutil.rmtree(photo_dir / "reads", ignore_errors=True)
+        for name in DERIVED:
+            (photo_dir / name).unlink(missing_ok=True)
+    if manifest is None or not all((photo_dir / "tiles" / tile["file"]).is_file() for tile in manifest["tiles"]):
         cut_tiles(photo, photo_dir)
     missing = [reader for reader in readers
                if _load_or_none(photo_dir / "reads" / reader[0] / "read.json") is None]
@@ -112,11 +112,6 @@ def read_photo(photo, work_root=DEFAULT_WORK_ROOT, *, readers=READERS, force=Fal
         read.result()  # raises the read's failure, after every read has ended
     merge_photo(photo_dir, [read_id for read_id, _ in readers])
     return photo_dir
-
-
-def _same_photo(photo, photo_dir):
-    manifest = _load_or_none(photo_dir / "tiles.json")
-    return manifest is not None and manifest.get("sha256") == hashlib.sha256(Path(photo).read_bytes()).hexdigest()
 
 
 def finish_photo(photo_dir, *, readers=READERS, location="", run=subprocess.run, fetch=None,
@@ -130,9 +125,9 @@ def finish_photo(photo_dir, *, readers=READERS, location="", run=subprocess.run,
         run_pick(photo_dir, run=run)
     records = export_photo(photo_dir, location=location)
     statuses = [record["read_status"] for record in records]
+    accepted = statuses.count("agreed")
     return {"photo": merged["file"], "directory": str(photo_dir),
-            "accepted": statuses.count("agreed"),
-            "review": sum(1 for item in merged["items"] if item["status"] == "review"),
+            "accepted": accepted, "review": len(merged["items"]) - accepted,
             "unreadable": statuses.count("unreadable"),
             "warnings": statuses.count("unparsed") + statuses.count("incomplete"),
             "seconds": {read_id: float(_load(photo_dir / "reads" / read_id / "run.json")["seconds"])

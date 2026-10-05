@@ -56,8 +56,9 @@ def _report(result):
         print(f"{result['photo']}: {result['error']}", file=sys.stderr, flush=True)
         return
     seconds = ", ".join(f"{read_id} {value:.0f} s" for read_id, value in result["seconds"].items())
+    lost = f", {result['warnings']} lost by a read (see the last rows)" if result["warnings"] else ""
     print(f"{result['photo']}: {result['accepted']} accepted, {result['review']} to review, "
-          f"{result['unreadable']} unreadable ({seconds}) -> {result['directory']}/records.csv", flush=True)
+          f"{result['unreadable']} unreadable{lost} ({seconds}) -> {result['directory']}/records.csv", flush=True)
 
 
 def _run(args):
