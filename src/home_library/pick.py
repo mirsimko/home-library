@@ -53,8 +53,6 @@ def _none(item: int, reason: str) -> dict:
 def _check(item: int, pick, ids: set) -> dict:
     if pick is None:
         return _none(item, "The model gave no answer for this book.")
-    if not isinstance(pick, dict):
-        return _none(item, "The model's answer for this book was not an object.")
     verdict = pick.get("verdict")
     reason = pick.get("reason")
     reason = reason if isinstance(reason, str) else ""

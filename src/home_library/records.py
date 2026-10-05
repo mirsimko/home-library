@@ -87,15 +87,13 @@ def build_records(merged: dict, candidates: dict | None = None, picks: dict | No
         record = _item_record(merged["file"], item, location)
         cands, pick = _find(candidates, picks, index)
         record["candidate_count"] = len(cands)
+        matched = None
         if pick:
             record["pick_verdict"] = pick["verdict"]
-            matched = next((c for c in cands if c["id"] == pick["candidate_id"]), None)
-            if pick["verdict"] != "match":
-                matched = None
+            if pick["verdict"] == "match":
+                matched = next((c for c in cands if c["id"] == pick["candidate_id"]), None)
             if matched:
                 _fill_catalogue(record, matched)
-        else:
-            matched = None
         record["notes"] = _notes(item, pick, matched)
         records.append(record)
     first_read = merged["reads"][0] if merged["reads"] else None
