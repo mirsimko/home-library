@@ -9,6 +9,8 @@ How well do vision-capable LLMs read book titles from ordinary phone photos of t
 
 This is a first pass on shelf photos only. Cover photos and barcode photos are not tested yet.
 
+Follow-up tests later the same day added a sixth model, tried letting the models zoom by themselves, and arrived at a faster method. They are in the last section and change two of the conclusions below: upside-down spines can be read once the tiles are also supplied turned round, and Muse Spark 1.3 joins the models that read reliably.
+
 ## Short answer
 
 - **Shelf photos work for books with clear print on the spine.** Claude Opus 5.5, Claude Sonnet 5.5 and GPT-6.1 Sol each found all 31 clearly printed titles, in Japanese, Czech and English, including vertical Japanese text and Czech diacritics.
@@ -113,15 +115,70 @@ Everything ran on existing subscriptions or a free model, with no paid API calls
 ## Consequences for the design
 
 1. Read shelf photos as full-resolution tiles, not as whole photos.
-2. Give the model each tile in both orientations, or detect upside-down spines and rotate them. This is untested.
+2. Give the model each tile in both orientations. The follow-up tests did this and recovered two of the four upside-down titles.
 3. Keep the rule against completing titles from memory, and the separate fields for partial readings and guesses.
 4. Tell the model that a spine carries a publisher, imprint or series as well as a title.
-5. Use Claude Sonnet 5.5 or GPT-6.1 Sol as the reader. Opus reads slightly more at a higher cost. Luna and Space Bunny are ruled out for unattended reading on this evidence.
+5. Use GPT-6.1 Sol, Muse Spark 1.3 or Claude Sonnet 5.5 as the reader. Opus reads slightly more at a higher cost. Luna and Space Bunny are ruled out for unattended reading on this evidence, and the follow-up tests did not change that.
 6. Shelf photos cannot be the only way in. Thin books without spine text need a cover photo.
 
 ## Still to test
 
 - Cover photos and barcode photos.
-- Tiles in both orientations.
+- A tile layout that does not cut long spine titles in two.
 - A box of books photographed from above.
 - The key confirmed by a person, then the scores recomputed.
+
+## Follow-up tests, 2026-10-05
+
+These used the same four photos and the same provisional key of 46 titles. Each number is a single run.
+
+### What was tried
+
+- **Zooming allowed.** The model may crop, enlarge and rotate the photos itself with image tools, still without OCR. Two prompts were used: a simple one, and a long procedural one written by GPT-6 Astra with a helper script, fixed passes and a re-reading step.
+- **More reasoning effort** for GPT-6 Luna: xhigh as well as medium. The Codex runtime does not accept max for Luna.
+- **A sixth model,** Muse Spark 1.3, through the OpenCode Go subscription.
+- **Two harnesses** for Muse Spark and Space Bunny: OpenCode and Pi.
+- **A fast method.** Code cuts each photo into six tiles and adds a copy of each turned by 180 degrees. The model gets one short call per photo with those twelve images, no tools, and no session carried over.
+
+### Results
+
+Titles found, out of 46:
+
+| Model and harness | Whole photos | Tiles | Zooming, simple prompt | Zooming, procedural prompt | Fast method |
+|---|---|---|---|---|---|
+| GPT-6.1 Sol, low effort, Codex | 36 | 40 | 44 | 45 | not run |
+| Muse Spark 1.3, OpenCode | 37 | 38 | no answer | not run | 41 |
+| Muse Spark 1.3, Pi | 36 | not run | no answer | not run | 39 |
+| GPT-6 Luna, xhigh, Codex | 19 | 23 | 33 | failed twice | not run |
+| GPT-6 Luna, medium, Codex | 26 | 20 | 27 | 26 | not run |
+| Space Bunny, OpenCode | 23 | 21 | no answer | not run | not run |
+| Space Bunny, Pi | 22 | not run | no answer | not run | not run |
+
+Time for the runs that finished cleanly:
+
+| Run | Time |
+|---|---|
+| Sol, zooming with the simple prompt | about 4 minutes for four photos |
+| Luna at xhigh, zooming with the simple prompt | about 11 minutes for four photos |
+| Muse Spark, fast method, Pi | 62 to 91 seconds per photo |
+| Muse Spark, fast method, OpenCode | 91 to 113 seconds per photo |
+
+### What the follow-up shows
+
+**Zooming helps a model that uses it.** Sol made about 46 crops, turned 11 of them upright, and read three of the four upside-down titles. Those three match the readings the key had taken from one model's zoomed crops, and Sol had no access to the key. Luna at medium cut each photo into four large quadrants and stopped.
+
+**More effort did not help Luna by itself.** Without zooming it found 19 to 26 titles at either effort level. With zooming, xhigh reached 33 and still gave two wrong titles as certain.
+
+**Telling a weak model to prefer "could not read" works; a long procedure does not.** The simple zooming prompt already removed most of Luna's invented titles at medium effort. The procedural prompt gave Sol one more title and Luna none, for many times the work, and was dropped.
+
+**Muse Spark 1.3 reads as reliably as Sol.** It found every clearly printed title from whole photos and gave no wrong title as certain in any pass. Space Bunny stayed at 21 to 23 in every setup.
+
+**Blind agreement between two independent reads is a strong check.** A model re-reading within one session still has its first answer in front of it. Two reads in separate sessions, compared by code, do not have that problem. Across eleven pairs of runs, titles that both reads marked fully readable were in the key in all but a handful of cases, and those were one-character slips; the wrong titles collected among those only one read gave. One model repeated the same misreading in two separate runs, so the two reads should come from different models, and the comparison should require an exact match.
+
+**The fast method is the practical one.** At roughly a minute and a quarter to a minute and three quarters per photo it found 39 and 41 titles, gave no wrong title as certain, and read two of the four upside-down titles. Its two runs agreed on 28 titles, all of them in the key. It has two faults to fix: a long spine title cut by a tile edge came back as a partial reading, and one answer was malformed JSON by a single character, so the pipeline should parse entry by entry.
+
+**The two harnesses read equally well; Pi was faster.** Reading quality differed by one or two titles in either direction. In the one clean comparison, identical requests run back to back, Pi took about 74 seconds per photo and OpenCode about 102. Pi can also run with tools switched off, which makes a blind read certain. Both shrink any image larger than 2000 pixels on a side.
+
+### A lesson about the home connection
+
+Runs marked "no answer" or "failed" above were lost to the network, not to the models, and the procedural-prompt runs that did finish were slowed by it. A zooming session re-sends every image it has viewed with each step. With many such runs in parallel the home uplink, about 10 Mbit/s, was saturated, and requests above roughly 23 MB hung past the harnesses' five-minute timeout. A pipeline on this connection has to keep each request small, start a new session for each photo, and run few requests at once.
