@@ -43,11 +43,22 @@ def _find_object(raw: str):
     return None
 
 
+def _none(item: int, reason: str) -> dict:
+    return {"item": item, "verdict": "none", "candidate_id": None, "reason": reason}
+
+
+def _check(item: int, pick: dict, ids: set) -> dict:
+    if pick["verdict"] == "match" and pick["candidate_id"] not in ids:
+        return _none(item, f"Rejected: candidate id {pick['candidate_id']} was not fetched for this book.")
+    return pick
+
+
 def parse_picks(raw: str, candidates: dict) -> dict:
     answer = _find_object(raw)
     by_item = {pick["item"]: pick for pick in answer["picks"]}
     picks = []
     for book in candidates["books"]:
         if book["candidates"]:
-            picks.append(by_item[book["item"]])
+            ids = {c["id"] for c in book["candidates"]}
+            picks.append(_check(book["item"], by_item[book["item"]], ids))
     return {"file": candidates["file"], "picks": picks}
