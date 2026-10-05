@@ -2,10 +2,12 @@
 import xml.etree.ElementTree as ET
 from urllib.parse import urlencode
 
+from home_library.lookup.errors import SourceError
 from home_library.lookup.marc import candidate_from_marc
 
 BASE = "https://lx2.loc.gov/sru/lcdb"
 MARC = "{http://www.loc.gov/MARC21/slim}"
+SRU = "{http://www.loc.gov/zing/srw/}"
 
 
 def _record(element):
@@ -36,6 +38,10 @@ def _query(cql, fetch):
         "recordSchema": "marcxml",
     }
     root = ET.fromstring(fetch(BASE + "?" + urlencode(params)))
+    if root.tag != SRU + "searchRetrieveResponse":
+        raise SourceError("loc: the answer is not an SRU response")
+    if any(node.tag.endswith("}diagnostic") for node in root.iter()):
+        raise SourceError("loc: the SRU response carries a diagnostic")
     return [_candidate(r) for r in root.iter(MARC + "record")]
 
 

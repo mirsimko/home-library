@@ -2,6 +2,8 @@
 import xml.etree.ElementTree as ET
 from urllib.parse import urlencode
 
+from home_library.lookup.errors import SourceError
+
 BASE = "https://ndlsearch.ndl.go.jp/api/opensearch"
 NS = {
     "dc": "http://purl.org/dc/elements/1.1/",
@@ -47,6 +49,8 @@ def _candidate(item):
 
 def _parse(body):
     root = ET.fromstring(body)
+    if root.tag != "rss":
+        raise SourceError("ndl: the answer is not an OpenSearch feed")
     return [_candidate(item) for item in root.iter("item")]
 
 
