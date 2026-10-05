@@ -3,8 +3,11 @@ import difflib
 import unicodedata
 
 
+_SIGNS = str.maketrans("", "", "™®©℠")  # NFKC would turn ™ into the letters TM
+
+
 def match_key(title: str) -> str:
-    folded = unicodedata.normalize("NFKC", title).casefold()
+    folded = unicodedata.normalize("NFKC", title.translate(_SIGNS)).casefold()
     return "".join(ch for ch in folded if ch.isalnum())
 
 
