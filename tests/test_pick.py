@@ -186,3 +186,30 @@ def test_run_pick_writes_picks_json_from_the_answer_file(tmp_path):
     text = (photo / "lookup" / "picks.json").read_text(encoding="utf-8")
     assert text.endswith("}\n") and '\n  "picks": [' in text
     assert json.loads(text) == result
+
+
+def test_a_failing_model_call_gives_none_for_every_book_with_the_reason(tmp_path):
+    cases = [
+        (FakeCodex(returncode=2), "exit"),
+        (FakeCodex(error=subprocess.TimeoutExpired("codex", 300)), "timed out"),
+        (FakeCodex(error=FileNotFoundError("codex")), "not found"),
+        (FakeCodex(), "no answer"),
+    ]
+    for fake, why in cases:
+        directory = tmp_path / why.replace(" ", "-")
+        directory.mkdir()
+        photo = photo_dir_with_lookup(directory)
+        result = run_pick(photo, run=fake)
+        assert [(p["item"], p["verdict"], p["candidate_id"]) for p in result["picks"]] == [
+            (0, "none", None), (2, "none", None)]
+        assert all("pick step failed" in p["reason"] and why in p["reason"] for p in result["picks"])
+        assert json.loads((photo / "lookup" / "picks.json").read_text(encoding="utf-8")) == result
+
+
+def test_a_stale_answer_file_is_not_taken_for_this_runs_answer(tmp_path):
+    photo = photo_dir_with_lookup(tmp_path)
+    (photo / "lookup" / "picks.raw.txt").write_text(
+        answer({"item": 0, "verdict": "match", "candidate_id": "nkcr:cnb001", "reason": "Old."}),
+        encoding="utf-8")
+    result = run_pick(photo, run=FakeCodex())
+    assert [p["verdict"] for p in result["picks"]] == ["none", "none"]
