@@ -16,6 +16,11 @@ def _reading(read_id: str, entry: dict) -> dict:
     return {"read_id": read_id, **entry}
 
 
+def _solo(read_id: str, entry: dict) -> dict:
+    return {"status": "review", "reason": "solo", "title": entry["title"], "language": entry["language"],
+            "exact": False, "readings": [_reading(read_id, entry)]}
+
+
 def _pair_equal_keys(keys_a: dict, keys_b: dict) -> dict:
     pairs = {}
     taken = set()
@@ -68,5 +73,11 @@ def merge_reads(read_a: dict, read_b: dict) -> dict:
                 "language": entry["language"], "exact": False,
                 "readings": [_reading(id_a, entry), _reading(id_b, other)],
             })
+        else:
+            items.append(_solo(id_a, entry))
+    paired_b = set(pairs.values()) | set(near.values())
+    for j, entry in enumerate(books_b):
+        if j not in paired_b:
+            items.append(_solo(id_b, entry))
     return {"file": read_a["file"], "reads": [id_a, id_b], "items": items,
             "unreadable": [], "parse_errors": []}
