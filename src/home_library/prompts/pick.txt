@@ -10,6 +10,6 @@ Prefer "none" to a doubtful match. A reading may be incomplete, or differ in scr
 Do not use tools. Do not look anything up. Do not stop to ask a question.
 
 Answer with one JSON object and nothing else, in this shape:
-{"picks": [{"item": 0, "verdict": "match | ambiguous | none", "candidate_id": "<id or null>", "reason": "<one short sentence>"}]}
-Give one pick for each book.
+{"picks": [{"book": 1, "title": "<the title as read, copied>", "verdict": "match | ambiguous | none", "candidate_id": "<id or null>", "reason": "<one short sentence>"}]}
+Give one pick for each book, under the book's own number and with its title as read.
 

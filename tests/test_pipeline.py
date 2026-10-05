@@ -127,7 +127,8 @@ def photo_and_programs(tmp_path):
     programs = FakePrograms(
         sol_answer=answer(entry(1, "だるまさんが", "ja"), entry(2, "The Blue Kite", "en"), entry(3, "", "unknown", "no")),
         spark_answer=answer(entry(1, "だるまさんが", "ja")),
-        pick_answer=json.dumps({"picks": [{"item": 0, "verdict": "match", "candidate_id": "ndl:000009209109",
+        pick_answer=json.dumps({"picks": [{"book": 1, "title": "だるまさんが", "verdict": "match",
+                                           "candidate_id": "ndl:000009209109",
                                            "reason": "Same title."}]}))
     return photo, programs
 

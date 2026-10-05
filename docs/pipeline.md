@@ -266,7 +266,7 @@ Every field is present. Text fields are strings and may be empty; `authors` and 
 
 ## Stage 6: pick and records (`home_library.pick`, `home_library.records`)
 
-The pick step gives a model the reading and its candidates as text and asks which candidate, if any, is the book. Code rejects an answer that names a candidate that was not fetched.
+The pick step gives a model the reading and its candidates as text and asks which candidate, if any, is the book. The prompt numbers the books from 1 and the model must echo each book's title. Code rejects an answer that echoes another title, and an answer that names a candidate that was not fetched for that book.
 
 `picks.json`:
 

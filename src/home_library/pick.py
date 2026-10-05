@@ -3,6 +3,7 @@ import json
 import subprocess
 from pathlib import Path
 
+from home_library.merge import match_key
 from home_library.workspace import refuse_inside_checkout
 
 _FIELDS = ("title", "title_reading", "authors", "publisher", "year", "series", "isbn")
@@ -21,10 +22,8 @@ def _candidate_lines(cand: dict) -> list:
 
 def build_prompt(merged: dict, candidates: dict) -> str:
     parts = [(Path(__file__).parent / "prompts" / "pick.txt").read_text(encoding="utf-8")]
-    for book in candidates["books"]:
-        if not book["candidates"]:
-            continue
-        lines = [f"Book {book['item']}", f"  Title as read: {book['title']}", f"  Language: {book['language']}"]
+    for number, book in enumerate(_books_with_candidates(candidates), start=1):
+        lines = [f"Book {number}", f"  Title as read: {book['title']}", f"  Language: {book['language']}"]
         for reading in merged["items"][book["item"]]["readings"]:
             lines.append(f"  Other text on the book ({reading['read_id']}): {reading['other_text']}")
         for cand in book["candidates"]:
@@ -50,9 +49,13 @@ def _none(item: int, reason: str) -> dict:
     return {"item": item, "verdict": "none", "candidate_id": None, "reason": reason}
 
 
-def _check(item: int, pick, ids: set) -> dict:
+def _check(book: dict, pick) -> dict:
+    item, ids = book["item"], {cand["id"] for cand in book["candidates"]}
     if pick is None:
         return _none(item, "The model gave no answer for this book.")
+    echoed = pick.get("title")
+    if not isinstance(echoed, str) or match_key(echoed) != match_key(book["title"]):
+        return _none(item, f"The model answered for the title {echoed!r}, not this book's; the answer was rejected.")
     verdict = pick.get("verdict")
     reason = pick.get("reason")
     reason = reason if isinstance(reason, str) else ""
@@ -78,12 +81,11 @@ def parse_picks(raw: str, candidates: dict) -> dict:
     answer = _find_object(raw)
     if answer is None:
         return _none_for_all(candidates, "The answer could not be read as a list of picks.")
-    by_item = {pick["item"]: pick for pick in answer["picks"]
-               if isinstance(pick, dict) and type(pick.get("item")) is int}
-    picks = []
-    for book in _books_with_candidates(candidates):
-        ids = {c["id"] for c in book["candidates"]}
-        picks.append(_check(book["item"], by_item.get(book["item"]), ids))
+    # The model numbers the books by position, as the prompt does, and echoes each title as a check.
+    by_number = {pick["book"]: pick for pick in answer["picks"]
+                 if isinstance(pick, dict) and type(pick.get("book")) is int}
+    picks = [_check(book, by_number.get(number))
+             for number, book in enumerate(_books_with_candidates(candidates), start=1)]
     return {"file": candidates["file"], "picks": picks}
 
 

@@ -32,12 +32,12 @@ def merged_and_candidates():
                    "exact": False, "readings": [reading("a-sol", 9, "あかいふうせん")]},
               ]}
     candidates = {"file": "shelf-1.jpg", "books": [
-        {"book": 1, "title": "Zelený drak", "title": "Zelený drak", "language": "cs", "queries": [],
+        {"item": 0, "title": "Zelený drak", "language": "cs", "queries": [],
          "candidates": [cand("nkcr:cnb001", "Zelený drak", authors=["Novotná, Marta"], publisher="Albatros",
                              year="2001", isbn="9788000000001", series="Malá knihovna"),
                         cand("nkcr:cnb002", "Zelený drak a jiné pohádky")]},
-        {"book": 3, "title": "The Blue Kite", "title": "The Blue Kite", "language": "en", "queries": [], "candidates": []},
-        {"book": 2, "title": "あかいふうせん", "title": "あかいふうせん", "language": "ja", "queries": [],
+        {"item": 1, "title": "The Blue Kite", "language": "en", "queries": [], "candidates": []},
+        {"item": 2, "title": "あかいふうせん", "language": "ja", "queries": [],
          "candidates": [cand("ndl:000111", "あかいふうせん", title_reading="アカイ フウセン")]},
     ]}
     return merged, candidates
