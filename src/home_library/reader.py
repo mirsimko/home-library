@@ -1,4 +1,5 @@
 """Stage 2: one model session over the tiles of one photo (see docs/pipeline.md)."""
+import hashlib
 import json
 import re
 import subprocess
@@ -141,7 +142,8 @@ def run_read(photo_dir, read_id, backend, *, run=subprocess.run, clock=time.mono
     (read_dir / "events.jsonl").unlink(missing_ok=True)
     if backend not in BACKENDS:
         raise ReadError(f"unknown backend {backend!r}; choose one of {', '.join(BACKENDS)}")
-    manifest = json.loads((photo_dir / "tiles.json").read_text(encoding="utf-8"))
+    manifest_bytes = (photo_dir / "tiles.json").read_bytes()
+    manifest = json.loads(manifest_bytes)
     tiles_dir = photo_dir / "tiles"
     files = [tile["file"] for tile in manifest["tiles"]]
     _check_tiles(tiles_dir, files)
@@ -182,5 +184,6 @@ def run_read(photo_dir, read_id, backend, *, run=subprocess.run, clock=time.mono
     read = parse_read(answer)
     read["read_id"] = read_id
     read["file"] = manifest["photo"]  # the model only echoes the name; the manifest knows it
+    read["photo_sha256"] = hashlib.sha256(manifest_bytes).hexdigest()
     _write_json(read_dir / "read.json", read)
     return read
