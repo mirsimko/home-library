@@ -38,3 +38,43 @@ def test_an_agreed_item_without_lookup_data_becomes_a_record_to_review():
     assert record["where"] == "r1c1-r0.jpg, #1"
     assert record["pick_verdict"] == ""
     assert record["notes"] == ""
+
+
+def cand(cid, title, **over):
+    c = {"id": cid, "source": cid.split(":")[0], "source_id": cid.split(":")[1], "url": "", "title": title,
+         "title_reading": "", "authors": [], "publisher": "", "year": "", "isbn": "", "series": "",
+         "language": "cs", "audience": "", "age_note": "", "subjects": [], "summary": ""}
+    c.update(over)
+    return c
+
+
+def candidates_of(*candidates, item=0):
+    return {"file": "shelf-1.jpg", "books": [
+        {"item": item, "title": "x", "language": "cs", "queries": [], "candidates": list(candidates)}]}
+
+
+def picks_of(verdict, candidate_id=None, reason="r", item=0):
+    return {"file": "shelf-1.jpg", "picks": [
+        {"item": item, "verdict": verdict, "candidate_id": candidate_id, "reason": reason}]}
+
+
+def test_a_matched_candidate_fills_the_catalogue_fields_and_the_sort_key():
+    merged = merged_of([item("agreed", "あかいふうせん", [reading("a-sol", 1, "あかいふうせん", language="ja"),
+                                                        reading("b-spark", 2, "あかいふうせん", language="ja")],
+                             language="ja")])
+    candidates = candidates_of(
+        cand("ndl:000111", "あかいふうせん", title_reading="アカイ フウセン", authors=["山田, 花子", "鈴木, 太郎"],
+             publisher="青空社", year="2008", isbn="9784000000001", series="えほんシリーズ"),
+        cand("ndl:000222", "あかいふうせん 2"))
+    (record,) = build_records(merged, candidates, picks_of("match", "ndl:000111"))
+    assert record["catalogue_title"] == "あかいふうせん"
+    assert record["author"] == "山田, 花子; 鈴木, 太郎"
+    assert record["publisher"] == "青空社"
+    assert record["year"] == "2008"
+    assert record["isbn"] == "9784000000001"
+    assert record["series"] == "えほんシリーズ"
+    assert record["source"] == "ndl"
+    assert record["source_id"] == "000111"
+    assert record["sort_key"] == "アカイ フウセン"
+    assert record["pick_verdict"] == "match"
+    assert record["candidate_count"] == 2
