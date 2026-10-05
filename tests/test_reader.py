@@ -96,3 +96,20 @@ def test_codex_answer_comes_from_the_last_agent_message_and_the_stream_is_kept(t
     read_dir = work / "reads" / "a-sol"
     assert (read_dir / "raw.txt").read_text(encoding="utf-8") == ANSWER
     assert (read_dir / "events.jsonl").read_text(encoding="utf-8") == stdout
+
+
+def test_read_json_holds_the_parsed_books_and_the_read_id(tmp_path):
+    work, _ = cut_small_photo(tmp_path)
+    run = FakeRun(stdout=codex_stream())
+
+    read = run_read(work, "a-sol", "codex-exec", run=run)
+
+    text = (work / "reads" / "a-sol" / "read.json").read_text(encoding="utf-8")
+    assert json.loads(text) == read
+    assert "Zelený drak" in text
+    assert text.endswith("}\n")
+    assert read["read_id"] == "a-sol"
+    assert read["file"] == "shelf-1.jpg"
+    assert read["complete"] is True
+    assert read["errors"] == []
+    assert [(b["n"], b["title"], b["language"]) for b in read["books"]] == [(1, "Zelený drak", "cs")]
