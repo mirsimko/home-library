@@ -191,3 +191,17 @@ def test_cutting_into_a_directory_inside_a_git_checkout_is_refused_and_writes_no
         cut_tiles(photo, out)
 
     assert not (tmp_path / "repo" / "work").exists()
+
+
+def test_tiles_of_both_rotations_carry_no_jpeg_comment(tmp_path):
+    photo = tmp_path / "shelf-1.jpg"
+    Image.open(make_corner_photo(tmp_path / "plain.jpg")).save(
+        photo, "JPEG", quality=95, comment=b"private note")
+    out = tmp_path / "out"
+
+    cut_tiles(photo, out)
+
+    for name in ("r1c1-r0.jpg", "r1c1-r180.jpg"):
+        with Image.open(out / "tiles" / name) as tile:
+            assert "comment" not in tile.info
+        assert b"private note" not in (out / "tiles" / name).read_bytes()
