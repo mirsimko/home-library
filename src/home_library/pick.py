@@ -30,8 +30,21 @@ def build_prompt(merged: dict, candidates: dict) -> str:
     return "\n".join(parts)
 
 
+def _find_object(raw: str):
+    decoder = json.JSONDecoder()
+    for start, ch in enumerate(raw):
+        if ch == "{":
+            try:
+                value, _ = decoder.raw_decode(raw, start)
+            except ValueError:
+                continue
+            if isinstance(value, dict) and isinstance(value.get("picks"), list):
+                return value
+    return None
+
+
 def parse_picks(raw: str, candidates: dict) -> dict:
-    answer = json.loads(raw)
+    answer = _find_object(raw)
     by_item = {pick["item"]: pick for pick in answer["picks"]}
     picks = []
     for book in candidates["books"]:
