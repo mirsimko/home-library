@@ -133,4 +133,5 @@ def merge_reads(read_a: dict, read_b: dict) -> dict:
     parse_errors = [{"read_id": read_id, **error}
                     for read_id, read in ((id_a, read_a), (id_b, read_b)) for error in read["errors"]]
     return {"file": file_a or file_b, "reads": [id_a, id_b], "items": items,
-            "unreadable": unreadable, "parse_errors": parse_errors}
+            "unreadable": unreadable, "parse_errors": parse_errors,
+            "incomplete": [read_id for read_id, read in ((id_a, read_a), (id_b, read_b)) if not read["complete"]]}
