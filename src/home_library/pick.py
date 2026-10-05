@@ -37,7 +37,7 @@ def _find_object(raw: str):
         if ch == "{":
             try:
                 value, _ = decoder.raw_decode(raw, start)
-            except ValueError:
+            except (ValueError, RecursionError):
                 continue
             if isinstance(value, dict) and isinstance(value.get("picks"), list):
                 return value
@@ -60,7 +60,7 @@ def _check(item: int, pick, ids: set) -> dict:
         return _none(item, f"The model gave an unknown verdict: {verdict!r}.")
     if verdict == "match":
         cid = pick.get("candidate_id")
-        if cid not in ids:
+        if not isinstance(cid, str) or cid not in ids:
             return _none(item, f"The model named candidate {cid}, which was not fetched for this book; the answer was rejected.")
         return {"item": item, "verdict": verdict, "candidate_id": cid, "reason": reason}
     return {"item": item, "verdict": verdict, "candidate_id": None, "reason": reason}
