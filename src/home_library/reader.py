@@ -1,5 +1,6 @@
 """Stage 2: one model session over the tiles of one photo (see docs/pipeline.md)."""
 import json
+import re
 import subprocess
 import time
 from datetime import datetime
@@ -14,6 +15,8 @@ from home_library.workspace import refuse_inside_checkout
 class ReadError(Exception):
     """A read failed; raw.txt and run.json, where there were any, are left for inspection."""
 
+
+_READ_ID = re.compile(r"[A-Za-z0-9][A-Za-z0-9._-]*")
 
 BACKENDS = {"codex-exec": "gpt-6.1-sol", "pi": "opencode-go/muse-spark-1.3-contributor"}
 
@@ -123,10 +126,12 @@ def run_read(photo_dir, read_id, backend, *, run=subprocess.run, clock=time.mono
              now=lambda: datetime.now().astimezone(), timeout=600):
     """Run one read of the photo in photo_dir and return the stored read.
 
-    Raises ReadError for a work directory inside a git checkout, an unknown backend, a tiles directory that
+    Raises ReadError for a read id that is not a plain name, a work directory inside a git checkout, an unknown backend, a tiles directory that
     does not match the manifest, and any failed run. Any attempt, failed or refused, first removes the read.json
     and events.jsonl of an earlier run of the same read. A failed run leaves raw.txt and run.json, never read.json.
     """
+    if not _READ_ID.fullmatch(read_id):
+        raise ReadError(f"read id {read_id!r} is not a plain name (letters, digits, dot, underscore, dash)")
     try:
         photo_dir = refuse_inside_checkout(photo_dir)
     except ValueError as error:
