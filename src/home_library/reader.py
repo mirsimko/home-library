@@ -48,6 +48,17 @@ def _answer(events):
     return answer
 
 
+def _usage(events):
+    for event in events:
+        if event.get("type") == "turn.completed":
+            return event.get("usage")
+    return None
+
+
+def _write_json(path, value):
+    path.write_text(json.dumps(value, indent=2, ensure_ascii=False) + "\n", encoding="utf-8")
+
+
 def _events(stdout):
     events = []
     for line in stdout.splitlines():
@@ -71,13 +82,22 @@ def run_read(photo_dir, read_id, backend, *, run=subprocess.run, clock=time.mono
     read_dir = photo_dir / "reads" / read_id
     read_dir.mkdir(parents=True, exist_ok=True)
     (read_dir / "prompt.txt").write_text(prompt, encoding="utf-8")
-    result = run(_codex_command(tiles_dir, files), input=prompt, capture_output=True, text=True,
+    command = _codex_command(tiles_dir, files)
+    started = now().isoformat()
+    began = clock()
+    result = run(command, input=prompt, capture_output=True, text=True,
                  encoding="utf-8", cwd=tiles_dir, timeout=timeout)
-    answer = _answer(_events(result.stdout))
+    seconds = clock() - began
+    events = _events(result.stdout)
+    answer = _answer(events)
+    info = {"read_id": read_id, "backend": backend, "model": BACKENDS[backend], "command": command,
+            "started": started, "seconds": seconds, "returncode": result.returncode, "tool_calls": [],
+            "usage": _usage(events)}
+    _write_json(read_dir / "run.json", info)
     (read_dir / "events.jsonl").write_text(result.stdout, encoding="utf-8")
     (read_dir / "raw.txt").write_text(answer, encoding="utf-8")
     read = parse_read(answer)
     read["read_id"] = read_id
     read["file"] = read["file"] or manifest["photo"]
-    (read_dir / "read.json").write_text(json.dumps(read, indent=2, ensure_ascii=False) + "\n", encoding="utf-8")
+    _write_json(read_dir / "read.json", read)
     return read
