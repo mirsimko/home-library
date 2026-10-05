@@ -28,3 +28,19 @@ def test_layout_of_a_portrait_3072_by_4080_photo():
         "columns": [0, 756, 1512],
         "rows": [0, 1040, 2080],
     }
+
+
+def test_any_vertical_run_of_928_pixels_lies_whole_inside_some_tile():
+    layout = plan_layout(4080, 3072)
+    height = layout["tile_height"]
+    tiles = [(top, top + height) for top in layout["rows"]]
+    for start in range(0, 3072 - 928 + 1):
+        end = start + 928
+        assert any(top <= start and end <= bottom for top, bottom in tiles), start
+
+
+def test_no_tile_side_exceeds_2000_with_the_defaults():
+    for width, height in [(4080, 3072), (3072, 4080), (9000, 9000), (100, 5000)]:
+        layout = plan_layout(width, height)
+        assert layout["tile_width"] <= 2000
+        assert layout["tile_height"] <= 2000
