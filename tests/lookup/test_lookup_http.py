@@ -219,3 +219,30 @@ def test_the_default_opener_calls_urlopen_with_the_timeout_and_no_request_body(m
     assert Fetcher()(NDL) == b"live"
 
     assert calls == [(NDL, (), {"timeout": 30})]
+
+
+def test_threads_asking_for_the_same_uncached_url_make_one_request_and_all_succeed(tmp_path):
+    calls, results, errors = [], [], []
+
+    def slow_opener(request, timeout):
+        calls.append(request.full_url)
+        time.sleep(0.05)
+        return Response(b"shared")
+
+    fetch = Fetcher(tmp_path, opener=slow_opener, clock=lambda: 0.0, sleep=lambda seconds: None)
+
+    def worker():
+        try:
+            results.append(fetch(NDL))
+        except Exception as error:  # collected, because join() does not propagate it
+            errors.append(error)
+
+    threads = [threading.Thread(target=worker) for _ in range(4)]
+    for thread in threads:
+        thread.start()
+    for thread in threads:
+        thread.join()
+
+    assert errors == []
+    assert results == [b"shared"] * 4
+    assert len(calls) == 1
