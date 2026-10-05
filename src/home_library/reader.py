@@ -100,9 +100,12 @@ def run_read(photo_dir, read_id, backend, *, run=subprocess.run, clock=time.mono
     Raises ReadError for an unknown backend, a tiles directory that does not match the manifest, and any failed
     run. A failed run leaves raw.txt and run.json, never read.json.
     """
+    photo_dir = Path(photo_dir).resolve()
+    read_dir = photo_dir / "reads" / read_id
+    (read_dir / "read.json").unlink(missing_ok=True)
+    (read_dir / "events.jsonl").unlink(missing_ok=True)
     if backend not in BACKENDS:
         raise ReadError(f"unknown backend {backend!r}; choose one of {', '.join(BACKENDS)}")
-    photo_dir = Path(photo_dir).resolve()
     manifest = json.loads((photo_dir / "tiles.json").read_text(encoding="utf-8"))
     tiles_dir = photo_dir / "tiles"
     files = [tile["file"] for tile in manifest["tiles"]]
@@ -113,9 +116,7 @@ def run_read(photo_dir, read_id, backend, *, run=subprocess.run, clock=time.mono
     if missing:
         raise ReadError(f"{tiles_dir} lacks files the manifest lists: {', '.join(missing)}")
     prompt = render_prompt(manifest)
-    read_dir = photo_dir / "reads" / read_id
     read_dir.mkdir(parents=True, exist_ok=True)
-    (read_dir / "read.json").unlink(missing_ok=True)
     (read_dir / "prompt.txt").write_text(prompt, encoding="utf-8")
     if backend == "codex-exec":
         command = logged = _codex_command(tiles_dir, files)
