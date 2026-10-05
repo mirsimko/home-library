@@ -244,3 +244,17 @@ def test_threads_asking_for_the_same_uncached_url_make_one_request_and_all_succe
     assert errors == []
     assert results == [b"shared"] * 4
     assert len(calls) == 1
+
+
+def test_the_default_opener_calls_urlopen_with_the_timeout_and_no_request_body(monkeypatch):
+    calls = []
+
+    def fake_urlopen(request, *args, **kwargs):
+        calls.append((request.full_url, args, kwargs))
+        return Response(b"live")
+
+    monkeypatch.setattr(urllib.request, "urlopen", fake_urlopen)
+
+    assert Fetcher()(NDL) == b"live"
+
+    assert calls == [(NDL, (), {"timeout": 30})]
