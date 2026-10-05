@@ -209,3 +209,20 @@ def test_pi_gets_each_tile_as_an_argument_and_the_prompt_last_and_answers_on_std
     assert info["command"] == [*args[:-1], "<prompt>"]
     assert info["tool_calls"] == []
     assert info["usage"] is None
+
+
+def read_dir_of(work, read_id):
+    return work / "reads" / read_id
+
+
+def test_a_non_zero_return_code_is_an_error_that_keeps_raw_and_run_json(tmp_path):
+    work, _ = cut_small_photo(tmp_path)
+    run = FakeRun(stdout=ANSWER, returncode=2, stderr="boom")
+
+    with pytest.raises(ReadError, match="return code 2"):
+        run_read(work, "b-spark", "pi", run=run)
+
+    read_dir = read_dir_of(work, "b-spark")
+    assert not (read_dir / "read.json").exists()
+    assert (read_dir / "raw.txt").read_text(encoding="utf-8") == ANSWER
+    assert json.loads((read_dir / "run.json").read_text(encoding="utf-8"))["returncode"] == 2
