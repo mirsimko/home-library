@@ -67,3 +67,19 @@ def test_looking_up_a_photo_stores_candidates_for_each_fully_read_title(tmp_path
     assert "ndl:000009209109" in [c["id"] for c in daruma["candidates"]]
     assert (drak["item"], drak["title"], drak["candidates"]) == (2, "Zelený drak", [])
     assert {"source": "nkcr", "step": "title", "status": "no_match", "count": 0} in drak["queries"]
+
+
+def test_one_reads_answers_for_all_photos_are_gathered_in_the_scoring_shape(tmp_path):
+    for stem, title in (("shelf-2", "あかいふうせん"), ("shelf-1", "Zelený drak")):
+        store_read(tmp_path / stem, "a-sol", [entry(1, title)])
+        read_path = tmp_path / stem / "reads" / "a-sol" / "read.json"
+        read_path.write_text(read_path.read_text(encoding="utf-8").replace("shelf-1.jpg", stem + ".jpg"),
+                             encoding="utf-8")
+    store_read(tmp_path / "shelf-3", "b-spark", [entry(1, "The Blue Kite", "en")])  # another read only
+
+    gathered = pipeline.gather_read(tmp_path, "a-sol")
+
+    assert gathered == {"model": "a-sol", "photos": [
+        {"file": "shelf-1.jpg", "books": [entry(1, "Zelený drak")]},
+        {"file": "shelf-2.jpg", "books": [entry(1, "あかいふうせん")]},
+    ]}
