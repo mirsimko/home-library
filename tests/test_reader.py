@@ -82,3 +82,17 @@ def test_codex_exec_runs_in_the_tiles_directory_with_the_prompt_on_standard_inpu
     assert kwargs["encoding"] == "utf-8"
     assert kwargs["timeout"] == 600
     assert (work / "reads" / "a-sol" / "prompt.txt").read_text(encoding="utf-8") == render_prompt(manifest)
+
+
+def test_codex_answer_comes_from_the_last_agent_message_and_the_stream_is_kept(tmp_path):
+    work, _ = cut_small_photo(tmp_path)
+    early = {"type": "item.completed", "item": {"id": "item_1", "type": "agent_message", "text": "Looking now."}}
+    reasoning = {"type": "item.completed", "item": {"id": "item_0", "type": "reasoning", "text": "hmm"}}
+    stdout = "not json at all\n" + codex_stream(extra=[reasoning, early])
+    run = FakeRun(stdout=stdout)
+
+    run_read(work, "a-sol", "codex-exec", run=run)
+
+    read_dir = work / "reads" / "a-sol"
+    assert (read_dir / "raw.txt").read_text(encoding="utf-8") == ANSWER
+    assert (read_dir / "events.jsonl").read_text(encoding="utf-8") == stdout
