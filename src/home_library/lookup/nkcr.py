@@ -50,3 +50,11 @@ def _parse(output):
 def by_isbn(isbn, run):
     output = run(_script('@attr 1=7 "%s"' % isbn))
     return [candidate_from_marc("nkcr", record) for record in _parse(output)]
+
+
+def search(title, author, run):
+    query = '@attr 1=4 "%s"' % title
+    if author:
+        query = '@and %s @attr 1=1003 "%s"' % (query, author)
+    output = run(_script(query))
+    return [candidate_from_marc("nkcr", record) for record in _parse(output)]
