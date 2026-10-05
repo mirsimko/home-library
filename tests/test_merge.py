@@ -51,3 +51,18 @@ def test_two_reads_that_agree_give_an_accepted_item_with_both_readings():
         "status": "accepted", "reason": "agreed", "title": "Zelený drak", "language": "cs", "exact": True,
         "readings": [reading("a-sol", book(1, "Zelený drak")), reading("b-spark", book(4, "Zelený drak"))],
     }]
+
+
+def only_item(a_title, b_title):
+    merged = merge_reads(read("a-sol", [book(1, a_title)]), read("b-spark", [book(1, b_title)]))
+    assert len(merged["items"]) == 1
+    return merged["items"][0]
+
+
+def test_exact_is_true_only_for_titles_equal_after_nfc_and_trimming():
+    assert only_item("Zelený drak", " Zelený drak\n")["exact"] is True
+    assert only_item("Zelený drak", "Zelený drak")["exact"] is True  # decomposed accent
+    for other in ["zelený drak", "Zelený  drak", "Zelený drak!", "Ｚelený drak"]:
+        item = only_item("Zelený drak", other)
+        assert item["status"] == "accepted"
+        assert item["exact"] is False, other
