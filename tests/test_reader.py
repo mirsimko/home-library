@@ -278,3 +278,15 @@ def test_a_codex_stream_without_an_answer_is_an_error(tmp_path):
         run_read(work, "a-sol", "codex-exec", run=run)
 
     assert not (read_dir_of(work, "a-sol") / "read.json").exists()
+
+
+def test_an_extra_file_in_tiles_is_refused_before_anything_runs(tmp_path):
+    work, _ = cut_small_photo(tmp_path)
+    (work / "tiles" / "notes.txt").write_text("not a tile", encoding="utf-8")
+    run = FakeRun(stdout=ANSWER)
+
+    with pytest.raises(ReadError, match="notes.txt"):
+        run_read(work, "b-spark", "pi", run=run)
+
+    assert run.calls == []
+    assert not (work / "reads").exists()
