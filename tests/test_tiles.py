@@ -17,3 +17,14 @@ def test_image_smaller_than_a_tile_gives_one_tile_of_the_images_size():
         "columns": [0],
         "rows": [0],
     }
+
+
+def test_layout_of_a_portrait_3072_by_4080_photo():
+    # width: 1512 px of travel, at most 1260 per step -> 3 columns of step 756
+    # height: 2080 px of travel, at most 1100 per step -> 3 rows of step 1040
+    assert plan_layout(3072, 4080) == {
+        "tile_width": 1560,
+        "tile_height": 2000,
+        "columns": [0, 756, 1512],
+        "rows": [0, 1040, 2080],
+    }
