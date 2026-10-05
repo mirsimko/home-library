@@ -1,7 +1,7 @@
 import json
 import subprocess
 
-from home_library.pick import build_prompt
+from home_library.pick import build_prompt, parse_picks
 
 
 def reading(read_id, n, title, other_text=""):
@@ -49,3 +49,19 @@ def test_prompt_lists_book_reading_and_candidates_and_skips_books_without_candid
     assert "9788000000001" in prompt and "Malá knihovna" in prompt
     assert "ndl:000111" in prompt and "アカイ フウセン" in prompt
     assert "The Blue Kite" not in prompt
+
+
+def answer(*picks):
+    return json.dumps({"picks": list(picks)}, ensure_ascii=False)
+
+
+def test_parse_picks_reads_a_clean_answer_in_candidates_order():
+    _, candidates = merged_and_candidates()
+    raw = answer(
+        {"item": 2, "verdict": "match", "candidate_id": "ndl:000111", "reason": "Same title."},
+        {"item": 0, "verdict": "ambiguous", "candidate_id": None, "reason": "Two editions."},
+    )
+    assert parse_picks(raw, candidates) == {"file": "shelf-1.jpg", "picks": [
+        {"item": 0, "verdict": "ambiguous", "candidate_id": None, "reason": "Two editions."},
+        {"item": 2, "verdict": "match", "candidate_id": "ndl:000111", "reason": "Same title."},
+    ]}
