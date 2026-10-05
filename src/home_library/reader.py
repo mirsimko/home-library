@@ -166,7 +166,8 @@ def run_read(photo_dir, read_id, backend, *, run=subprocess.run, clock=time.mono
         "started": started, "seconds": seconds, "returncode": result.returncode, "tool_calls": tool_calls,
         "usage": usage})
     if failure is None and result.returncode != 0:
-        failure = f"{command[0]} exited with return code {result.returncode}: {(result.stderr or '').strip()[-500:]}"
+        said = (result.stderr or "").strip()[-500:]
+        failure = f"{command[0]} exited with return code {result.returncode}: {said}"
     if failure is None and not answer.strip():
         failure = f"empty answer from {command[0]}"
     if failure is None and tool_calls:
@@ -175,6 +176,6 @@ def run_read(photo_dir, read_id, backend, *, run=subprocess.run, clock=time.mono
         raise ReadError(failure)
     read = parse_read(answer)
     read["read_id"] = read_id
-    read["file"] = read["file"] or manifest["photo"]
+    read["file"] = manifest["photo"]  # the model only echoes the name; the manifest knows it
     _write_json(read_dir / "read.json", read)
     return read

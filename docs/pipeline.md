@@ -145,7 +145,7 @@ Turns a raw answer into a read, entry by entry, so that one malformed entry does
 - `errors` lists each piece of the answer that could not be decoded: its position in the list counted from 1, its character offset in the raw text, the reason, and the raw text itself. Every element of the list counts towards the position, decodable or not. An entry the answer was cut off in is listed too.
 - An answer with no `books` list gives one error with position 0 that holds the whole answer.
 - `complete` is false when anything was lost: an entry in `errors`, a cut-off answer, or no `books` list at all.
-- The reader adds `read_id` when it stores the read, and fills an empty `file` with the photo's name from the manifest.
+- The reader adds `read_id` when it stores the read, and sets `file` to the photo's name from the manifest, whatever name the model echoed.
 
 ## Stage 4: merge (`home_library.merge`)
 
