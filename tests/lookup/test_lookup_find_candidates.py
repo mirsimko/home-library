@@ -329,3 +329,27 @@ def test_the_cache_directory_is_created_on_the_first_write_and_leaves_only_finis
     names = [path.name for path in cache.iterdir()]
     assert len(names) == 1
     assert names[0].endswith(".json")
+
+
+def test_a_skipped_source_is_not_called_and_is_recorded_as_unavailable(fixture_bytes):
+    fetch = Router(fixture_bytes, **{"api.openbd.jp": "openbd_9784001111118.json"})
+
+    result = find_candidates(
+        "あかいふうせん", "ja", author="山田花子", isbn="9784001111118", fetch=fetch, run_yaz=no_yaz, skip={"ndl"}
+    )
+
+    assert result["queries"] == [
+        {"source": "ndl", "step": "skipped", "status": "unavailable", "count": 0},
+        {"source": "openbd", "step": "isbn", "status": "ok", "count": 1},
+    ]
+    assert [c["id"] for c in result["candidates"]] == ["openbd:9784001111118"]
+    assert [urlparse(u).hostname for u in fetch.urls] == ["api.openbd.jp"]
+
+
+def test_a_skipped_nkcr_does_not_run_yaz_client():
+    result = find_candidates("Zelený drak", "cs", fetch=no_http, run_yaz=no_yaz, skip=["nkcr"])
+
+    assert result == {
+        "queries": [{"source": "nkcr", "step": "skipped", "status": "unavailable", "count": 0}],
+        "candidates": [],
+    }
