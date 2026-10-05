@@ -67,7 +67,7 @@ def find_candidates(
 ):
     isbn = normalize_isbn(isbn) if isbn else None
     queries, candidates = [], []
-    for source in SOURCES.get(language.strip().lower(), []):
+    for source in SOURCES.get((language or "").strip().lower(), []):
         name = source.__name__.rsplit(".", 1)[-1]
         if name in skip:
             queries.append({"source": name, "step": "skipped", "status": "unavailable", "count": 0})
