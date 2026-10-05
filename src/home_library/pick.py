@@ -1,5 +1,6 @@
 """Stage 6: pick the catalogue candidate that is the book."""
 import json
+import subprocess
 from pathlib import Path
 
 _FIELDS = ("title", "title_reading", "authors", "publisher", "year", "series", "isbn")
@@ -84,3 +85,18 @@ def parse_picks(raw: str, candidates: dict) -> dict:
         ids = {c["id"] for c in book["candidates"]}
         picks.append(_check(book["item"], by_item.get(book["item"]), ids))
     return {"file": candidates["file"], "picks": picks}
+
+
+def _write_picks(lookup_dir: Path, picks: dict) -> None:
+    text = json.dumps(picks, indent=2, ensure_ascii=False) + "\n"
+    (lookup_dir / "picks.json").write_text(text, encoding="utf-8")
+
+
+def run_pick(photo_dir, *, run=subprocess.run, timeout=300) -> dict:
+    photo_dir = Path(photo_dir)
+    lookup_dir = photo_dir / "lookup"
+    merged = json.loads((photo_dir / "merged.json").read_text(encoding="utf-8"))
+    candidates = json.loads((lookup_dir / "candidates.json").read_text(encoding="utf-8"))
+    picks = {"file": candidates["file"], "picks": []}
+    _write_picks(lookup_dir, picks)
+    return picks
