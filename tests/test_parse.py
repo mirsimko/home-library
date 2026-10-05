@@ -170,3 +170,21 @@ def test_non_string_field_values_become_strings():
     assert book["title"] == "2001"
     assert book["other_text"] == ""
     assert book["language"] == '["ja"]'
+
+
+def test_object_nested_inside_a_malformed_entry_is_not_promoted_to_a_book():
+    raw = '{"books":[{"title":"bad" "other_text":{"title":"Invented","readable":"yes"}},{"title":"C"}]}'
+    read = parse_read(raw)
+    assert [b["title"] for b in read["books"]] == ["C"]
+    assert read["books"][0]["n"] == 2
+    assert [(e["position"], e["raw"]) for e in read["errors"]] == [
+        (1, '{"title":"bad" "other_text":{"title":"Invented","readable":"yes"}}')
+    ]
+
+
+def test_braces_and_a_bracket_inside_a_malformed_title_keep_the_entry_whole():
+    raw = '{"books":[{"title":"A"},{"title":"x { } ] y" "z"},{"title":"C"}]}'
+    read = parse_read(raw)
+    assert [b["title"] for b in read["books"]] == ["A", "C"]
+    assert [b["n"] for b in read["books"]] == [1, 3]
+    assert [(e["position"], e["raw"]) for e in read["errors"]] == [(2, '{"title":"x { } ] y" "z"}')]
