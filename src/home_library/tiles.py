@@ -20,6 +20,8 @@ def _starts(size, tile, min_overlap):
 
 def plan_layout(width, height, *, tile_width=1560, tile_height=2000,
                 min_overlap_x=300, min_overlap_y=900):
+    if tile_width <= min_overlap_x or tile_height <= min_overlap_y:
+        raise ValueError("a tile must be larger than its minimum overlap")
     tile_width = min(tile_width, width)
     tile_height = min(tile_height, height)
     return {
@@ -33,6 +35,10 @@ def plan_layout(width, height, *, tile_width=1560, tile_height=2000,
 def cut_tiles(photo, out_dir, *, quality=88, **layout_options):
     photo = Path(photo)
     out_dir = refuse_inside_checkout(out_dir)
+    with Image.open(photo) as opened:
+        image = ImageOps.exif_transpose(opened).convert("RGB")
+    width, height = image.size
+    layout = plan_layout(width, height, **layout_options)
     tiles_dir = out_dir / "tiles"
     tiles_dir.mkdir(parents=True, exist_ok=True)
     for stale in tiles_dir.iterdir():
@@ -40,10 +46,6 @@ def cut_tiles(photo, out_dir, *, quality=88, **layout_options):
             shutil.rmtree(stale)
         else:
             stale.unlink()
-    with Image.open(photo) as opened:
-        image = ImageOps.exif_transpose(opened).convert("RGB")
-    width, height = image.size
-    layout = plan_layout(width, height, **layout_options)
     tiles = []
     for row, top in enumerate(layout["rows"], start=1):
         for column, left in enumerate(layout["columns"], start=1):
