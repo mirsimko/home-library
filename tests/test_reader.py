@@ -1,4 +1,5 @@
 import json
+import shutil
 import subprocess
 from pathlib import Path
 from datetime import datetime, timedelta, timezone
@@ -412,3 +413,17 @@ def test_a_timeout_keeps_the_partial_stream_and_its_answer_and_tool_calls(tmp_pa
     assert info["returncode"] is None
     assert info["tool_calls"] == ["command_execution"]
     assert not (read_dir / "read.json").exists()
+
+
+def test_a_work_directory_inside_a_git_checkout_is_refused_before_anything_is_written(tmp_path):
+    work, _ = cut_small_photo(tmp_path)
+    repo_work = tmp_path / "repo" / "work" / "shelf-1"
+    shutil.copytree(work, repo_work)
+    (tmp_path / "repo" / ".git").mkdir()
+    run = FakeRun(stdout=ANSWER)
+
+    with pytest.raises(ReadError, match="git checkout"):
+        run_read(repo_work, "b-spark", "pi", run=run)
+
+    assert run.calls == []
+    assert not (repo_work / "reads").exists()
