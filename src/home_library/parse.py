@@ -80,5 +80,8 @@ def _scan_entries(raw: str, start: int):
 
 def parse_read(raw: str) -> dict:
     found = _BOOKS.search(raw)
+    if found is None:
+        error = {"position": 0, "offset": 0, "reason": 'No "books" list found', "raw": raw}
+        return {"file": _file_name(raw), "books": [], "errors": [error], "complete": False}
     books, errors, closed = _scan_entries(raw, found.end())
     return {"file": _file_name(raw), "books": books, "errors": errors, "complete": closed and not errors}
