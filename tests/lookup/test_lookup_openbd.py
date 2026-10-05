@@ -28,3 +28,9 @@ def test_openbd_by_isbn_returns_the_candidate_in_the_contract_shape(fake_fetch, 
     ]
     assert fetch.urls[0].startswith("https://api.openbd.jp/v1/get?")
     assert fetch.query()["isbn"] == "9784001111118"
+
+
+def test_openbd_answers_null_for_an_isbn_it_does_not_hold(fake_fetch, fixture_bytes):
+    fetch = fake_fetch(fixture_bytes("openbd_null.json"))
+
+    assert openbd.by_isbn("9784001111118", fetch) == []
