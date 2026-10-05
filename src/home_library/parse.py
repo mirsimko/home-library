@@ -23,12 +23,11 @@ def _skip_space(raw: str, pos: int) -> int:
     return pos
 
 
-def _skip_value(raw: str, pos: int, stops: str):
+def _skip_value(raw: str, pos: int, stops: str) -> int:
     """End of the value at `pos`, found by tracking strings, escapes and nesting.
 
     Stops at a depth-0 character in `stops`. A raw newline inside a string ends the value there, because JSON
     forbids one inside a string; that keeps one missing quote from swallowing the lines below it.
-    Returns (end, stop_char or "").
     """
     depth = 0
     in_string = False
@@ -40,17 +39,17 @@ def _skip_value(raw: str, pos: int, stops: str):
             elif ch == '"':
                 in_string = False
             elif ch == "\n":
-                return pos, ""
+                return pos
         elif ch == '"':
             in_string = True
         elif depth == 0 and ch in stops:
-            return pos, ch
+            return pos
         elif ch in "{[":
             depth += 1
         elif ch in "}]" and depth > 0:
             depth -= 1
         pos += 1
-    return len(raw), ""
+    return len(raw)
 
 
 def _text(value) -> str:
@@ -81,7 +80,7 @@ def _scan_entries(raw: str, pos: int):
         if raw[pos] == "]":
             return books, errors, pos + 1, True
         position += 1
-        end, _ = _skip_value(raw, pos, ",]")
+        end = _skip_value(raw, pos, ",]")
         span = raw[pos:end].rstrip(_WHITESPACE + ",")
         value, used, reason = _decode(span, 0)
         if reason is None and used < len(span):
@@ -106,8 +105,8 @@ def parse_read(raw: str) -> dict:
     if start is None:
         return _no_books(raw, "")
     pos = start.start() + 1
-    file_name, books, errors, closed = "", None, [], False
-    complete = True
+    file_name, books, errors = "", None, []
+    closed, complete = False, True
     while True:
         pos = _skip_space(raw, pos)
         while pos < len(raw) and raw[pos] == ",":
@@ -128,7 +127,7 @@ def parse_read(raw: str) -> dict:
             books, errors, pos, list_closed = _scan_entries(raw, pos + 1)
             complete = complete and list_closed
             continue
-        end, _ = _skip_value(raw, pos, ",}")
+        end = _skip_value(raw, pos, ",}")
         if key == "file":
             value, _, reason = _decode(raw[pos:end].rstrip(_WHITESPACE), 0)
             if reason is None and isinstance(value, str):
