@@ -427,3 +427,76 @@ def test_a_work_directory_inside_a_git_checkout_is_refused_before_anything_is_wr
 
     assert run.calls == []
     assert not (repo_work / "reads").exists()
+
+
+def started_and_done(item_id, kind, **fields):
+    item = {"id": item_id, "type": kind, **fields}
+    return [{"type": "item.started", "item": item}, {"type": "item.completed", "item": item}]
+
+
+@pytest.mark.parametrize("extra, expected", [
+    ([{"type": "item.started", "item": {"id": "item_1", "type": "command_execution", "command": "ls"}}],
+     ["command_execution"]),
+    (started_and_done("item_1", "web_search", query="x"), ["web_search"]),
+    (started_and_done("item_1", "command_execution") + started_and_done("item_2", "command_execution"),
+     ["command_execution", "command_execution"]),
+    (started_and_done("item_1", "mcp_tool_call") + started_and_done("item_2", "command_execution"),
+     ["mcp_tool_call", "command_execution"]),
+])
+def test_every_distinct_tool_item_is_listed_and_rejects_the_read(tmp_path, extra, expected):
+    work, _ = cut_small_photo(tmp_path)
+    run = FakeRun(stdout=codex_stream(extra=extra))
+
+    with pytest.raises(ReadError, match="used tools"):
+        run_read(work, "a-sol", "codex-exec", run=run)
+
+    info = json.loads((read_dir_of(work, "a-sol") / "run.json").read_text(encoding="utf-8"))
+    assert info["tool_calls"] == expected
+    assert not (read_dir_of(work, "a-sol") / "read.json").exists()
+
+
+def reversed_manifest(work):
+    manifest = json.loads((work / "tiles.json").read_text(encoding="utf-8"))
+    manifest["tiles"].reverse()
+    (work / "tiles.json").write_text(json.dumps(manifest), encoding="utf-8")
+    return manifest
+
+
+def test_the_prompt_and_both_commands_keep_the_manifest_order(tmp_path):
+    work, _ = cut_small_photo(tmp_path)
+    manifest = reversed_manifest(work)
+    names = SIX_TILE_FILES.split()[::-1]
+
+    assert f"in this order: {' '.join(names)}\n" in render_prompt(manifest)
+    codex, pi = FakeRun(stdout=codex_stream()), FakeRun(stdout=ANSWER)
+    run_read(work, "a-sol", "codex-exec", run=codex)
+    run_read(work, "b-spark", "pi", run=pi)
+
+    codex_args = codex.calls[0][0]
+    assert codex_args[codex_args.index("-i") + 1] == ",".join(names)
+    assert pi.calls[0][0][12:-1] == [f"@{name}" for name in names]
+
+
+EXPECTED_PROMPT = """You are reading book titles from one photo of a family's bookshelves. The books are children's books in Japanese, Czech and English.
+
+Attached are 12 images: the photo cut into 6 overlapping tiles at full resolution (2 rows by 3 columns), each tile given twice. A name such as r1c2 means row 1 from the top, column 2 from the left. Files ending in -r0 show the tile as photographed. Files ending in -r180 show the same tile turned by 180 degrees, so that text on upside-down books can be read upright. Neighbouring tiles overlap, so the same book can appear in several images.
+
+The images are attached in this order: """ + SIX_TILE_FILES + """
+
+Rules:
+- Read with your own vision, from these 12 images only. Use no tools, no OCR and no look-ups. Do not run any command and do not open any file.
+- Do not stop to ask a question. Everything you need is attached.
+- List every distinct physical book once, including books you cannot read. Count a run of unreadable thin books as one entry and say roughly how many there are.
+- Write each title exactly as printed, in its original script, with Czech diacritics. Put only the title in "title". A publisher, imprint, author, series name or issue number goes in "other_text".
+- Do not complete a title from memory and do not guess. If part of a title is not legible, put only the legible part in "title", mark the entry partial, and put any guess in "inferred". Never write placeholder words in "title".
+
+Answer with one JSON object and nothing else, in this shape:
+
+{"file": "shelf-1.jpg", "books": [{"n": 1, "where": "<tile name and where in it>", "visible": "spine | front cover | back cover | edge", "title": "<as printed, or empty>", "other_text": "<everything else legible>", "language": "ja | cs | en | zh | unknown", "readable": "yes | partial | no", "confidence": "high | medium | low", "inferred": "<a guess, or empty>"}]}
+"""
+
+
+def test_the_rendered_prompt_is_the_exact_text_of_the_contract(tmp_path):
+    _, manifest = cut_small_photo(tmp_path)
+
+    assert render_prompt(manifest).rstrip("\n") == EXPECTED_PROMPT.rstrip("\n")
