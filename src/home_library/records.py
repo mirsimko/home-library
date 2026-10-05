@@ -1,7 +1,10 @@
 """Stage 6: one record per book, as JSON and CSV."""
 from __future__ import annotations
 
+import csv
+import json
 import re
+from pathlib import Path
 
 
 COLUMNS = ["title", "sort_key", "author", "illustrator", "publisher", "year", "language", "isbn", "series",
@@ -98,3 +101,21 @@ def build_records(merged: dict, candidates: dict | None = None, picks: dict | No
         if entry["read_id"] == first_read:
             records.append(_unreadable_record(merged["file"], entry, location))
     return records
+
+
+def _cell(value) -> str:
+    if value is True:
+        return "true"
+    text = str(value)
+    return "'" + text if text[:1] in ("=", "+", "-", "@") else text
+
+
+def write_records(photo_dir, records: list) -> None:
+    photo_dir = Path(photo_dir)
+    (photo_dir / "records.json").write_text(
+        json.dumps(records, indent=2, ensure_ascii=False) + "\n", encoding="utf-8")
+    with open(photo_dir / "records.csv", "w", encoding="utf-8-sig", newline="") as f:
+        writer = csv.writer(f)
+        writer.writerow(COLUMNS)
+        for record in records:
+            writer.writerow([_cell(record[column]) for column in COLUMNS])
