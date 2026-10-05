@@ -59,10 +59,15 @@ def _pair_similar(keys_a: dict, keys_b: dict) -> dict:
     return pairs
 
 
+def _word_keys(text: str) -> list:
+    return [key for key in map(match_key, text.split()) if key]
+
+
 def _words_found(entry: dict, other: dict) -> bool:
-    words = [key for key in map(match_key, entry["title"].split()) if key]
-    everything = match_key(other["title"] + " " + other["other_text"])
-    return bool(words) and all(word in everything for word in words)
+    """Whether every word of the entry's title is, as a whole word, in the other entry's title or other text."""
+    words = _word_keys(entry["title"])
+    available = set(_word_keys(other["title"] + " " + other["other_text"]))
+    return bool(words) and all(word in available for word in words)
 
 
 def _pair_same_words(books_a: dict, books_b: dict) -> dict:
