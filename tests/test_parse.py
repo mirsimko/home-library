@@ -211,3 +211,16 @@ def test_answer_cut_off_after_the_books_list_is_incomplete_and_keeps_the_books()
         read = parse_read(raw)
         assert [b["title"] for b in read["books"]] == ["A"]
         assert read["complete"] is False
+
+
+def test_numbers_and_nesting_that_the_json_decoder_refuses_become_errors_not_exceptions():
+    huge = '{"books":[{"n":' + "9" * 5000 + ',"title":"A"},{"title":"B"}]}'
+    read = parse_read(huge)
+    assert [b["title"] for b in read["books"]] == ["B"]
+    assert [e["position"] for e in read["errors"]] == [1]
+    assert read["complete"] is False
+    deep = '{"books":[{"title":"A"},' + "[" * 100000 + "]" * 100000 + ',{"title":"C"}]}'
+    read = parse_read(deep)
+    assert [b["title"] for b in read["books"]] == ["A", "C"]
+    assert [e["position"] for e in read["errors"]] == [2]
+    assert read["complete"] is False
