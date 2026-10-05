@@ -20,9 +20,13 @@ def _eligible(entry: dict) -> bool:
     return entry["readable"] == "yes" and match_key(entry["title"]) != "" and entry["inferred"] == ""
 
 
+def _item(status: str, reason: str, entry: dict, readings: list, exact: bool) -> dict:
+    return {"status": status, "reason": reason, "title": entry["title"], "language": entry["language"],
+            "exact": exact, "readings": readings}
+
+
 def _solo(read_id: str, entry: dict) -> dict:
-    return {"status": "review", "reason": "solo" if _eligible(entry) else "partial", "title": entry["title"], "language": entry["language"],
-            "exact": False, "readings": [_reading(read_id, entry)]}
+    return _item("review", "solo" if _eligible(entry) else "partial", entry, [_reading(read_id, entry)], False)
 
 
 def _pair_equal_keys(keys_a: dict, keys_b: dict) -> dict:
@@ -79,19 +83,13 @@ def merge_reads(read_a: dict, read_b: dict) -> dict:
     for i, entry in enumerate(books_a):
         if i in pairs:
             other = books_b[pairs[i]]
-            items.append({
-                "status": "accepted", "reason": "agreed", "title": entry["title"],
-                "language": entry["language"], "exact": _exact(entry["title"], other["title"]),
-                "readings": [_reading(id_a, entry), _reading(id_b, other)],
-            })
+            items.append(_item("accepted", "agreed", entry, [_reading(id_a, entry), _reading(id_b, other)],
+                               _exact(entry["title"], other["title"])))
         elif i in near:
             other = books_b[near[i]]
-            items.append({
-                "status": "review", "reason": "near" if _eligible(entry) and _eligible(other) else "partial",
-                "title": entry["title"], "language": entry["language"],
-                "exact": _exact(entry["title"], other["title"]),
-                "readings": [_reading(id_a, entry), _reading(id_b, other)],
-            })
+            reason = "near" if _eligible(entry) and _eligible(other) else "partial"
+            items.append(_item("review", reason, entry, [_reading(id_a, entry), _reading(id_b, other)],
+                               _exact(entry["title"], other["title"])))
         else:
             items.append(_solo(id_a, entry))
     paired_b = set(pairs.values()) | set(near.values())
