@@ -2,6 +2,7 @@
 import xml.etree.ElementTree as ET
 from urllib.parse import urlencode
 
+from home_library.lookup.candidate import new_candidate
 from home_library.lookup.errors import SourceError
 
 BASE = "https://ndlsearch.ndl.go.jp/api/opensearch"
@@ -27,24 +28,20 @@ def _identifier(item, kind):
 
 def _candidate(item):
     source_id = _identifier(item, "NDLBibID")
-    return {
-        "id": "ndl:" + source_id,
-        "source": "ndl",
-        "source_id": source_id,
-        "url": _text(item, "link"),
-        "title": _text(item, "dc:title"),
-        "title_reading": _text(item, "dcndl:titleTranscription"),
-        "authors": [(n.text or "").strip() for n in item.findall("dc:creator", NS)],
-        "publisher": _text(item, "dc:publisher"),
-        "year": _text(item, "dc:date"),
-        "isbn": _identifier(item, "ISBN").replace("-", ""),
-        "series": _text(item, "dcndl:seriesTitle"),
-        "language": "ja",
-        "audience": "",
-        "age_note": "",
-        "subjects": [(n.text or "").strip() for n in item.findall("dcndl:genre", NS)],
-        "summary": "",
-    }
+    return new_candidate(
+        "ndl",
+        source_id,
+        url=_text(item, "link"),
+        title=_text(item, "dc:title"),
+        title_reading=_text(item, "dcndl:titleTranscription"),
+        authors=[(n.text or "").strip() for n in item.findall("dc:creator", NS)],
+        publisher=_text(item, "dc:publisher"),
+        year=_text(item, "dc:date"),
+        isbn=_identifier(item, "ISBN").replace("-", ""),
+        series=_text(item, "dcndl:seriesTitle"),
+        language="ja",
+        subjects=[(n.text or "").strip() for n in item.findall("dcndl:genre", NS)],
+    )
 
 
 def _parse(body):
