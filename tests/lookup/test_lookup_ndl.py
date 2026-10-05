@@ -36,6 +36,15 @@ def test_ndl_by_isbn_asks_only_for_ndl_own_records(fake_fetch, fixture_bytes):
     assert fetch.query()["dpid"] == "iss-ndl-opac"
 
 
+def test_ndl_search_without_an_author_sends_no_creator(fake_fetch, fixture_bytes):
+    fetch = fake_fetch(fixture_bytes("ndl_search_daruma.xml"))
+
+    ndl.search("だるまさんが", None, fetch)
+
+    assert "creator" not in fetch.query()
+    assert fetch.query()["dpid"] == "iss-ndl-opac"
+
+
 def test_ndl_search_sends_title_and_creator_and_always_the_dpid(fake_fetch, fixture_bytes):
     fetch = fake_fetch(fixture_bytes("ndl_search_daruma.xml"))
 
@@ -62,4 +71,4 @@ def test_ndl_with_no_hits_gives_an_empty_list(fake_fetch, fixture_bytes):
     fetch = fake_fetch(fixture_bytes("ndl_empty.xml"))
 
     assert ndl.by_isbn("9784893094315", fetch) == []
-    assert "creator" not in (lambda f: (ndl.search("ぐりとぐろ", None, f), f.query())[1])(fetch)
+    assert ndl.search("ぐりとぐろ", "中川李枝子", fetch) == []
