@@ -49,6 +49,7 @@ def cut_tiles(photo, out_dir, *, quality=88, **layout_options):
         for column, left in enumerate(layout["columns"], start=1):
             box = [left, top, left + layout["tile_width"], top + layout["tile_height"]]
             tile = image.crop(box)
+            tile.info.clear()
             for rotation in (0, 180):
                 name = f"r{row}c{column}-r{rotation}.jpg"
                 shown = tile if rotation == 0 else tile.rotate(180)
