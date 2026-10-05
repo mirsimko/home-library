@@ -1,4 +1,5 @@
 """Stage 1: cut a photo into overlapping tiles (see docs/pipeline.md)."""
+import hashlib
 import json
 from pathlib import Path
 
@@ -49,6 +50,7 @@ def cut_tiles(photo, out_dir, *, quality=88, **layout_options):
                               "rotation": rotation, "box": box, "bytes": size})
     manifest = {
         "photo": photo.name,
+        "sha256": hashlib.sha256(photo.read_bytes()).hexdigest(),
         "width": width,
         "height": height,
         "layout": layout,
