@@ -72,3 +72,25 @@ def test_a_work_root_inside_a_git_checkout_is_refused(tmp_path, capsys):
     assert code == 1
     assert "git checkout" in capsys.readouterr().err
     assert not (tmp_path / "work").exists()
+
+
+def test_merge_takes_the_two_reads_that_are_stored_when_none_are_named(tmp_path, capsys):
+    work = tmp_path / "work"
+    store_read(work, "shelf-9", "a-sol", [entry(1, "Zelený drak")])
+    store_read(work, "shelf-9", "b-sol", [entry(1, "Zelený drak")])  # after --second-reader codex-exec
+
+    assert main(["merge", "shelf-9.jpg", "--work-root", str(work)]) == 0
+
+    merged = json.loads((work / "shelf-9" / "merged.json").read_text(encoding="utf-8"))
+    assert merged["reads"] == ["a-sol", "b-sol"]
+
+
+def test_merge_asks_which_reads_when_more_than_two_are_stored(tmp_path, capsys):
+    work = tmp_path / "work"
+    for read_id in ("a-sol", "b-sol", "b-spark"):
+        store_read(work, "shelf-9", read_id, [entry(1, "Zelený drak")])
+
+    assert main(["merge", "shelf-9.jpg", "--work-root", str(work)]) == 1
+
+    assert "--reads" in capsys.readouterr().err
+    assert not (work / "shelf-9" / "merged.json").exists()
