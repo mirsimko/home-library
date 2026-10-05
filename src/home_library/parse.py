@@ -40,6 +40,8 @@ _FIELDS = ["n", "where", "visible", "title", "other_text", "language", "readable
 
 def _normalise(entry: dict, position: int) -> dict:
     book = {name: entry.get(name, "") for name in _FIELDS}
+    if book["readable"] not in ("yes", "partial", "no"):
+        book["readable"] = "partial"
     n = entry.get("n")
     book["n"] = n if isinstance(n, int) and not isinstance(n, bool) else position
     return book
