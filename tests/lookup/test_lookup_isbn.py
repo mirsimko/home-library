@@ -20,3 +20,9 @@ def test_text_that_is_not_an_isbn_is_rejected():
     assert normalize_isbn("hello") is None
     assert normalize_isbn("978-4-89309-431") is None
     assert normalize_isbn("48340X0826") is None
+
+
+def test_non_ascii_digits_are_rejected_without_raising():
+    assert normalize_isbn("²" * 13) is None
+    assert normalize_isbn("²" * 10) is None
+    assert normalize_isbn("٩٧٨٤٨٩٣٠٩٤٣١٥") is None
