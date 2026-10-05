@@ -74,17 +74,17 @@ def find_candidates(
             continue
         for step, values, run in _steps(source, title, author, isbn)[:MAX_REQUESTS_PER_SOURCE]:
             path = _cache_path(cache_dir, name, step, values) if cache_dir is not None else None
+            cached = path is not None and path.exists()
             try:
-                if path is not None and path.exists():
+                if cached:
                     found = json.loads(path.read_text(encoding="utf-8"))
                 else:
                     found = run(run_yaz if source is nkcr else fetch)
-                    if path is not None:
-                        _write_cache(path, found)
             except Exception as failure:  # a failing source must never stop the run
-                status = _failure_status(failure)
-                queries.append({"source": name, "step": step, "status": status, "count": 0})
+                queries.append({"source": name, "step": step, "status": _failure_status(failure), "count": 0})
                 break  # asking the same source again would not help
+            if path is not None and not cached:
+                _write_cache(path, found)
             found = _unique(found)[:max_per_source]
             status = "ok" if found else "no_match"
             queries.append({"source": name, "step": step, "status": status, "count": len(found)})
