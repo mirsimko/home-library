@@ -78,3 +78,33 @@ def test_a_matched_candidate_fills_the_catalogue_fields_and_the_sort_key():
     assert record["sort_key"] == "アカイ フウセン"
     assert record["pick_verdict"] == "match"
     assert record["candidate_count"] == 2
+
+
+def test_the_title_stays_the_reading_when_the_catalogue_title_differs():
+    candidates = candidates_of(cand("nkcr:cnb001", "Zelený drak a jiné pohádky", title_reading=""))
+    (record,) = build_records(merged_of([agreed()]), candidates, picks_of("match", "nkcr:cnb001"))
+    assert record["title"] == "Zelený drak"
+    assert record["catalogue_title"] == "Zelený drak a jiné pohádky"
+    assert record["sort_key"] == "Zelený drak"
+
+
+def test_a_pick_of_none_or_ambiguous_fills_no_catalogue_field():
+    candidates = candidates_of(cand("nkcr:cnb001", "Zelený drak", authors=["Novotná, Marta"], publisher="Albatros",
+                                    year="2001", isbn="9788000000001", series="Malá knihovna",
+                                    title_reading="Zeleny drak"))
+    for verdict in ["none", "ambiguous"]:
+        (record,) = build_records(merged_of([agreed()]), candidates, picks_of(verdict))
+        for column in ["catalogue_title", "author", "publisher", "year", "isbn", "series", "source",
+                       "source_id", "age_from", "age_to"]:
+            assert record[column] == "", column
+        assert record["sort_key"] == "Zelený drak"
+        assert record["pick_verdict"] == verdict
+        assert record["candidate_count"] == 1
+
+
+def test_age_from_and_age_to_come_from_the_matched_candidates_age_note():
+    for note, low, high in [("Pro děti od 3 let", "3", ""), ("Pro děti 5-8 let", "5", "8"),
+                            ("Pro čtenáře", "", "")]:
+        candidates = candidates_of(cand("nkcr:cnb001", "Zelený drak", age_note=note))
+        (record,) = build_records(merged_of([agreed()]), candidates, picks_of("match", "nkcr:cnb001"))
+        assert (record["age_from"], record["age_to"]) == (low, high), note
