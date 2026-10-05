@@ -29,6 +29,30 @@ This cuts the tiles, reads each photo twice, merges the reads, looks the titles 
 - **From an agent harness,** start a run of several photos as a background job: a photo takes about two minutes, and a harness may cap a single command at ten.
 - Each stage is also a command of its own, for repeating one step: `hl tiles`, `hl read`, `hl merge`, `hl lookup`, `hl pick`, `hl export`. Each takes the photo and the same `--work-root`. `hl gather <read-id>` prints one read's answers for all photos in the shape the scoring tools of the 2026-10-05 tests take.
 
+## Measured on 2026-10-05
+
+One run of `hl run` over the four test photos (4080x3072), from nothing, on the home uplink of about 10 Mbit/s. The answer key of 46 titles is provisional; see the [shelf photo reading test](research/shelf-photo-reading-test.md).
+
+| Measure | Result |
+|---|---|
+| Time for all four photos, every stage | 458 seconds, about 115 seconds per photo |
+| Tile images per photo | 12, together 4.4 to 6.2 MB |
+| GPT-6.1 Sol read | 77 to 145 seconds per photo; 43 of 46 key titles |
+| Muse Spark 1.3 read | 56 to 85 seconds per photo; 44 of 46 key titles |
+| Titles both reads gave identically (accepted) | 28, all of them in the key |
+| Titles sent to review | 29: 22 partly read, 7 given by one read only |
+| Reads that used a tool; answers with a parse error | 0; 0 |
+| Catalogue picks for 32 titles with candidates | 16 matched, 8 ambiguous, 8 none |
+
+What the run and the trials before it showed:
+
+- **One attached call is faster than an agent session.** The same Sol read took 151 to 199 seconds when Codex opened the twelve images one by one inside a session.
+- **Two reads at once cost nothing on this uplink.** Both reads of the densest photo together took 133 seconds, against about 190 in sequence.
+- **NDL title searches are slow,** 10 to 15 seconds each when NDL has not answered the same search recently. Its ISBN look-up and the other sources answer in under two seconds.
+- **Pi must run with standard input closed.** With an image attached and standard input left open it produced nothing for four minutes.
+- **Models divide a spine differently.** One puts a series name into the title where the other puts it into the other text. The merge pairs such readings as `split`, so the book is one review row and not two.
+- **A model renumbers what it is given.** The first pick prompt labelled books with their item numbers; the model numbered its answers from the start, and its verdicts landed on the wrong books. The check on candidate ids kept every wrong match out, but most picks were lost. The prompt now numbers books from 1 and the answer must echo each title.
+
 ## Work directory
 
 One directory per photo, named after the photo's file stem:

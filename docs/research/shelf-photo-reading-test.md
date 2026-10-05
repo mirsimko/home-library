@@ -124,7 +124,7 @@ Everything ran on existing subscriptions or a free model, with no paid API calls
 ## Still to test
 
 - Cover photos and barcode photos.
-- A tile layout that does not cut long spine titles in two.
+- A tile layout that does not cut long spine titles in two. Done on 2026-10-05: see "The pipeline run" at the end.
 - A box of books photographed from above.
 - The key confirmed by a person, then the scores recomputed.
 
@@ -183,3 +183,24 @@ Time for the runs that finished cleanly:
 ### A lesson about the home connection
 
 Runs marked "no answer" or "failed" above were lost to the network, not to the models, and the procedural-prompt runs that did finish were slowed by it. A zooming session re-sends every image it has viewed with each step. With many such runs in parallel the home uplink, about 10 Mbit/s, was saturated, and requests above roughly 23 MB hung past the harnesses' five-minute timeout. A pipeline on this connection has to keep each request small, start a new session for each photo, and run few requests at once.
+
+## The pipeline run, 2026-10-05
+
+> [!NOTE]
+> **AI-generated.** Added the same day by the Claude Code session (Claude Opus 5.5) that built the pipeline. Each number is a single run against the same provisional key, which no person has confirmed.
+
+The pipeline described in [pipeline.md](../pipeline.md) was then built and run on the same four photos. It differs from the fast method above in four ways: tiles of 1560x2000 with a row overlap of 928 pixels in place of 408; GPT-6.1 Sol called once through `codex exec` with the tiles attached, not through an agent session; the two reads run at the same time; and an exact comparison of the two reads done by code.
+
+Titles found, out of 46:
+
+| Read | A (31) | B (11) | C (4) | All | Time per photo |
+|---|---|---|---|---|---|
+| GPT-6.1 Sol, one attached call | 31 | 9 | 3 | 43 | 77 to 145 seconds |
+| Muse Spark 1.3, Pi | 31 | 10 | 3 | 44 | 56 to 85 seconds |
+| Accepted: both reads gave the title identically | 24 | 4 | 0 | 28 | |
+
+- **No accepted title was outside the key.** All 28 titles that passed the exact comparison are key titles.
+- **Sol read as well in one attached call as in an agent session, in about half the time.** A first trial of the attached call on the old tiles found 41 titles in 63 to 153 seconds.
+- **Muse Spark found more than in any earlier run** (39 and 41 on the old tiles). One run cannot separate the effect of the taller tiles from chance.
+- **All four photos took 458 seconds from photo to review records,** look-ups and catalogue picks included.
+- **Codex shrinks large images.** On generated images of small digits, Sol read 7 to 9 pixel digits almost perfectly at 1560x1740 and 1560x2000, lost about half of the 7 pixel digits at 1360x3072, and read none at 4080x3072. This settles the open point under "Limits of this test": the whole photos were not seen in full by Sol either.
