@@ -1,8 +1,11 @@
 import io
 import urllib.error
 
+import urllib.error
+
 import pytest
 
+from home_library.lookup.errors import RateLimited
 from home_library.lookup.http import Fetcher
 
 NDL = "https://ndlsearch.ndl.go.jp/api/opensearch?isbn=9784893094315&dpid=iss-ndl-opac"
@@ -105,3 +108,34 @@ def test_the_first_request_to_a_host_does_not_wait_and_other_hosts_do_not_share_
     fetch("https://lx2.loc.gov/sru/lcdb?query=x")
 
     assert world.sleeps == []
+
+
+def http_error(code):
+    return urllib.error.HTTPError("https://example.test/", code, "error", {}, None)
+
+
+def test_a_429_from_ndl_is_retried_once_after_a_25_second_pause():
+    world = FakeWorld(http_error(429), b"ok")
+
+    body = world.fetcher()(NDL)
+
+    assert body == b"ok"
+    assert len(world.requests) == 2
+    assert world.requests[1][3] - world.requests[0][3] == pytest.approx(25)
+
+
+def test_a_429_from_another_host_is_retried_once_after_a_shorter_pause():
+    world = FakeWorld(http_error(429), b"ok")
+
+    world.fetcher()("https://openlibrary.org/search.json?title=x")
+
+    assert 1.2 <= world.requests[1][3] - world.requests[0][3] <= 10
+
+
+def test_a_second_429_is_reported_as_rate_limited_after_two_requests():
+    world = FakeWorld(http_error(429))
+
+    with pytest.raises(RateLimited):
+        world.fetcher()(NDL)
+
+    assert len(world.requests) == 2
