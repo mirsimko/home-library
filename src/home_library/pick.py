@@ -1,4 +1,5 @@
 """Stage 6: pick the catalogue candidate that is the book."""
+import hashlib
 import json
 import subprocess
 from pathlib import Path
@@ -89,43 +90,60 @@ def parse_picks(raw: str, candidates: dict) -> dict:
     return {"file": candidates["file"], "picks": picks}
 
 
-def _write_picks(lookup_dir: Path, picks: dict) -> None:
-    text = json.dumps(picks, indent=2, ensure_ascii=False) + "\n"
-    (lookup_dir / "picks.json").write_text(text, encoding="utf-8")
+def _made_for(merged: dict, candidates: dict) -> str:
+    """A fingerprint of everything the pick model is shown: the readings and the candidates."""
+    return hashlib.sha256(build_prompt(merged, candidates).encode("utf-8")).hexdigest()
 
 
-def _failed(lookup_dir: Path, candidates: dict, why: str) -> dict:
-    picks = _none_for_all(candidates, f"The pick step failed: {why}.")
-    _write_picks(lookup_dir, picks)
+def stored_picks(photo_dir, merged: dict, candidates: dict):
+    """The stored picks.json, if it was made for exactly these readings and candidates; otherwise None."""
+    try:
+        picks = json.loads((Path(photo_dir) / "lookup" / "picks.json").read_text(encoding="utf-8"))
+    except (OSError, ValueError):
+        return None
+    if not isinstance(picks, dict) or picks.get("made_for") != _made_for(merged, candidates):
+        return None
     return picks
 
 
 def run_pick(photo_dir, *, run=subprocess.run, timeout=300) -> dict:
+    """Ask the model once and write picks.json. A model call that fails gives `none` for every book."""
     photo_dir = refuse_inside_checkout(photo_dir)
     lookup_dir = photo_dir / "lookup"
     merged = json.loads((photo_dir / "merged.json").read_text(encoding="utf-8"))
     candidates = json.loads((lookup_dir / "candidates.json").read_text(encoding="utf-8"))
+    failure = None
     if not _books_with_candidates(candidates):
         picks = {"file": candidates["file"], "picks": []}
     else:
-        raw_file = lookup_dir / "picks.raw.txt"
-        command = ["codex", "exec", "--ignore-user-config", "-m", "gpt-6.1-sol",
-                   "-c", 'model_reasoning_effort="low"', "-s", "read-only", "--skip-git-repo-check",
-                   "--ephemeral", "-C", str(lookup_dir), "-o", str(raw_file), "-"]
-        raw_file.unlink(missing_ok=True)
-        try:
-            done = run(command, input=build_prompt(merged, candidates), cwd=str(lookup_dir), timeout=timeout,
-                       capture_output=True, text=True, encoding="utf-8")
-        except subprocess.TimeoutExpired:
-            return _failed(lookup_dir, candidates, f"codex timed out after {timeout} seconds")
-        except OSError as error:
-            return _failed(lookup_dir, candidates, f"codex not found or could not be run: {error}")
-        if done.returncode != 0:
-            return _failed(lookup_dir, candidates, f"codex exit code {done.returncode}")
-        try:
-            raw = raw_file.read_text(encoding="utf-8")
-        except OSError:
-            return _failed(lookup_dir, candidates, "no answer file from codex")
-        picks = parse_picks(raw, candidates)
-    _write_picks(lookup_dir, picks)
+        raw, failure = _ask(lookup_dir, build_prompt(merged, candidates), run, timeout)
+        if failure:
+            picks = _none_for_all(candidates, f"The pick step failed: {failure}.")
+        else:
+            picks = parse_picks(raw, candidates)
+    picks.update(made_for=_made_for(merged, candidates), failed=failure is not None)
+    text = json.dumps(picks, indent=2, ensure_ascii=False) + "\n"
+    (lookup_dir / "picks.json").write_text(text, encoding="utf-8")
     return picks
+
+
+def _ask(lookup_dir: Path, prompt: str, run, timeout):
+    """Run the model once. Returns (answer, None), or (None, why it failed)."""
+    raw_file = lookup_dir / "picks.raw.txt"
+    command = ["codex", "exec", "--ignore-user-config", "-m", "gpt-6.1-sol",
+               "-c", 'model_reasoning_effort="low"', "-s", "read-only", "--skip-git-repo-check",
+               "--ephemeral", "-C", str(lookup_dir), "-o", str(raw_file), "-"]
+    raw_file.unlink(missing_ok=True)  # an answer of an earlier run must not be taken for this one
+    try:
+        done = run(command, input=prompt, cwd=str(lookup_dir), timeout=timeout,
+                   capture_output=True, text=True, encoding="utf-8")
+    except subprocess.TimeoutExpired:
+        return None, f"codex timed out after {timeout} seconds"
+    except OSError as error:
+        return None, f"codex not found or could not be run: {error}"
+    if done.returncode != 0:
+        return None, f"codex exit code {done.returncode}"
+    try:
+        return raw_file.read_text(encoding="utf-8"), None
+    except OSError:
+        return None, "no answer file from codex"

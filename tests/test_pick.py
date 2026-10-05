@@ -316,9 +316,6 @@ def test_parse_picks_accepts_an_echoed_title_that_differs_only_in_case_and_spaci
 
 # --- a stored pick is only good for the readings and candidates it was made for ---
 
-GOOD_REPLY = None
-
-
 def good_reply():
     return answer({"book": 1, "title": "Zelený drak", "verdict": "match", "candidate_id": "nkcr:cnb001",
                    "reason": "Same title."},
