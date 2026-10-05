@@ -94,12 +94,38 @@ def _events(stdout):
     return events
 
 
+def _check_tiles(tiles_dir, files):
+    present = {entry.name for entry in tiles_dir.iterdir()}
+    extra = sorted(present - set(files))
+    missing = sorted(name for name in set(files) if not (tiles_dir / name).is_file())
+    if extra:
+        raise ReadError(f"{tiles_dir} holds files the manifest does not list: {', '.join(extra)}")
+    if missing:
+        raise ReadError(f"{tiles_dir} lacks files the manifest lists: {', '.join(missing)}")
+
+
+def _execute(command, stdin, cwd, run, timeout):
+    """Run the command; return (result, failure) where failure is None unless it timed out or is missing."""
+    try:
+        return run(command, input=stdin, capture_output=True, text=True,
+                   encoding="utf-8", cwd=cwd, timeout=timeout), None
+    except subprocess.TimeoutExpired as expired:
+        partial = expired.stdout or ""
+        if isinstance(partial, bytes):
+            partial = partial.decode("utf-8", errors="replace")
+        return (SimpleNamespace(returncode=None, stdout=partial),
+                f"{command[0]} timed out after {timeout} seconds")
+    except FileNotFoundError:
+        return SimpleNamespace(returncode=None, stdout=""), f"{command[0]} is not installed"
+
+
 def run_read(photo_dir, read_id, backend, *, run=subprocess.run, clock=time.monotonic,
              now=lambda: datetime.now().astimezone(), timeout=600):
     """Run one read of the photo in photo_dir and return the stored read.
 
-    Raises ReadError for a work directory inside a git checkout, an unknown backend, a tiles directory that does not match the manifest, and any failed
-    run. A failed run leaves raw.txt and run.json, never read.json.
+    Raises ReadError for a work directory inside a git checkout, an unknown backend, a tiles directory that
+    does not match the manifest, and any failed run. Any attempt, failed or refused, first removes the read.json
+    and events.jsonl of an earlier run of the same read. A failed run leaves raw.txt and run.json, never read.json.
     """
     try:
         photo_dir = refuse_inside_checkout(photo_dir)
@@ -113,13 +139,7 @@ def run_read(photo_dir, read_id, backend, *, run=subprocess.run, clock=time.mono
     manifest = json.loads((photo_dir / "tiles.json").read_text(encoding="utf-8"))
     tiles_dir = photo_dir / "tiles"
     files = [tile["file"] for tile in manifest["tiles"]]
-    present = {entry.name for entry in tiles_dir.iterdir()}
-    extra, missing = sorted(present - set(files)), sorted(set(files) - present)
-    missing = sorted({*missing, *(name for name in files if name in present and not (tiles_dir / name).is_file())})
-    if extra:
-        raise ReadError(f"{tiles_dir} holds files the manifest does not list: {', '.join(extra)}")
-    if missing:
-        raise ReadError(f"{tiles_dir} lacks files the manifest lists: {', '.join(missing)}")
+    _check_tiles(tiles_dir, files)
     prompt = render_prompt(manifest)
     read_dir.mkdir(parents=True, exist_ok=True)
     (read_dir / "prompt.txt").write_text(prompt, encoding="utf-8")
@@ -132,32 +152,19 @@ def run_read(photo_dir, read_id, backend, *, run=subprocess.run, clock=time.mono
         stdin = None
     started = now().isoformat()
     began = clock()
-    failure = None
-    try:
-        result = run(command, input=stdin, capture_output=True, text=True,
-                     encoding="utf-8", cwd=tiles_dir, timeout=timeout)
-    except subprocess.TimeoutExpired as expired:
-        partial = expired.stdout or ""
-        if isinstance(partial, bytes):
-            partial = partial.decode("utf-8", errors="replace")
-        result = SimpleNamespace(returncode=None, stdout=partial)
-        failure = f"{command[0]} timed out after {timeout} seconds"
-    except FileNotFoundError:
-        result = SimpleNamespace(returncode=None, stdout="")
-        failure = f"{command[0]} is not installed"
+    result, failure = _execute(command, stdin, tiles_dir, run, timeout)
     seconds = clock() - began
     if backend == "codex-exec":
         events = _events(result.stdout)
-        answer, tool_calls, usage, stream = _answer(events), _tool_calls(events), _usage(events), result.stdout
+        answer, tool_calls, usage = _answer(events), _tool_calls(events), _usage(events)
+        (read_dir / "events.jsonl").write_text(result.stdout, encoding="utf-8")
     else:
-        answer, tool_calls, usage, stream = result.stdout, [], None, None
-    info = {"read_id": read_id, "backend": backend, "model": BACKENDS[backend], "command": logged,
-            "started": started, "seconds": seconds, "returncode": result.returncode, "tool_calls": tool_calls,
-            "usage": usage}
-    if stream is not None:
-        (read_dir / "events.jsonl").write_text(stream, encoding="utf-8")
+        answer, tool_calls, usage = result.stdout, [], None
     (read_dir / "raw.txt").write_text(answer, encoding="utf-8")
-    _write_json(read_dir / "run.json", info)
+    _write_json(read_dir / "run.json", {
+        "read_id": read_id, "backend": backend, "model": BACKENDS[backend], "command": logged,
+        "started": started, "seconds": seconds, "returncode": result.returncode, "tool_calls": tool_calls,
+        "usage": usage})
     if failure is None and result.returncode != 0:
         failure = f"{command[0]} exited with return code {result.returncode}"
     if failure is None and not answer.strip():
