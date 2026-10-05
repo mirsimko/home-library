@@ -5,7 +5,7 @@ DEFAULT_WORK_ROOT = Path.home() / "home-library" / "work"
 
 
 def photo_dir(work_root, photo):
-    directory = Path(work_root).absolute() / Path(photo).stem
+    directory = (Path(work_root) / Path(photo).stem).resolve()
     for ancestor in [directory, *directory.parents]:
         if (ancestor / ".git").exists():
             raise ValueError(
