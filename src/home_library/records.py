@@ -179,7 +179,7 @@ def _cell(value) -> str:
     if value is True:
         return "true"
     text = str(value)
-    return "'" + text if text[:1] in ("=", "+", "-", "@") else text
+    return "'" + text if text[:1] in ("=", "+", "-", "@", "\t", "\r") else text
 
 
 def write_records(photo_dir, records: list) -> None:
