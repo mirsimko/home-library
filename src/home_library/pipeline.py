@@ -41,10 +41,18 @@ def _store(path, value):
     return value
 
 
+def _tiles_hash(photo_dir):
+    return hashlib.sha256((photo_dir / "tiles.json").read_bytes()).hexdigest()
+
+
 def merge_photo(photo_dir, read_ids):
     """Stage 4: compare the two stored reads and write merged.json."""
     photo_dir = Path(photo_dir)
     first, second = (_load(photo_dir / "reads" / read_id / "read.json") for read_id in read_ids)
+    if (photo_dir / "tiles.json").exists():
+        for read_id, read in zip(read_ids, (first, second)):
+            if read.get("tiles_sha256") != _tiles_hash(photo_dir):
+                raise ValueError(f"read {read_id} was made from other tiles than the stored ones; run it again")
     return _store(photo_dir / "merged.json", merge_reads(first, second))
 
 
@@ -92,6 +100,21 @@ def _manifest_of(photo, photo_dir):
     return manifest if same else None
 
 
+def _forget(photo_dir):
+    """Remove the reads and every file made from them."""
+    shutil.rmtree(photo_dir / "reads", ignore_errors=True)
+    for name in DERIVED:
+        (photo_dir / name).unlink(missing_ok=True)
+
+
+def tile_photo(photo, photo_dir):
+    """Stage 1: cut the tiles. If the stored files are of another photo, they are removed first."""
+    photo_dir = Path(photo_dir)
+    if _manifest_of(photo, photo_dir) is None:
+        _forget(photo_dir)
+    return cut_tiles(photo, photo_dir)
+
+
 def read_photo(photo, work_root=DEFAULT_WORK_ROOT, *, readers=READERS, force=False, run=subprocess.run):
     """Stages 1 to 4 for one photo: tiles, the reads (at the same time) and the merge. Returns its directory.
 
@@ -101,12 +124,10 @@ def read_photo(photo, work_root=DEFAULT_WORK_ROOT, *, readers=READERS, force=Fal
     photo_dir = photo_dir_of(work_root, photo)
     manifest = None if force else _manifest_of(photo, photo_dir)
     if manifest is None:
-        shutil.rmtree(photo_dir / "reads", ignore_errors=True)
-        for name in DERIVED:
-            (photo_dir / name).unlink(missing_ok=True)
+        _forget(photo_dir)
     if manifest is None or not all((photo_dir / "tiles" / tile["file"]).is_file() for tile in manifest["tiles"]):
         cut_tiles(photo, photo_dir)
-    tiles = hashlib.sha256((photo_dir / "tiles.json").read_bytes()).hexdigest()
+    tiles = _tiles_hash(photo_dir)
     missing = [reader for reader in readers  # not stored, cut short, or made from other tiles
                if (_load_or_none(photo_dir / "reads" / reader[0] / "read.json") or {}).get("tiles_sha256") != tiles]
     # Both reads at once: measured on the home uplink, this took no longer than the slower read alone.

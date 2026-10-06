@@ -7,7 +7,6 @@ from pathlib import Path
 from home_library import pipeline
 from home_library.pick import run_pick
 from home_library.reader import BACKENDS, run_read
-from home_library.tiles import cut_tiles
 from home_library.workspace import DEFAULT_WORK_ROOT, photo_dir
 
 SECOND_READ_ID = {"pi": "b-spark", "codex-exec": "b-sol"}
@@ -71,7 +70,7 @@ def _run(args):
 def _stage(args):
     directory = photo_dir(args.work_root, args.photo)
     if args.command == "tiles":
-        manifest = cut_tiles(args.photo, directory)
+        manifest = pipeline.tile_photo(args.photo, directory)
         print(f"{manifest['photo']}: {len(manifest['tiles'])} images, "
               f"{manifest['total_bytes'] / 1e6:.1f} MB -> {directory}/tiles")
     elif args.command == "read":
