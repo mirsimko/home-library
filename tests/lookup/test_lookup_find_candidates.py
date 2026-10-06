@@ -260,6 +260,21 @@ def test_a_record_that_a_source_returns_twice_is_kept_once(fixture_bytes):
     assert result["queries"][0]["count"] == 3
 
 
+def test_records_a_source_gives_no_id_are_all_kept_and_told_apart_by_a_number():
+    answer = b'{"docs": [{"title": "Blue Kite"}, {"key": "/works/OL1W", "title": "Blue Kite"}, {"title": "Kite"}]}'
+
+    result = find_candidates(
+        "Blue Kite", "en", fetch=lambda url: answer if "openlibrary" in url else b"", run_yaz=no_yaz
+    )
+
+    found = [(c["id"], c["source_id"], c["title"]) for c in result["candidates"]]
+    assert found == [
+        ("openlibrary:no-id-1", "", "Blue Kite"),
+        ("openlibrary:OL1W", "OL1W", "Blue Kite"),
+        ("openlibrary:no-id-2", "", "Kite"),
+    ]
+
+
 def test_a_step_that_ran_before_is_answered_from_the_cache_and_recorded_as_if_it_had_run(fixture_bytes, tmp_path):
     fetch = Router(fixture_bytes, **{"ndlsearch.ndl.go.jp": "ndl_search_daruma.xml"})
     first = find_candidates("だるまさんが", "ja", fetch=fetch, run_yaz=no_yaz, cache_dir=tmp_path / "cache")
