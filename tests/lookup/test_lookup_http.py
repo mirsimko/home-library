@@ -3,7 +3,7 @@ import urllib.request
 
 import pytest
 
-from home_library.lookup.errors import FetchError, RateLimited, Unavailable
+from home_library.lookup.errors import FetchError, RateLimited, SourceError, Unavailable
 from home_library.lookup.http import Fetcher
 
 NDL = "https://ndlsearch.ndl.go.jp/api/opensearch?isbn=9784893094315&dpid=iss-ndl-opac"
@@ -68,6 +68,18 @@ def test_fetcher_closes_the_response_once_it_is_read():
     world.fetcher()(NDL)
 
     assert [response.closed for response in world.responses] == [True]
+
+
+@pytest.mark.parametrize("code", [429, 500])
+def test_fetcher_closes_an_error_answer_too(code):
+    answers = [urllib.error.HTTPError(NDL, code, "error", {}, Response(b"")) for _ in range(2)]
+    world = FakeWorld(*answers)
+
+    with pytest.raises(SourceError):
+        world.fetcher()(NDL)
+
+    asked = len(world.requests)
+    assert [answer.fp.closed for answer in answers[:asked]] == [True] * asked
 
 
 @pytest.mark.parametrize(
