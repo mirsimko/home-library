@@ -5,6 +5,7 @@ import csv
 import json
 import re
 
+from home_library.merge import match_key
 from home_library.workspace import refuse_inside_checkout
 
 
@@ -41,6 +42,28 @@ def _unreadable_record(photo: str, entry: dict, location: str) -> dict:
     record.update(photo=photo, location=location, language=entry["language"], read_status="unreadable",
                   other_text=entry["other_text"], where=entry["where"], read_ids=entry["read_id"], notes=notes)
     return record
+
+
+def _unreadable_entries(merged: dict) -> list:
+    """The first read's unreadable entries, then those the second read lists beyond them.
+
+    Two reads describe where a book stands too differently to pair their entries one by one. So an entry of
+    the second read counts as already listed when its other text equals that of an entry of the first read,
+    and the remaining entries pair off by number.
+    """
+    first_read = merged["reads"][0] if merged["reads"] else None
+    first = [entry for entry in merged["unreadable"] if entry["read_id"] == first_read]
+    unpaired = [match_key(entry["other_text"]) for entry in first]
+    rest = []
+    for entry in merged["unreadable"]:
+        key = match_key(entry["other_text"])
+        if entry["read_id"] == first_read:
+            continue
+        if key and key in unpaired:
+            unpaired.remove(key)
+        else:
+            rest.append(entry)
+    return first + rest[len(unpaired):]
 
 
 def _lost_records(photo: str, merged: dict, location: str) -> list:
@@ -148,10 +171,7 @@ def build_records(merged: dict, candidates: dict | None = None, picks: dict | No
                 _fill_catalogue(record, matched)
         record["notes"] = _notes(item, book, pick, matched)
         records.append(record)
-    first_read = merged["reads"][0] if merged["reads"] else None
-    for entry in merged["unreadable"]:
-        if entry["read_id"] == first_read:
-            records.append(_unreadable_record(merged["file"], entry, location))
+    records += [_unreadable_record(merged["file"], entry, location) for entry in _unreadable_entries(merged)]
     return records + _lost_records(merged["file"], merged, location)
 
 

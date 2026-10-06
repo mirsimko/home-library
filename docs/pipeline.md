@@ -338,7 +338,7 @@ The pick step gives a model the reading and its candidates as text and asks whic
 - Unlike a read, the pick is not checked for tool use: it sees only text the two reads already produced.
 - When no book has a candidate, no model is called.
 
-`records.json` and `records.csv` hold one row per entry of `merged.json` `items`, followed by the unreadable entries of the first read. The columns follow spec section 2.1 where this stage can fill them, then the provenance:
+`records.json` and `records.csv` hold one row per entry of `merged.json` `items`, followed by the unreadable entries of the first read and by those the second read lists beyond them. Two reads describe where an untitled book stands too differently to pair their entries one by one. So an entry of the second read counts as already listed when its `other_text` equals that of an entry of the first read, and the rest pair off by number: a photo gets as many unreadable rows as the read that listed more of them. The columns follow spec section 2.1 where this stage can fill them, then the provenance:
 
 `title, sort_key, author, illustrator, publisher, year, language, isbn, series, age_from, age_to, tags, state, location, cover_photo, source, source_id, needs_review, notes, photo, read_status, other_reading, catalogue_title, other_text, where, read_ids, pick_verdict, candidate_count`
 
