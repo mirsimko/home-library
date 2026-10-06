@@ -195,6 +195,32 @@ def test_unreadable_entries_of_the_first_read_follow_the_items():
     assert list(first) == CONTRACT_COLUMNS
 
 
+def unreadable(read_id, n, other_text=""):
+    return reading(read_id, n, "", where=f"r1c1-r0.jpg, #{n}", other_text=other_text, readable="no")
+
+
+def test_an_unreadable_book_only_the_second_read_lists_gets_a_row():
+    records = build_records(merged_of([agreed()], [unreadable("b-spark", 7)]))
+    assert [(r["read_status"], r["read_ids"]) for r in records] == [("agreed", "a-sol; b-spark"),
+                                                                    ("unreadable", "b-spark")]
+
+
+def test_the_second_read_adds_only_the_unreadable_books_it_lists_beyond_the_first_reads():
+    entries = [unreadable("a-sol", 3), unreadable("a-sol", 4),
+               unreadable("b-spark", 5), unreadable("b-spark", 6), unreadable("b-spark", 7)]
+    records = build_records(merged_of([], entries))
+    assert [(r["read_ids"], r["where"]) for r in records] == [
+        ("a-sol", "r1c1-r0.jpg, #3"), ("a-sol", "r1c1-r0.jpg, #4"), ("b-spark", "r1c1-r0.jpg, #7")]
+
+
+def test_an_unreadable_book_both_reads_describe_by_the_same_text_is_not_the_extra_one():
+    entries = [unreadable("a-sol", 3, other_text="Albatros 12"),
+               unreadable("b-spark", 5), unreadable("b-spark", 6, other_text="ALBATROS  12")]
+    records = build_records(merged_of([], entries))
+    assert [(r["read_ids"], r["where"]) for r in records] == [
+        ("a-sol", "r1c1-r0.jpg, #3"), ("b-spark", "r1c1-r0.jpg, #5")]
+
+
 def czech_japanese_records():
     cz = agreed()
     jp = item("agreed", "あかいふうせん", [reading("a-sol", 2, "あかいふうせん", language="ja", other_text="青空社, \"絵本\""),
