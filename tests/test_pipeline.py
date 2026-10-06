@@ -486,3 +486,21 @@ def test_reads_made_from_other_tiles_are_not_merged(tmp_path):
 
     with pytest.raises(ValueError, match="a-sol was made from other tiles"):
         pipeline.merge_photo(tmp_path / "work" / "shelf-9", ["a-sol", "b-spark"])
+
+
+def test_force_asks_the_catalogues_again_and_a_plain_rerun_does_not(tmp_path):
+    # PR review: an empty answer stayed in the look-up cache for good, even through --force.
+    photo, programs = photo_and_programs(tmp_path)
+    asked, answers = [], catalogues()
+
+    def fetch(url):
+        asked.append(url)
+        return answers(url)
+
+    run_one(photo, tmp_path / "work", run=programs, fetch=fetch)
+    once = len(asked)
+    run_one(photo, tmp_path / "work", run=programs, fetch=fetch)
+    assert once > 0 and len(asked) == once
+
+    run_one(photo, tmp_path / "work", run=programs, fetch=fetch, force=True)
+    assert len(asked) == 2 * once
