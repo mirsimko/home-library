@@ -499,3 +499,18 @@ def test_force_asks_the_catalogues_again_and_a_plain_rerun_does_not(tmp_path):
 
     run_one(photo, tmp_path / "work", run=programs, fetch=fetch, force=True)
     assert len(asked) == 2 * once
+
+
+def test_tiles_cut_differently_from_the_same_photo_remove_the_reads_made_from_the_old_ones(tmp_path, monkeypatch):
+    # PR review: after a Pillow upgrade the same photo gives other tiles, and `hl merge` refused the old reads.
+    photo, programs = photo_and_programs(tmp_path)
+    Image.effect_noise((640, 480), 60).convert("RGB").save(photo)  # a flat image encodes alike at any quality
+    directory = tmp_path / "work" / "shelf-9"
+    run_one(photo, tmp_path / "work", run=programs, fetch=catalogues())
+
+    pipeline.tile_photo(photo, directory)  # cut alike: everything is kept
+    assert (directory / "reads" / "a-sol" / "read.json").exists() and (directory / "records.csv").exists()
+
+    monkeypatch.setattr(pipeline, "cut_tiles", lambda photo, out: cut_tiles(photo, out, quality=40))
+    pipeline.tile_photo(photo, directory)
+    assert not (directory / "reads").exists() and not (directory / "records.csv").exists()
