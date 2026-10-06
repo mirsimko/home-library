@@ -258,6 +258,15 @@ def test_cells_that_look_like_formulas_get_a_leading_quote_in_the_csv_only(tmp_p
     assert json.loads((tmp_path / "records.json").read_text(encoding="utf-8"))[0]["title"] == "=SUM(A1)"
 
 
+def test_a_formula_hidden_behind_a_tab_or_a_carriage_return_gets_the_quote_too(tmp_path):
+    tricky = [item("solo", title, [reading("a-sol", n, title)], exact=False)
+              for n, title in enumerate(["\t=1+1", "\r=1+1"])]
+    write_records(tmp_path, build_records(merged_of(tricky)))
+    with open(tmp_path / "records.csv", encoding="utf-8-sig", newline="") as f:
+        rows = list(csv.DictReader(f))
+    assert [r["title"] for r in rows] == ["'\t=1+1", "'\r=1+1"]
+
+
 def test_records_json_is_a_list_of_typed_objects_with_every_column(tmp_path):
     write_records(tmp_path, czech_japanese_records())
     text = (tmp_path / "records.json").read_text(encoding="utf-8")
