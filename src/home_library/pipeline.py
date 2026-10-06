@@ -120,11 +120,14 @@ def read_photo(photo, work_root=DEFAULT_WORK_ROOT, *, readers=READERS, force=Fal
 
     A read that is already stored is not repeated, so a run that failed half way can simply be started again.
     A changed photo, or force, starts from nothing: every file made from the old photo is removed first.
+    Force also forgets what the catalogues answered.
     """
     photo_dir = photo_dir_of(work_root, photo)
     manifest = None if force else _manifest_of(photo, photo_dir)
     if manifest is None:
         _forget(photo_dir)
+    if force:  # the catalogues' answers are kept for a changed photo: they belong to a title, not to a photo
+        shutil.rmtree(photo_dir / "lookup" / "cache", ignore_errors=True)
     if manifest is None or not all((photo_dir / "tiles" / tile["file"]).is_file() for tile in manifest["tiles"]):
         cut_tiles(photo, photo_dir)
     tiles = _tiles_hash(photo_dir)

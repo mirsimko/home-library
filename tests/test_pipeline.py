@@ -495,7 +495,7 @@ def test_force_asks_the_catalogues_again_and_a_plain_rerun_does_not(tmp_path):
 
     def fetch(url):
         asked.append(url)
-        return answers(url)
+        return (FIXTURES / "loc_empty.xml").read_bytes() if "loc.gov" in url else answers(url)
 
     run_one(photo, tmp_path / "work", run=programs, fetch=fetch)
     once = len(asked)
