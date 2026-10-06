@@ -123,13 +123,13 @@ Cuts a photo into overlapping tiles at full resolution and saves each tile twice
   "layout": {"tile_width": 1560, "tile_height": 2000, "columns": [0, 1260, 2520], "rows": [0, 1072]},
   "quality": 88,
   "tiles": [
-    {"file": "r1c1-r0.jpg", "row": 1, "column": 1, "rotation": 0, "box": [0, 0, 1560, 2000], "bytes": 412345}
+    {"file": "r1c1-r0.jpg", "row": 1, "column": 1, "rotation": 0, "box": [0, 0, 1560, 2000], "bytes": 412345, "sha256": "<hash of this tile file>"}
   ],
   "total_bytes": 4812345
 }
 ```
 
-`box` is `[left, top, right, bottom]` in the upright photo's pixels, for both rotations of a tile.
+`box` is `[left, top, right, bottom]` in the upright photo's pixels, for both rotations of a tile. The top-level `sha256` is the hash of the photo file and each tile's `sha256` that of its image file, so the hash of `tiles.json`, which a read stores as `tiles_sha256`, changes whenever any tile does.
 
 ## Stage 2: read (`home_library.reader`)
 

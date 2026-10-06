@@ -59,9 +59,9 @@ def cut_tiles(photo, out_dir, *, quality=88, **layout_options):
                 name = f"r{row}c{column}-r{rotation}.jpg"
                 shown = tile if rotation == 0 else tile.rotate(180)
                 shown.save(tiles_dir / name, "JPEG", quality=quality)
-                size = (tiles_dir / name).stat().st_size
-                tiles.append({"file": name, "row": row, "column": column,
-                              "rotation": rotation, "box": box, "bytes": size})
+                written = (tiles_dir / name).read_bytes()
+                tiles.append({"file": name, "row": row, "column": column, "rotation": rotation, "box": box,
+                              "bytes": len(written), "sha256": hashlib.sha256(written).hexdigest()})
     manifest = {
         "photo": photo.name,
         "sha256": hashlib.sha256(photo.read_bytes()).hexdigest(),
