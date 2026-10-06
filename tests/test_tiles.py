@@ -2,7 +2,6 @@ import hashlib
 import json
 
 import pytest
-
 from PIL import Image
 
 from home_library.tiles import cut_tiles, plan_layout

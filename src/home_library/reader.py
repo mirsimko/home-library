@@ -6,7 +6,6 @@ import subprocess
 import time
 from datetime import datetime
 from importlib import resources
-from pathlib import Path
 from types import SimpleNamespace
 
 from home_library.parse import parse_read

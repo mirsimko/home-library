@@ -14,6 +14,7 @@ hl = "home_library.cli:main"
 [dependency-groups]
 dev = [
     "pytest>=8",
+    "ruff>=0.16",
 ]
 
 [build-system]
@@ -25,3 +26,11 @@ packages = ["src/home_library"]
 
 [tool.pytest.ini_options]
 testpaths = ["tests"]
+
+[tool.ruff]
+line-length = 120
+
+[tool.ruff.lint]
+# Pinned, so that a check does not depend on Ruff's defaults or on a user's own configuration.
+select = ["E", "F", "I"]
+ignore = ["E501"]  # long lines are test data

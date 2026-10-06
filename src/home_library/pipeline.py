@@ -14,7 +14,8 @@ from home_library.pick import run_pick, stored_picks
 from home_library.reader import run_read
 from home_library.records import build_records, write_records
 from home_library.tiles import cut_tiles
-from home_library.workspace import DEFAULT_WORK_ROOT, photo_dir as photo_dir_of, refuse_inside_checkout
+from home_library.workspace import DEFAULT_WORK_ROOT, refuse_inside_checkout
+from home_library.workspace import photo_dir as photo_dir_of
 
 READERS = (("a-sol", "codex-exec"), ("b-spark", "pi"))  # read id and backend of the two blind reads
 

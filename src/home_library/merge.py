@@ -2,7 +2,6 @@
 import difflib
 import unicodedata
 
-
 _SIGNS = str.maketrans("", "", "™®©℠")  # NFKC would turn ™ into the letters TM
 
 

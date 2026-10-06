@@ -2,9 +2,8 @@ from urllib.parse import parse_qs, urlparse
 
 import pytest
 
-from home_library.lookup.errors import FetchError, RateLimited, Unavailable
-
 from home_library.lookup import find_candidates
+from home_library.lookup.errors import FetchError, RateLimited, Unavailable
 
 
 class Router:

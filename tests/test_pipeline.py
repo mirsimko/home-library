@@ -1,8 +1,17 @@
 """The stages run on a photo's work directory: each reads plain files and writes plain files."""
+import csv
 import json
+import threading
 from pathlib import Path
+from types import SimpleNamespace
+
+import pytest
+from PIL import Image
 
 from home_library import pipeline
+from home_library.lookup.errors import Unavailable
+from home_library.reader import run_read
+from home_library.tiles import cut_tiles
 
 FIXTURES = Path(__file__).parent / "lookup" / "fixtures"
 
@@ -88,11 +97,6 @@ def test_one_reads_answers_for_all_photos_are_gathered_in_the_scoring_shape(tmp_
 
 
 # --- the whole pipeline on one photo, with the model programs and the catalogues faked ---
-
-import csv
-from types import SimpleNamespace
-
-from PIL import Image
 
 
 def answer(*books):
@@ -219,8 +223,6 @@ def test_the_summary_reports_how_long_each_read_took(tmp_path):
 
 # --- speed: what may overlap, measured on the home uplink on 2026-10-05 ---
 
-import threading
-
 
 def test_the_two_reads_of_a_photo_run_at_the_same_time(tmp_path):
     photo, programs = photo_and_programs(tmp_path)
@@ -293,8 +295,6 @@ def test_the_look_ups_of_one_photo_run_while_the_next_photo_is_read(tmp_path):
 
 
 # --- a rerun never reuses what no longer fits (review council, 2026-10-05) ---
-
-from home_library.reader import run_read
 
 
 def rows_of(photo_dir):
@@ -412,8 +412,6 @@ def test_a_stage_refuses_to_write_inside_a_git_checkout(tmp_path):
 
 # --- look-ups: cached answers, sources that are down, and the real fetcher ---
 
-from home_library.lookup.errors import Unavailable
-
 
 def czech_items(*titles):
     return [item(title, "cs") for title in titles]
@@ -461,7 +459,6 @@ def test_a_look_up_without_an_injected_fetch_builds_the_real_one(tmp_path):
 
 def test_a_read_made_from_other_tiles_is_made_again(tmp_path):
     # Review council: after `hl tiles` on a retaken photo, the old reads looked current.
-    from home_library.tiles import cut_tiles
     photo, programs = photo_and_programs(tmp_path)
     run_one(photo, tmp_path / "work", run=programs, fetch=catalogues())
     Image.new("RGB", (640, 480), "grey").save(photo)
@@ -477,8 +474,6 @@ def test_a_read_made_from_other_tiles_is_made_again(tmp_path):
 
 def test_reads_made_from_other_tiles_are_not_merged(tmp_path):
     # PR review: `hl merge` compared reads without asking which tiles they were made from.
-    import pytest
-    from home_library.tiles import cut_tiles
     photo, programs = photo_and_programs(tmp_path)
     run_one(photo, tmp_path / "work", run=programs, fetch=catalogues())
     Image.new("RGB", (640, 480), "grey").save(photo)

@@ -8,7 +8,6 @@ import re
 from home_library.merge import match_key
 from home_library.workspace import refuse_inside_checkout
 
-
 COLUMNS = ["title", "sort_key", "author", "illustrator", "publisher", "year", "language", "isbn", "series",
            "age_from", "age_to", "tags", "state", "location", "cover_photo", "source", "source_id",
            "needs_review", "notes", "photo", "read_status", "other_reading", "catalogue_title", "other_text",
