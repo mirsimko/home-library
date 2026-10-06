@@ -13,8 +13,13 @@ SOURCES = {"ja": [ndl, openbd], "cs": [nkcr], "en": [openlibrary, loc]}
 
 
 def _unique(candidates):
-    seen, unique = set(), []
+    """Each record once. A record without an id from its source is kept and numbered: the pick names a
+    candidate by its id, and two such records are not known to be the same."""
+    seen, unique, unnamed = set(), [], 0
     for candidate in candidates:
+        if not candidate["source_id"]:
+            unnamed += 1
+            candidate = {**candidate, "id": "%s:no-id-%d" % (candidate["source"], unnamed)}
         if candidate["id"] not in seen:
             seen.add(candidate["id"])
             unique.append(candidate)

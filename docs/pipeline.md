@@ -288,7 +288,7 @@ A candidate:
 }
 ```
 
-Every field is present and none is null. Text fields are strings and may be empty; `authors` and `subjects` are lists of strings. `id` is `<source>:<source_id>` and is unique among one book's candidates.
+Every field is present and none is null. Text fields are strings and may be empty; `authors` and `subjects` are lists of strings. `id` is `<source>:<source_id>` and is unique among one book's candidates. A record its source gave no id has an empty `source_id` and the `id` `<source>:no-id-<number>`, so that the pick can still name it.
 
 `candidates.json`:
 
