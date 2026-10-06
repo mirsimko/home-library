@@ -31,6 +31,25 @@ def test_tiles_cuts_a_photo_into_its_work_directory(tmp_path, capsys):
     assert "2 images" in capsys.readouterr().out
 
 
+def test_tiles_of_another_photo_under_the_same_name_remove_what_was_made_from_the_old_one(tmp_path):
+    # PR review: `hl tiles` on a retaken photo left the old reads, and `hl merge` then merged them.
+    photo, directory = tmp_path / "shelf-9.jpg", tmp_path / "work" / "shelf-9"
+    Image.new("RGB", (640, 480), "white").save(photo)
+    assert main(["tiles", str(photo), "--work-root", str(tmp_path / "work")]) == 0
+    store_read(tmp_path / "work", "shelf-9", "a-sol", [entry(1, "Zelený drak")])
+    made = [directory / name for name in ("merged.json", "records.csv", "records.json", "lookup/candidates.json")]
+    for path in made:
+        path.parent.mkdir(exist_ok=True)
+        path.write_text("old", encoding="utf-8")
+
+    assert main(["tiles", str(photo), "--work-root", str(tmp_path / "work")]) == 0  # the same photo: all kept
+    assert (directory / "reads" / "a-sol" / "read.json").exists() and all(path.exists() for path in made)
+
+    Image.new("RGB", (640, 480), "grey").save(photo)
+    assert main(["tiles", str(photo), "--work-root", str(tmp_path / "work")]) == 0
+    assert not (directory / "reads").exists() and not any(path.exists() for path in made)
+
+
 def test_merge_then_export_turn_two_stored_reads_into_a_review_sheet(tmp_path):
     work = tmp_path / "work"
     store_read(work, "shelf-9", "a-sol", [entry(1, "Zelený drak"), entry(2, "The Blue Kite", "en")])

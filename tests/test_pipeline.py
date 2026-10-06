@@ -473,3 +473,16 @@ def test_a_read_made_from_other_tiles_is_made_again(tmp_path):
 
     assert sorted(programs.started) == ["codex pick", "codex read", "pi read"]
     assert [row["title"] for row in rows_of(tmp_path / "work" / "shelf-9")] == ["あかいふうせん"]
+
+
+def test_reads_made_from_other_tiles_are_not_merged(tmp_path):
+    # PR review: `hl merge` compared reads without asking which tiles they were made from.
+    import pytest
+    from home_library.tiles import cut_tiles
+    photo, programs = photo_and_programs(tmp_path)
+    run_one(photo, tmp_path / "work", run=programs, fetch=catalogues())
+    Image.new("RGB", (640, 480), "grey").save(photo)
+    cut_tiles(photo, tmp_path / "work" / "shelf-9")
+
+    with pytest.raises(ValueError, match="a-sol was made from other tiles"):
+        pipeline.merge_photo(tmp_path / "work" / "shelf-9", ["a-sol", "b-spark"])
