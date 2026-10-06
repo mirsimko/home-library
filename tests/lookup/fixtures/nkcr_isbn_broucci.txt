@@ -1,0 +1,26 @@
+Z> Connecting...OK.
+Sent initrequest.
+Connection accepted by v3 target.
+Z> Z> Sent searchRequest.
+Received SearchResponse.
+Search was a success.
+Number of hits: 1, setno 1
+records returned: 0
+Z> Sent presentRequest (1+10).
+Records: 1
+[NKC-UTF]Record type: USmarc
+01658nam a2200481 i 4500
+001 nkc20257639293
+008 250318t20252025xr a   b      000 j cze  
+020    $a 978-80-7639-293-9 $q (vázáno)
+100 1  $a Karafiát, Jan, $d 1846-1929 $7 jk01010001 $4 aut
+245 10 $a Broučci / $c Jan Karafiát ; ilustrace Vlasta Švejdová
+264  1 $a Ostrava : $b Bookmedia s.r.o., $c [2025]
+650 07 $a podzim $7 ph000001 $2 czenas
+650 07 $a světlušky $x pohádky $2 czenas
+655  7 $a české pohádky $7 fd000001 $2 czenas
+655  7 $a publikace pro děti $7 fd133156 $2 czenas
+700 1  $a Švejdová, Vlasta, $d 1946- $7 jk01020002 $4 ill
+
+nextResultSetPosition = 0
+Z> See you later, alligator.

@@ -1,6 +1,6 @@
 # Home library: draft spec
 
-Version 0, 2026-10-05. Nothing described here is built.
+Version 0, 2026-10-05. The shelf-photo reading pipeline of sections 2.4 and 2.5 is built and writes plain files; see [pipeline.md](pipeline.md). Nothing else described here is built.
 
 Part 1 holds the requirements, which are settled. Part 2 holds the design, where every point carries one of three marks:
 
@@ -133,12 +133,18 @@ These are not yet confirmed by the family.
 - The model may not complete a title from memory. A partial reading or a guess goes into its own field and marks the record for review.
 - Requests stay small, and few run at once.
 
+**Built on 2026-10-05**, as the proposals above describe, and run on the four test photos (details and numbers in [pipeline.md](pipeline.md)):
+
+- Tiles are 1560x2000 pixels, two rows by three columns, so neighbouring rows overlap by 928 pixels. The tested layout overlapped by 408 and cut long spine titles in two. Taller tiles are not possible: Pi shrinks images above 2000 pixels, and in a measurement with small digits Codex lost detail on attached images much taller than that.
+- Sol reads in one Codex call with the twelve tiles attached, which takes 77 to 145 seconds per photo. Code checks that the read used no tools.
+- The second read is Muse Spark 1.3 through Pi, with tools switched off. The two reads run at the same time.
+- All stages together took 107 to 115 seconds per photo in two runs. The titles both reads gave alike (ignoring case, spacing and punctuation) numbered 28 in one run and 22 in the other, and all were in the provisional key; 29 and 30 more titles went to review.
+
 **Open:**
 
 - The mix of the three ways in. Cover photos and barcode photos are not tested yet (section 3).
-- A tile layout that does not cut long spine titles in two.
-- How to make Sol's reading faster. Its zooming run took about one minute per photo, but as one long session over all four photos, which does not suit the home uplink. Zooming with one photo per session is untested.
-- Whether the second, checking read is another Sol session or Muse Spark 1.3. A different model catches a misreading that one model repeats, and Muse Spark read as reliably as Sol in the test.
+- Whether the second, checking read stays Muse Spark 1.3 or becomes another Sol session. The pipeline does either. A different model catches a misreading that one model repeats, and Muse Spark read as reliably as Sol in the test.
+- Whether a title longer than 928 pixels still turns up cut in two on other shelves.
 
 ### 2.5 Matching a photo to a catalogue record
 
@@ -152,6 +158,8 @@ Research on 2026-10-05 found that an ISBN resolves to a solid record in all thre
   - English: Open Library, then the Library of Congress.
 - **Without an ISBN**, search by author or by a shortened title, collect the candidates, and let the model pick the best one or say that none fits.
 - **With no match**, keep what the model read from the photo and mark the record for review.
+
+**Built on 2026-10-05** for the title path, with the five sources named above; the pick is a text-only Sol call. A shelf photo gives no ISBN, so the ISBN path is built but unused until barcode photos exist. NDL answers a title search in 10 to 15 seconds, so look-ups run in the background while the next photo is read.
 
 ### 2.6 The store
 

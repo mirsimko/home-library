@@ -1,0 +1,54 @@
+<rss xmlns:dc="http://purl.org/dc/elements/1.1/" xmlns:openSearch="http://a9.com/-/spec/opensearchrss/1.0/" xmlns:dcndl="http://ndl.go.jp/dcndl/terms/" xmlns:dcmitype="http://purl.org/dc/dcmitype/" xmlns:dcterms="http://purl.org/dc/terms/" xmlns:xsi="http://www.w3.org/2001/XMLSchema-instance" xmlns:rdfs="http://www.w3.org/2000/01/rdf-schema#" xmlns:rdf="http://www.w3.org/1999/02/22-rdf-syntax-ns#" version="2.0">
+  <channel>
+    <language>ja</language>
+    <openSearch:totalResults>2</openSearch:totalResults>
+    <openSearch:startIndex>1</openSearch:startIndex>
+    <openSearch:itemsPerPage>2</openSearch:itemsPerPage>
+    <item>
+      <title>だるまさんが</title>
+      <link>https://ndlsearch.ndl.go.jp/books/R100000002-I000009209109</link>
+      <description><![CDATA[<p>ブロンズ新社,2008,978-4-89309-431-5<p><ul><li>タイトル：だるまさんが</li><li>タイトル（読み）：ダルマサン ガ</li><li>責任表示：かがくいひろし さく</li><li>NDC(9)：726.6</li></ul>]]></description>
+      <author>加岳井, 広, 1955-2009,かがくいひろし さく</author>
+      <category>図書</category>
+      <category>紙</category>
+      <guid isPermaLink="true">https://ndlsearch.ndl.go.jp/books/R100000002-I000009209109</guid>
+      <dc:title>だるまさんが</dc:title>
+      <dcndl:titleTranscription>ダルマサン ガ</dcndl:titleTranscription>
+      <dc:creator>加岳井, 広, 1955-2009</dc:creator>
+      <dc:publisher>ブロンズ新社</dc:publisher>
+      <dc:date xsi:type="dcterms:W3CDTF">2008</dc:date>
+      <dcndl:price>850円</dcndl:price>
+      <dc:identifier xsi:type="dcndl:ISBN">978-4-89309-431-5</dc:identifier>
+      <dc:identifier xsi:type="dcndl:NDLBibID">000009209109</dc:identifier>
+      <dc:identifier xsi:type="dcndl:JPNO">21350311</dc:identifier>
+      <dcndl:genre>児童図書</dcndl:genre>
+      <dc:subject xsi:type="dcndl:NDLC">Y17</dc:subject>
+      <dc:subject xsi:type="dcndl:NDC9">726.6</dc:subject>
+      <dc:description> 2008</dc:description>
+    </item>
+    <item>
+      <title>だるまさんが</title>
+      <link>https://ndlsearch.ndl.go.jp/books/R100000002-I029271854</link>
+      <description><![CDATA[<p>ブロンズ新社,2008,978-4-89309-431-5<p><ul><li>タイトル：だるまさんが</li><li>タイトル（読み）：ダルマサン ガ</li><li>責任表示：かがくいひろし さく</li><li>シリーズ名：かがくいひろしのファーストブック ; 1</li><li>シリーズ名（読み）：カガクイ ヒロシ ノ ファースト ブック ; 1</li><li>NDC(10)：726.6</li></ul>]]></description>
+      <author>加岳井, 広, 1955-2009,かがくいひろし さく</author>
+      <category>図書</category>
+      <category>紙</category>
+      <guid isPermaLink="true">https://ndlsearch.ndl.go.jp/books/R100000002-I029271854</guid>
+      <dc:title>だるまさんが</dc:title>
+      <dcndl:titleTranscription>ダルマサン ガ</dcndl:titleTranscription>
+      <dc:creator>加岳井, 広, 1955-2009</dc:creator>
+      <dcndl:seriesTitle>かがくいひろしのファーストブック ; 1</dcndl:seriesTitle>
+      <dcndl:seriesTitleTranscription>カガクイ ヒロシ ノ ファースト ブック ; 1</dcndl:seriesTitleTranscription>
+      <dc:publisher>ブロンズ新社</dc:publisher>
+      <dc:date xsi:type="dcterms:W3CDTF">2008</dc:date>
+      <dc:identifier xsi:type="dcndl:ISBN">978-4-89309-431-5</dc:identifier>
+      <dc:identifier xsi:type="dcndl:NDLBibID">029271854</dc:identifier>
+      <dc:identifier xsi:type="dcndl:JPNO">23129070</dc:identifier>
+      <dcndl:genre>児童図書</dcndl:genre>
+      <dc:subject xsi:type="dcndl:NDLC">Y17</dc:subject>
+      <dc:subject xsi:type="dcndl:NDC10">726.6</dc:subject>
+      <dc:description>付属資料: 1枚 : だるまさん身長計</dc:description>
+      <dc:description> 2008</dc:description>
+    </item>
+  </channel>
+</rss>

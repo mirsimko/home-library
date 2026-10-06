@@ -1,0 +1,58 @@
+Z> Connecting...OK.
+Sent initrequest.
+Connection accepted by v3 target.
+Z> Z> Sent searchRequest.
+Received SearchResponse.
+Search was a success.
+Number of hits: 8, setno 1
+records returned: 0
+Z> Sent presentRequest (1+3).
+Records: 3
+[NKC-UTF]Record type: USmarc
+01658nam a2200481 i 4500
+001 nkc20233578648
+008 240805s2024    xr a   a      000 j cze  
+020    $a 978-80-242-9721-7 $q (vázáno)
+100 1  $a Miler, Zdeněk, $d 1921-2011 $7 jk01081695 $4 aut $4 ill
+245 10 $a Krtek a zajíček / $c Zdeněk Miler
+264  1 $a V Praze : $b Euromedia Group, a.s., $c 2024
+490 1  $a Pikola
+520 2  $a Příběh o Krtkovi, který tentokrát pomůže ztracenému zajíčkovi najít maminku.
+521 8  $a Pro děti od 2 let
+655  7 $a české příběhy $7 fd133973 $2 czenas
+655  7 $a leporela $7 fd132727 $2 czenas
+655  7 $a publikace pro děti $7 fd133156 $2 czenas
+655  9 $a Czech stories $2 eczenas
+655  9 $a folding picture-books $2 eczenas
+655  9 $a children's literature $2 eczenas
+
+[NKC-UTF]Record type: USmarc
+01301nam a2200397 i 4500
+001 nkc20162777681
+008 160212s2016    xr a   a      000 1 cze  
+020    $a 978-80-242-5277-3 $q (vázáno)
+100 1  $a Miler, Zdeněk, $d 1921-2011 $7 jk01081695 $4 aut $4 ill
+245 10 $a Krtek a zajíček / $c Zdeněk Miler
+264  1 $a Praha : $b Knižní klub, $c 2016
+521 8  $a Pro děti od dvou let
+655  7 $a leporela $7 fd132727 $2 czenas
+655  7 $a publikace pro děti $7 fd133156 $2 czenas
+655  9 $a folding picture-books $2 eczenas
+655  9 $a children's literature $2 eczenas
+
+[NKC-UTF]Record type: USmarc
+03679nam a2200793 aa4500
+001 zpk20142614070
+008 140819s2012    cc ac  a      000 j chio 
+020    $a 978-7-5448-2587-0 $q (soubor v krabici)
+020    $a 978-7-5448-2576-4 $q (sv. 1 ; $q brož.)
+020    $a 978-7-5448-2575-7 $q (sv. 2 ; $q brož.)
+100 1  $a Miler, Zdeněk, $d 1921-2011 $7 jk01081695 $4 aut $4 ill
+245 10 $a Yan shu de gu shi : $b jing dian ban / $c Zideneike Mile hui
+655  7 $a české příběhy $7 fd133973 $2 czenas
+655  7 $a publikace pro děti $7 fd133156 $2 czenas
+700 12 $a Miler, Zdeněk, $d 1921-2011. $t Jak krtek uzdravil myšku. $l Čínsky $7 aun2014835921
+700 12 $a Miler, Zdeněk, $d 1921-2011. $t Krtek a paraplíčko. $l Čínsky $7 aun2014835923
+
+Z> See you later, alligator.
+
