@@ -109,11 +109,13 @@ def _forget(photo_dir):
 
 
 def tile_photo(photo, photo_dir):
-    """Stage 1: cut the tiles. If the stored files are of another photo, they are removed first."""
+    """Stage 1: cut the tiles. Unless they come out as the stored ones, the reads of those are removed."""
     photo_dir = Path(photo_dir)
-    if _manifest_of(photo, photo_dir) is None:
+    stored = _tiles_hash(photo_dir) if (photo_dir / "tiles.json").exists() else None
+    manifest = cut_tiles(photo, photo_dir)
+    if _tiles_hash(photo_dir) != stored:  # another photo, or the same one cut or encoded differently
         _forget(photo_dir)
-    return cut_tiles(photo, photo_dir)
+    return manifest
 
 
 def read_photo(photo, work_root=DEFAULT_WORK_ROOT, *, readers=READERS, force=False, run=subprocess.run):
