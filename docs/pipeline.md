@@ -23,12 +23,12 @@ uv run hl run ~/photos/shelf-1.jpg ~/photos/shelf-2.jpg --location "Box 3"
 This cuts the tiles, reads each photo twice, merges the reads, looks the titles up, picks catalogue records and writes `records.csv` and `records.json` into each photo's work directory. It prints one line per photo and exits with 1 if any photo failed.
 
 - **Needs:** [uv](https://docs.astral.sh/uv/); the `codex` command, logged in, for GPT-6.1 Sol; the `pi` command with access to Muse Spark 1.3 for the second read; and `yaz-client` (Ubuntu package `yaz`) for Czech look-ups. Without `yaz-client` Czech titles are simply not looked up.
-- **Starting again is safe.** A read that is already stored is not repeated, and a look-up that was answered is not asked again. If a run fails half way, run the same command again. A stored read is reused only for the tiles it was made from, and a stored pick only for the readings and candidates it was made for; a pick step that failed is made again. `--force` starts a photo from nothing, and so does a changed photo file: every file made from the old photo is removed first.
+- **Starting again is safe.** A read that is already stored is not repeated, and a look-up that was answered is not asked again. If a run fails half way, run the same command again. A stored read is reused only for the tiles it was made from, and a stored pick only for the readings and candidates it was made for; a pick step that failed is made again. `--force` starts a photo from nothing, and so does a changed photo file: the reads and every file made from them are removed first. The catalogues' answers in `lookup/cache/` belong to a title and not to a photo, so a changed photo keeps them; `--force` removes them too.
 - **One work directory per file name.** Two different photos with the same file name cannot both be kept: the later one replaces the earlier one's results, and two of them in one run are refused.
 - **`--second-reader codex-exec`** makes the second read another Sol session in place of Muse Spark.
 - **What runs at once.** The two reads of one photo run at the same time. Photos are read one after another. The look-ups and the pick of a photo run in the background while the next photo is read, because one NDL title search takes 10 to 15 seconds.
 - **From an agent harness,** start a run of several photos as a background job: a photo takes about two minutes, and a harness may cap a single command at ten.
-- Each stage is also a command of its own, for repeating one step: `hl tiles`, `hl read`, `hl merge`, `hl lookup`, `hl pick`, `hl export`. Each takes the photo and the same `--work-root`. `hl gather <read-id>` prints one read's answers for all photos in the shape the scoring tools of the 2026-10-05 tests take.
+- Each stage is also a command of its own, for repeating one step: `hl tiles`, `hl read`, `hl merge`, `hl lookup`, `hl pick`, `hl export`. Each takes the photo and the same `--work-root`. `hl tiles` on another photo under the same name removes the old photo's reads and what was made from them, and `hl merge` refuses a read made from other tiles than the stored ones. `hl gather <read-id>` prints one read's answers for all photos in the shape the scoring tools of the 2026-10-05 tests take.
 
 ## Measured on 2026-10-05
 
@@ -97,7 +97,7 @@ One directory per photo, named after the photo's file stem:
   records.csv
 ```
 
-The default work root is `~/home-library/work/`. Every stage refuses to write inside a git checkout, so a clone of this repository must not itself be `~/home-library`; pass `--work-root` in that case.
+The default work root is `~/home-library/work/`. Every stage refuses to write inside a git checkout, so a clone of this repository must not itself be `~/home-library`; pass `--work-root` in that case. The check looks at every directory above the work root: if the home directory is itself a checkout, as with a dotfiles repository, every work root under it is refused and `--work-root` has to point outside it.
 
 ## Stage 1: tiles (`home_library.tiles`)
 
@@ -263,7 +263,7 @@ Fetches candidate catalogue records for a title, from the sources tested in [boo
 - The language is matched without regard to case and surrounding white space. A language with no source is not looked up, and the record says so.
 - Requests to one HTTP source are paced: NDL caps concurrent requests, and Open Library allows one request per second. The whole run makes its look-ups one after another.
 - A source that fails or is not installed never stops the run. Its status is recorded, any failure ends that source's ladder for the book, and a source that could not be reached or was rate limited is not asked again for the rest of the photo: its later queries are recorded with the step `skipped`.
-- The answer of each step, including "no match", is cached in `lookup/cache/`, so a repeated run makes no request. A failure is never cached.
+- The answer of each step, including "no match", is cached in `lookup/cache/`, so a repeated run makes no request. A failure is never cached. A cached answer does not expire: to ask the catalogues again, run with `--force` or delete `lookup/cache/`.
 
 A candidate:
 
