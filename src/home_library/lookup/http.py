@@ -46,6 +46,8 @@ class Fetcher:
             with contextlib.closing(self.opener(request, TIMEOUT_SECONDS)) as response:
                 return response.read()
         except urllib.error.HTTPError as error:
+            if error.fp is not None:  # the error is itself an answer, with an open socket
+                error.close()
             if error.code == 429:
                 failure = RateLimited("%s answered HTTP 429 twice" % host)
                 return self._pause_then_retry(url, host, retry, error, failure)
