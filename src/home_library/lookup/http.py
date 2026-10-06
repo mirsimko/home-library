@@ -1,4 +1,5 @@
 """The real fetch for the HTTP sources: polite, paced and retrying. Standard library only."""
+import contextlib
 import time
 import urllib.error
 import urllib.request
@@ -42,7 +43,8 @@ class Fetcher:
         self._wait_for_turn(host)
         request = urllib.request.Request(url, headers={"User-Agent": USER_AGENT})
         try:
-            return self.opener(request, TIMEOUT_SECONDS).read()
+            with contextlib.closing(self.opener(request, TIMEOUT_SECONDS)) as response:
+                return response.read()
         except urllib.error.HTTPError as error:
             if error.code == 429:
                 failure = RateLimited("%s answered HTTP 429 twice" % host)
