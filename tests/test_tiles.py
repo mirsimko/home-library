@@ -93,6 +93,17 @@ def test_manifest_bytes_match_the_files_on_disk(tmp_path):
         p.stat().st_size for p in (out / "tiles").iterdir())
 
 
+def test_the_manifest_names_the_hash_of_each_tile_file(tmp_path):
+    # PR review: with sizes only, tiles encoded differently at the same sizes looked like the stored ones.
+    photo = make_photo(tmp_path / "shelf-1.jpg", (2000, 2400))
+    out = tmp_path / "out"
+
+    manifest = cut_tiles(photo, out)
+
+    for tile in manifest["tiles"]:
+        assert tile["sha256"] == hashlib.sha256((out / "tiles" / tile["file"]).read_bytes()).hexdigest()
+
+
 def test_manifest_sha256_is_the_hash_of_the_photo_file(tmp_path):
     photo = make_photo(tmp_path / "shelf-1.jpg", (1200, 900))
 
