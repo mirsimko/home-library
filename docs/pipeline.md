@@ -354,4 +354,4 @@ The pick step gives a model the reading and its candidates as text and asks whic
 - `notes` says in plain words why the row needs a look: which read gave a solo title, that two reads divide the words differently, a guess the model put in `inferred`, a catalogue that could not be asked or does not cover the language, why no catalogue record was matched, an ambiguous match with its reason, a catalogue age or audience note.
 - `records.json` is a list of objects with every column. `needs_review` is a boolean and `candidate_count` an integer there.
 - `records.csv` is UTF-8 with a byte-order mark, so that a spreadsheet program opens Japanese and Czech text correctly. `needs_review` is written as `true`.
-- In the CSV, a cell that starts with `=`, `+`, `-` or `@` is prefixed with a single quote, so a spreadsheet does not run it as a formula.
+- In the CSV, a cell that starts with `=`, `+`, `-`, `@`, a tab or a carriage return is prefixed with a single quote, so a spreadsheet does not run it as a formula.

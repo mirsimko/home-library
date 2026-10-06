@@ -12,9 +12,13 @@ NDL = "https://ndlsearch.ndl.go.jp/api/opensearch?isbn=9784893094315&dpid=iss-nd
 class Response:
     def __init__(self, body):
         self.body = body
+        self.closed = False
 
     def read(self):
         return self.body
+
+    def close(self):
+        self.closed = True
 
 
 class FakeWorld:
@@ -25,6 +29,7 @@ class FakeWorld:
         self.sleeps = []
         self.script = list(script)
         self.requests = []  # (url, headers, timeout, time)
+        self.responses = []
 
     def clock(self):
         return self.now
@@ -38,7 +43,8 @@ class FakeWorld:
         step = self.script.pop(0) if len(self.script) > 1 else self.script[0]
         if isinstance(step, Exception):
             raise step
-        return Response(step)
+        self.responses.append(Response(step))
+        return self.responses[-1]
 
     def fetcher(self):
         return Fetcher(opener=self.opener, clock=self.clock, sleep=self.sleep)
@@ -54,6 +60,14 @@ def test_fetcher_returns_the_body_and_identifies_itself_with_a_30_second_timeout
     assert url == NDL
     assert headers["User-agent"] == "home-library/0.1 (+https://github.com/mirsimko/home-library)"
     assert timeout == 30
+
+
+def test_fetcher_closes_the_response_once_it_is_read():
+    world = FakeWorld(b"<rss/>")
+
+    world.fetcher()(NDL)
+
+    assert [response.closed for response in world.responses] == [True]
 
 
 @pytest.mark.parametrize(
