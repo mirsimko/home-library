@@ -421,3 +421,58 @@ def test_three_failed_heartbeats_in_a_row_count_as_a_lost_lease(tmp_path):
     db = store.open(root)
     assert capture(db)["job"]["status"] == "running" and store.observations(db) == []
     db.close()
+
+
+class StopAfterWaits(__import__("threading").Event):
+    """A stop signal that records each idle wait and fires on the n-th."""
+
+    def __init__(self, after):
+        super().__init__()
+        self.after, self.waits = after, []
+
+    def wait(self, timeout=None):
+        self.waits.append(timeout)
+        if len(self.waits) >= self.after:
+            self.set()
+        return self.is_set()
+
+
+def test_a_database_error_when_claiming_waits_and_the_loop_goes_on(tmp_path, monkeypatch):
+    import sqlite3
+
+    root = tmp_path / "private"
+    queued(root)
+    real, calls = store.claim_job, []
+
+    def locked(db, now=None):
+        calls.append(now)
+        if len(calls) == 1:
+            raise sqlite3.OperationalError("database is locked")
+        return real(db, now)
+
+    monkeypatch.setattr(store, "claim_job", locked)
+    stop = StopAfterWaits(2)  # the wait after the error, then the wait once the queue is empty
+    assert worker.run(root, popen=Child(), stop=stop, idle_wait=7) == 0
+    assert stop.waits == [7, 7]
+    db = store.open(root)
+    assert capture(db)["job"]["status"] == "done"
+    db.close()
+
+
+@pytest.mark.parametrize("name", ["finish_job", "fail_job"])
+def test_a_database_error_when_finishing_or_failing_is_logged_by_job_id_and_does_not_crash(tmp_path, monkeypatch, caplog, name):
+    import sqlite3
+
+    root = tmp_path / "private"
+    queued(root)
+
+    def locked(*args, **kwargs):
+        raise sqlite3.OperationalError("database is locked")
+
+    monkeypatch.setattr(store, name, locked)
+    child = Child(returncode=0 if name == "finish_job" else 3)
+    assert worker.run(root, once=True, popen=child) == 0
+    assert "job 1" in caplog.text and "The Copper Comet" not in caplog.text
+    db = store.open(root)
+    assert capture(db)["job"]["status"] == "running"  # the lease runs out and another attempt takes over
+    db.close()
