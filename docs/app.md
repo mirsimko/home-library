@@ -63,7 +63,8 @@ Every function takes the connection first. A rule that is broken raises `store.I
   - `update_book(id, version, changes, by)` applies a partial change if `version` is current, then adds one to it. A field that is not a book field is refused.
   - `move_books(ids, location_id=None, state=None, by)` changes location or state of several books in one transaction.
   - `book(id)`; `search_books(query="", state=None, location_id=None, tag=None, limit=50, offset=0)`. A query of three or more characters uses `books_fts`; a shorter one, which is common for Japanese titles, uses a `LIKE` match on the same columns. Results sort by `sort_key`, then `title`.
-- **Export:** `export_rows()` gives every book as a flat dict with the location's name, in the column order of spec 2.1.
+- **Export:** `export_rows()` gives every book as a flat dict with the location's name, in the column order of spec 2.1. `export_books()` adds sorted, distinct `capture_ids` from its observations and its chosen cover, in the same database snapshot.
+- **Web reads:** `capture(id)` returns the stored receipt plus `open_observations`; `captures(ids=None)` lists these newest first; `jobs()` lists jobs in id order; `health()` gives the title-free worker summary; `observation(id)` returns one row with its record and capture. `validate_capture(...)` checks the same metadata as `add_capture` without writing, and returns the stored receipt when the id and hash already exist. Upload publication calls it before moving the file, then calls `add_capture`, which checks again in its write transaction.
 
 ## Worker (`home_library.worker`, `hl worker`)
 
@@ -102,23 +103,28 @@ Both write the same `records.json` and `records.csv` as `hl run`, in the photo's
 
 ## Access
 
-The app listens on `127.0.0.1` only. Tailscale Serve puts it on the tailnet with HTTPS and adds the header `Tailscale-User-Login` to each request (plan D9).
+The app listens on `127.0.0.1` by default. Another bind address requires an explicit `hl serve --host` argument. Tailscale Serve puts it on the tailnet with HTTPS and adds the header `Tailscale-User-Login` to each request (plan D9).
 
 - A browser request is let in when its `Tailscale-User-Login` is one of the logins in `$HL_USERS` (comma-separated). That login is the person's name in the catalog (`uploaded_by`, `created_by`, `reviewed_by`).
 - An agent sends `Authorization: Bearer <token>`. The token is let in when its sha256 equals the one in `<data-root>/agent-token`; its name in the catalog is `agent`. `hl token` makes a new token, prints it once and stores its hash, which also revokes the old one.
 - Everything else gets 401, except `GET /health`.
 - `$HL_DEV_USER` lets every request in as that login, for local development. `hl serve` refuses it unless it listens on `127.0.0.1`.
 - **Cross-site requests.** A browser request with a method other than GET or HEAD must carry an `Origin` header whose host is the request's own `Host`, or `Sec-Fetch-Site: same-origin`. Otherwise it gets 403. Bearer-token requests are exempt.
-- Photos and tiles are served only to requests that are let in.
+- Photos and tiles are served only to requests that are let in. The authenticated name is available to handlers as `request.state.user`.
+
+When access methods overlap, a valid bearer token names `agent`; otherwise the development identity takes precedence over an allowed Tailscale login. An invalid bearer token does not grant the cross-site exemption. Origin comparison uses the HTTP or HTTPS authority, including any explicit port, without regard to case; credentials in the Origin are refused. Development browser writes still need the same-origin proof.
+
+`hl serve` trusts proxy headers only from `127.0.0.1`. Its HTTP access log is disabled because a search URL can contain a title.
 
 ## HTTP API
 
-JSON in and out. Errors are `{"error": "<message>"}` with 400 (`Invalid`), 404, 409 (`Conflict`) or 413/415 for uploads.
+JSON in and out. Errors are `{"error": "<message>"}` with 400 (`Invalid`), 404, 409 (`Conflict`) or 413/415 for uploads. Malformed JSON, path and query values also return 400. An upload's missing location is a 400 metadata error with the store's message; a missing resource requested by URL returns 404. A file-system failure during upload returns 503 with a message inviting a retry.
 
 | Method and path | Does |
 |---|---|
 | `POST /api/captures` | Multipart: `file`, `id`, `kind`, `location_id`, `state` (default `Active`), optional `group_id`. Returns 201 with the receipt, or 200 with the stored receipt for a repeated id. JPEG, PNG and WebP only, found from the file's content, not its name or declared type (415 otherwise); at most 40 MB (413). The file is written to a temporary file, flushed to disk and moved into place before the capture is recorded. |
 | `GET /api/captures` | Recent captures with their job status and how many open observations each has. `?ids=a,b` limits it to those captures. |
+| `GET /api/captures/{id}` | One stored receipt with its job, open observation count and `image` metadata. |
 | `GET /api/captures/{id}/photo` | The photo. |
 | `GET /api/captures/{id}/tiles/{file}` | One tile image of the capture's work directory; `file` must be a tile name the manifest lists. |
 | `GET /api/jobs` | The queue, with the worker's last heartbeat. `POST /api/jobs/{id}/retry`. |
@@ -135,6 +141,18 @@ JSON in and out. Errors are `{"error": "<message>"}` with 400 (`Invalid`), 404, 
 | `GET /export.csv`, `GET /export.json` | Every book. CSV in UTF-8 with a byte-order mark and the formula escaping of `records.py`. JSON with each book's capture ids. |
 | `GET /health` | `{"ok": true, "worker_seen": "<last heartbeat or null>", "queued": n, "failed": n}`. No titles. |
 
+### Response and file details
+
+- Listings are JSON arrays. Capture entries contain `capture`, `job`, `created: false`, `open_observations` and, when relevant, `duplicate_of`. The capture list has no implicit limit and is ordered newest first. An empty `ids=` selects none.
+- Upload receipts and single-capture details include `image: {"width": n, "height": n, "format": "JPEG|PNG|WEBP", "orientation": n|null}`. Width and height describe the original pixels before EXIF rotation. Uploads keep the original bytes, including metadata. The original filename is stored only as text.
+- Here 40 MB means 40,000,000 file bytes, excluding multipart fields and framing. Multipart bytes stream directly into `captures/.incoming/*.tmp`; the limit is checked before each file chunk is written. The temporary file is flushed and fsynced before `os.replace` publishes it. A Linux/WSL file lock in `.incoming/.lock` serialises publication, including simultaneous retries; a repeated id never replaces its stored file. Temporary files are removed after rejection or completion, and a failed store insert removes the newly published file.
+- Photo and tile responses carry their image media type and `Cache-Control: private`. A tile must have a plain basename listed in `tiles.json`, and resolve inside that capture's `tiles/` directory.
+- Candidate matching uses the observation's zero-based `row`, rather than its title: the pipeline writes one record per merged item first, in item order. Unreadable, unparsed, incomplete and no-barcode rows have no candidates. Missing or unfinished look-up output yields an empty list. This keeps the pipeline records and stored observations unchanged.
+- Creating a location or book, and approving observations, returns 201. Other catalogue writes return 200 with the store result. Dismissal returns the dismissed observations; attachment returns the existing book.
+- Both exports use spec 2.1 field order and catalogue sort order. JSON adds `capture_ids`, including evidence and the chosen cover, or an empty list for a manually entered book without either. CSV uses the escaping in `records.py` and writes null cells as empty text. Both responses carry `Cache-Control: private`.
+
+`home_library.web.create_app(data_root, users, dev_user=None)` constructs the protected app. Its empty `templates/` and `static/` directories are included in the wheel with placeholder files for the page slice. This slice adds no HTML routes.
+
 ## Pages
 
 Server-rendered with Jinja2; HTMX (vendored under `static/`, no CDN) for partial updates; a little plain JavaScript on the capture page. Every page works on a phone, and the review pages are made for a keyboard.
@@ -150,7 +168,7 @@ Server-rendered with Jinja2; HTMX (vendored under `static/`, no CDN) for partial
 
 | Command | Does |
 |---|---|
-| `hl serve [--port 8765]` | The web app on `127.0.0.1`. |
+| `hl serve [--data-root PATH] [--port 8765] [--host 127.0.0.1]` | The web app, with environment access settings and local proxy trust. |
 | `hl worker [--once]` | The worker. |
 | `hl cover`, `hl barcode` | The pipeline for one cover or barcode photo. |
 | `hl catalog books [--q] [--state] [--location]` | List books as JSON lines. |
@@ -163,6 +181,8 @@ Server-rendered with Jinja2; HTMX (vendored under `static/`, no CDN) for partial
 | `hl backup <dest>` | A consistent copy of the data root: `catalog.db` through `VACUUM INTO`, then `captures/` and `work/` copied with `rsync -a`. |
 
 All of them take `--data-root`, defaulting to `$HL_DATA` or `~/home-library/`.
+
+`hl serve` reads comma-separated `HL_USERS` and optional `HL_DEV_USER`. Without `--host`, it uses `127.0.0.1`; if `UVICORN_HOST` names another address, startup is refused until `--host` is supplied explicitly. `HL_DEV_USER` is refused with any host other than the literal `127.0.0.1`, including `localhost` and `::1`. Ports must be between 1 and 65535.
 
 ## Running it
 
