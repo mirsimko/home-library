@@ -39,7 +39,7 @@ def _steps(source, title, author, isbn):
     steps = []
     if isbn:
         steps.append(("isbn", [isbn], lambda fetch: source.by_isbn(isbn, fetch)))
-    if hasattr(source, "search"):
+    if title.strip() and hasattr(source, "search"):
         if author:
             steps.append(("title+author", [title, author], lambda fetch: source.search(title, author, fetch)))
         steps.append(("title", [title], lambda fetch: source.search(title, None, fetch)))
