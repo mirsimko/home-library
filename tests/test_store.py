@@ -15,7 +15,7 @@ def test_open_creates_private_directories_and_migrates_once(tmp_path):
         assert db.execute("PRAGMA journal_mode").fetchone()[0] == "wal"
         assert db.execute("PRAGMA foreign_keys").fetchone()[0] == 1
         version = db.execute("PRAGMA user_version").fetchone()[0]
-        assert version == 4
+        assert version == 5
         db.execute("INSERT INTO locations (name, kind, created_at) VALUES ('Box A', 'box', '2026-01-01T00:00:00Z')")
     with store.open(root) as db:
         assert db.execute("PRAGMA user_version").fetchone()[0] == version
@@ -505,3 +505,20 @@ def test_search_filters_tags_state_location_and_pages_in_catalog_order(db):
     assert store.search_books(db, location_id=box["id"]) == [second, third]
     assert store.search_books(db, "invented", state="Gone", tag="moon") == [third]
     assert store.search_books(db, limit=1, offset=1) == [second]
+
+
+def test_fts_tracks_updates_and_deletes_of_all_its_columns(db):
+    original = typed_book(db, title="First vessel", sort_key="first key", author="First writer",
+                          series="First series", isbn="111111")
+    changed = store.update_book(db, original["id"], 1, {"title": "Second vessel", "sort_key": "second key",
+                                "author": "Second writer", "series": "Second series", "isbn": "222222"},
+                                "editor", now=NOW)
+    for query in ("First", "111111"):
+        assert store.search_books(db, query) == []
+    for query in ("Second vessel", "second key", "Second writer", "Second series", "222222"):
+        assert store.search_books(db, query) == [changed]
+    # There is no public delete function; exercise the specified database trigger directly.
+    with db:
+        db.execute("DELETE FROM books WHERE id = ?", (original["id"],))
+    assert store.search_books(db, "Second") == []
+    assert db.execute("SELECT rowid FROM books_fts WHERE books_fts MATCH 'Second'").fetchall() == []
