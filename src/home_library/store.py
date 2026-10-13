@@ -1,5 +1,6 @@
 """The private catalog and job queue, shared by every app writer."""
 import sqlite3
+from datetime import datetime, timezone
 from importlib.resources import files
 
 from home_library.workspace import refuse_inside_checkout
@@ -12,6 +13,7 @@ def open(data_root):
     for directory in ("captures", "work"):
         (root / directory).mkdir(exist_ok=True)
     db = sqlite3.connect(root / "catalog.db")
+    db.row_factory = sqlite3.Row
     try:
         db.execute("PRAGMA foreign_keys = ON")
         db.execute("PRAGMA journal_mode = WAL")
@@ -35,3 +37,78 @@ def open(data_root):
         db.close()
         raise
     return db
+
+
+class Invalid(ValueError):
+    """A request breaks a catalog rule."""
+
+
+class Conflict(ValueError):
+    """Another writer has already changed the requested row."""
+
+
+class NotFound(LookupError):
+    """The requested catalog row does not exist."""
+
+
+def _stamp(now=None):
+    value = now() if callable(now) else now
+    if value is None:
+        value = datetime.now(timezone.utc)
+    if isinstance(value, str):
+        try:
+            value = datetime.fromisoformat(value.replace("Z", "+00:00"))
+        except ValueError as error:
+            raise Invalid("now must be an ISO 8601 time with a timezone") from error
+    if not isinstance(value, datetime) or value.tzinfo is None or value.utcoffset() is None:
+        raise Invalid("now must include a timezone")
+    return value.astimezone(timezone.utc).isoformat().replace("+00:00", "Z")
+
+
+def _name(value, field):
+    if not isinstance(value, str) or not value.strip():
+        raise Invalid(f"{field} must not be empty")
+    return value.strip()
+
+
+def _choice(value, choices, field):
+    if value not in choices:
+        raise Invalid(f"{field} must be one of {', '.join(choices)}")
+    return value
+
+
+def _get(db, table, id):
+    row = db.execute(f"SELECT * FROM {table} WHERE id = ?", (id,)).fetchone()
+    if row is None:
+        raise NotFound(f"{table}: {id} was not found")
+    return dict(row)
+
+
+def add_location(db, name, kind, *, now=None):
+    """Add a shelf or box under a unique name."""
+    name = _name(name, "location name")
+    _choice(kind, ("shelf", "box"), "location kind")
+    try:
+        with db:
+            id = db.execute("INSERT INTO locations (name, kind, created_at) VALUES (?, ?, ?)",
+                            (name, kind, _stamp(now))).lastrowid
+    except sqlite3.IntegrityError as error:
+        raise Invalid("a location with that name already exists") from error
+    return _get(db, "locations", id)
+
+
+def rename_location(db, id, name):
+    """Rename a location without changing which books belong to it."""
+    name = _name(name, "location name")
+    _get(db, "locations", id)
+    try:
+        with db:
+            db.execute("UPDATE locations SET name = ? WHERE id = ?", (name, id))
+    except sqlite3.IntegrityError as error:
+        raise Invalid("a location with that name already exists") from error
+    return _get(db, "locations", id)
+
+
+def locations(db):
+    """List locations by name."""
+    return [dict(row) for row in db.execute("SELECT * FROM locations ORDER BY name")]
