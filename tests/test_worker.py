@@ -294,7 +294,7 @@ def test_timeout_stops_a_real_fake_hl_and_its_descendant(tmp_path):
             child.wait()
 
 
-def test_stopping_kills_the_child_and_leaves_its_job_running_for_takeover(tmp_path):
+def test_stopping_kills_the_child_and_gives_its_job_back_to_the_queue(tmp_path):
     import signal
     import threading
     from concurrent.futures import ThreadPoolExecutor
@@ -313,8 +313,9 @@ def test_stopping_kills_the_child_and_leaves_its_job_running_for_takeover(tmp_pa
     assert child.kills == [(child.pid, signal.SIGKILL)]
     db = store.open(root)
     job = capture(db)["job"]
-    assert job["status"] == "running" and job["owner"] and job["attempts"] == 1
+    assert job["status"] == "queued" and job["owner"] is None and job["attempts"] == 0
     assert job["error"] is None and store.observations(db) == []
+    assert store.claim_job(db)["attempts"] == 1  # a restart takes it at once, and the stop cost nothing
     db.close()
 
 

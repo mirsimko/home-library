@@ -1,4 +1,4 @@
-"""Real OS signals stop a worker without completing or failing an interrupted lease."""
+"""Real OS signals stop a worker and give an interrupted job back, without completing or failing it."""
 import os
 import signal
 import subprocess
@@ -50,7 +50,8 @@ def test_signals_stop_active_and_idle_workers_and_restore_handlers(tmp_path, sig
         if active:
             db = store.open(root)
             job = capture(db)["job"]
-            assert job["status"] == "running" and job["owner"] and job["error"] is None
+            assert job["status"] == "queued" and job["owner"] is None and job["attempts"] == 0
+            assert job["error"] is None
             assert store.observations(db) == []
             db.close()
             child = Path(f"/proc/{pid_file.read_text()}/stat")

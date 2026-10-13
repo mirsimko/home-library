@@ -219,3 +219,38 @@ def test_two_connections_contending_for_one_job_never_share_an_owner(db, tmp_pat
     claimed = [result for result in results if result is not None]
     assert len(claimed) == 1 and claimed[0]["attempts"] == 1
     assert capture(db)["job"]["owner"] == claimed[0]["owner"]
+
+
+def test_releasing_a_job_puts_it_back_in_the_queue_without_costing_an_attempt(db):
+    capture(db)
+    job = store.claim_job(db, NOW)
+    assert job["attempts"] == 1
+    released = store.release_job(db, job["id"], job["owner"])
+    assert (released["status"], released["attempts"], released["owner"], released["heartbeat_at"]) == (
+        "queued", 0, None, None)
+    assert released["error"] is None
+    again = store.claim_job(db, NOW)  # no need to wait for a lease to go stale
+    assert again["id"] == job["id"] and again["attempts"] == 1 and again["owner"] != job["owner"]
+
+
+def test_a_release_gives_back_one_attempt_and_never_goes_below_zero(db):
+    capture(db)
+    store.claim_job(db, NOW)
+    second = store.claim_job(db, "2026-01-02T03:24:06Z")
+    assert second["attempts"] == 2
+    assert store.release_job(db, second["id"], second["owner"])["attempts"] == 1
+    db.execute("UPDATE jobs SET status = 'running', owner = 'x', attempts = 0 WHERE id = ?", (second["id"],))
+    assert store.release_job(db, second["id"], "x")["attempts"] == 0
+
+
+def test_only_the_owner_of_a_running_job_can_release_it(db):
+    capture(db)
+    job = store.claim_job(db, NOW)
+    for owner in ("someone else", None):
+        with pytest.raises(store.Conflict):
+            store.release_job(db, job["id"], owner)
+    with pytest.raises(store.NotFound):
+        store.release_job(db, 999, job["owner"])
+    store.finish_job(db, job["id"], job["owner"], [record()], NOW)
+    with pytest.raises(store.Conflict):
+        store.release_job(db, job["id"], job["owner"])
