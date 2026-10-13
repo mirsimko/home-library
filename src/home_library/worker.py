@@ -24,7 +24,7 @@ def _job(db, root, job, popen, heartbeat_interval, timeout, killpg, stop):
     capture = job["capture"]
     photo = root / "captures" / f"{capture['id']}.{EXTENSIONS[capture['media_type']]}"
     command = [sys.executable, "-m", "home_library.cli", "--work-root", str(root / "work"),
-               COMMANDS[capture["kind"]], str(photo), "--location", job["location"]]
+               COMMANDS[capture["kind"]], str(photo), f"--location={job['location']}"]
     LOG.info("job %s capture %s started", job["id"], capture["id"])
     with tempfile.TemporaryFile() as errors:
         try:
