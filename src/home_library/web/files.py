@@ -18,7 +18,8 @@ def photo_path(root, capture):
 
 def checked_file(path, directory):
     """Reject missing files and symlinks that lead outside the expected directory."""
-    if not path.is_file() or not path.resolve().is_relative_to(directory):
+    # Both sides are resolved: the directory itself may be a symlink (captures on another disk).
+    if not path.is_file() or not path.resolve().is_relative_to(directory.resolve()):
         raise HTTPException(404, "the image was not found")
     return path
 
