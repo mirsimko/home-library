@@ -4,7 +4,7 @@ import re
 
 _DECODER = json.JSONDecoder()
 _OUTER_OBJECT = re.compile(r'\{\s*"')
-_FIELDS = ["n", "where", "visible", "title", "other_text", "language", "readable", "confidence", "inferred"]
+_FIELDS = ["n", "where", "visible", "title", "other_text", "language", "readable", "confidence", "inferred", "author"]
 _WHITESPACE = " \t\r\n"
 
 
