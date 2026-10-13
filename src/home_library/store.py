@@ -454,3 +454,18 @@ def dismiss(db, observation_ids, by):
             db.execute("UPDATE observations SET status = 'dismissed' WHERE id = ?", (observation["id"],))
             observation["status"] = "dismissed"
         return evidence
+
+
+def move_books(db, ids, location_id=None, state=None, *, by, now=None):
+    """Move selected copies or change their state, with no partial batch on failure."""
+    changes = {}
+    if location_id is not None:
+        changes["location_id"] = location_id
+    if state is not None:
+        changes["state"] = state
+    if not changes:
+        raise Invalid("choose a location or state for the books")
+    with _write(db):
+        originals = [book(db, id) for id in _ids(ids)]
+        stamp = _stamp(now)
+        return [_update_book(db, original, changes, by, stamp) for original in originals]
