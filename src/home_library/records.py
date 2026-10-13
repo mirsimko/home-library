@@ -40,7 +40,8 @@ def _unreadable_record(photo: str, entry: dict, location: str) -> dict:
         notes += f" Guess: {entry['inferred']}."
     record = _empty()
     record.update(photo=photo, location=location, language=entry["language"], read_status="unreadable",
-                  other_text=entry["other_text"], where=entry["where"], read_ids=entry["read_id"], notes=notes)
+                  other_text=entry["other_text"], where=entry["where"], read_ids=entry["read_id"], notes=notes,
+                  author=entry.get("author", ""))
     return record
 
 
