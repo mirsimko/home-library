@@ -201,15 +201,19 @@ def _claimed(db, id):
 def claim_job(db, now=None):
     """Lease the oldest eligible job, retiring workers that stopped three times."""
     stamp = _stamp(now)
-    cutoff = (datetime.fromisoformat(stamp.replace("Z", "+00:00")) - timedelta(minutes=20)).isoformat()
+    cutoff = datetime.fromisoformat(stamp.replace("Z", "+00:00")) - timedelta(minutes=20)
     with _write(db):
-        while True:
-            row = db.execute("""SELECT jobs.* FROM jobs JOIN captures ON captures.id = jobs.capture_id
-                                WHERE jobs.status = 'queued' OR
-                                    (jobs.status = 'running' AND julianday(heartbeat_at) < julianday(?))
-                                ORDER BY julianday(captures.created_at), jobs.id LIMIT 1""", (cutoff,)).fetchone()
-            if row is None:
-                return None
+        candidates = db.execute("""SELECT jobs.*, captures.created_at AS uploaded_at FROM jobs
+                                   JOIN captures ON captures.id = jobs.capture_id
+                                   WHERE jobs.status IN ('queued', 'running')""").fetchall()
+        # SQLite's date functions round to milliseconds; lease boundaries need the full saved precision.
+        candidates.sort(key=lambda row: (datetime.fromisoformat(row["uploaded_at"].replace("Z", "+00:00")),
+                                         row["id"]))
+        for row in candidates:
+            if row["status"] == "running" and row["heartbeat_at"] is not None:
+                heartbeat_at = datetime.fromisoformat(row["heartbeat_at"].replace("Z", "+00:00"))
+                if heartbeat_at >= cutoff:
+                    continue
             if row["attempts"] >= 3:
                 db.execute("""UPDATE jobs SET status = 'failed', owner = NULL, finished_at = ?,
                               error = 'the worker stopped responding 3 times' WHERE id = ?""", (stamp, row["id"]))
@@ -218,6 +222,7 @@ def claim_job(db, now=None):
                           heartbeat_at = ?, started_at = ?, finished_at = NULL WHERE id = ?""",
                        (str(uuid4()), stamp, stamp, row["id"]))
             return _claimed(db, row["id"])
+        return None
 
 
 def heartbeat(db, job_id, owner, now=None):
