@@ -47,6 +47,8 @@ Windows reaches the app in WSL through WSL's localhost forwarding. Check it once
 
 In the Tailscale admin console, the access rules should let only the two family logins reach battlebox on port 443.
 
+**Accepted risk.** The app trusts the `Tailscale-User-Login` header, and it can only tell that a request came from `127.0.0.1`, not who sent it. Any process on battlebox, in Windows or in WSL, that can reach `127.0.0.1:8765` can send that header with a family login and be let in as that person. That is accepted for a family machine whose only users are the family; it would not be acceptable on a shared one.
+
 ### Starting WSL at boot
 
 The two scheduled tasks that keep WSL alive today (`WSLKeeper`, `WSLKeepalive`) run only while `ai` is logged in. For the app to come back after a Windows update with nobody logged in, add a task that starts at boot whether or not anyone is logged on. As an administrator:
@@ -80,10 +82,11 @@ rsync -a --delete battlebox-wsl:home-library-backup/ ~/home-library-backup/
 ### Restoring
 
 1. Stop the services: `systemctl --user stop hl-web hl-worker`.
-2. Copy the backup into place: `rsync -a ~/home-library-backup/ ~/home-library/`.
-3. Start them again. Jobs that were `running` when the backup was taken are taken over once their heartbeat is stale, after at most 20 minutes.
+2. Remove the old write-ahead files, so that SQLite does not replay them over the restored database: `rm -f ~/home-library/catalog.db-wal ~/home-library/catalog.db-shm`.
+3. Copy the backup into place: `rsync -a ~/home-library-backup/ ~/home-library/`.
+4. Start them again. Jobs that were `running` when the backup was taken are taken over once their heartbeat is stale, after at most 20 minutes.
 
-Try a restore once on Battlebook, into an empty directory with `HL_DATA` pointing at it and `HL_DEV_USER` set, and check that the books and photos are there.
+Try a restore once on Battlebook, into an empty directory with `HL_DATA` pointing at it and `HL_DEV_USER` set (and `HL_USERS` unset; `hl serve` refuses both), and check that the books and photos are there.
 
 ## Updating
 
