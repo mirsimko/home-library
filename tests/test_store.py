@@ -522,3 +522,26 @@ def test_fts_tracks_updates_and_deletes_of_all_its_columns(db):
         db.execute("DELETE FROM books WHERE id = ?", (original["id"],))
     assert store.search_books(db, "Second") == []
     assert db.execute("SELECT rowid FROM books_fts WHERE books_fts MATCH 'Second'").fetchall() == []
+
+
+EXPORT_COLUMNS = (
+    "title sort_key author illustrator publisher year language isbn series age_from age_to tags "
+    "state location cover_photo source source_id needs_review notes").split()
+
+
+def test_export_is_flat_in_spec_order_and_uses_the_current_location_name(db):
+    assert store.export_rows(db) == []
+    capture(db, kind="cover", media_type="image/png")
+    typed_book(db, title="=Invented title", sort_key="b", illustrator="Test Artist", publisher="Test Press",
+               year="2020", language="cs", isbn="9780000000002", series="Test Series", age_from=3, age_to=8,
+               tags="moon", state="Gone", cover_capture_id=CAPTURE_ID, source="test", source_id="42", notes="typed")
+    store.rename_location(db, 1, "New Shelf")
+    (row,) = store.export_rows(db)
+    assert list(row) == EXPORT_COLUMNS
+    assert row == dict(zip(EXPORT_COLUMNS, ["=Invented title", "b", "", "Test Artist", "Test Press", "2020", "cs",
+                       "9780000000002", "Test Series", 3, 8, "moon", "Gone", "New Shelf",
+                       f"captures/{CAPTURE_ID}.png", "test", "42", False, "typed"]))
+    typed_book(db, title="The Glass Canoe", sort_key="a")
+    exported = store.export_rows(db)
+    assert [r["title"] for r in exported] == ["The Glass Canoe", "=Invented title"]
+    assert exported[0]["cover_photo"] == "" and exported[0]["age_from"] is None
