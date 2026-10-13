@@ -1,6 +1,7 @@
 """Catalog commands for agents and people, using the same store as the app."""
 import argparse
 import csv
+import io
 import json
 import sqlite3
 import subprocess
@@ -85,12 +86,18 @@ def _catalog(db, args):
         if args.json:
             _print(rows)
         else:
-            sys.stdout.write("\ufeff")
-            writer = csv.writer(sys.stdout)
+            output = io.StringIO(newline="")
+            writer = csv.writer(output)
             columns = records.COLUMNS[:19]
             writer.writerow(columns)
             for row in rows:
                 writer.writerow([records.csv_cell(row[key] if row[key] is not None else "") for key in columns])
+            if hasattr(sys.stdout, "buffer"):
+                sys.stdout.flush()
+                sys.stdout.buffer.write(output.getvalue().encode("utf-8-sig"))
+                sys.stdout.buffer.flush()
+            else:
+                sys.stdout.write("\ufeff" + output.getvalue())
     elif action == "show":
         _print(store.book(db, args.id))
     elif action == "edit":
