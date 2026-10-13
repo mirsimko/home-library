@@ -660,3 +660,70 @@ def test_claim_order_and_the_stale_boundary_preserve_microseconds(db):
     assert store.claim_job(db, "2026-01-02T03:24:05Z") is None
     reclaimed = store.claim_job(db, "2026-01-02T03:24:05.000001Z")
     assert reclaimed["id"] == first["id"] and reclaimed["attempts"] == 2
+
+
+def migration_directory(tmp_path):
+    directory = tmp_path / "migrations"
+    directory.mkdir()
+    for resource in files("home_library.migrations").iterdir():
+        if resource.name.endswith(".sql"):
+            (directory / resource.name).write_text(resource.read_text(encoding="utf-8"))
+    return directory
+
+
+def test_reopening_applies_all_sql_in_a_new_migration_and_preserves_data(tmp_path, monkeypatch):
+    root = tmp_path / "private"
+    db = store.open(root)
+    store.add_location(db, "Shelf A", "shelf", now=NOW)
+    db.close()
+    directory = migration_directory(tmp_path)
+    (directory / "0006_extra.sql").write_text(
+        "CREATE TABLE extra (name TEXT); INSERT INTO extra VALUES ('test; text');\n"
+        "INSERT INTO extra VALUES ('unterminated but valid final statement')")
+    monkeypatch.setattr(store, "files", lambda package: directory)
+    db = store.open(root)
+    assert db.execute("PRAGMA user_version").fetchone()[0] == 6
+    assert [r[0] for r in db.execute("SELECT name FROM extra")] == ["test; text", "unterminated but valid final statement"]
+    assert store.locations(db)[0]["name"] == "Shelf A"
+    db.close()
+    db = store.open(root)
+    assert db.execute("SELECT count(*) FROM extra").fetchone()[0] == 2
+    db.close()
+
+
+def test_a_failed_migration_rolls_back_its_schema_and_version(tmp_path, monkeypatch):
+    import sqlite3
+
+    root = tmp_path / "private"
+    store.open(root).close()
+    directory = migration_directory(tmp_path)
+    (directory / "0006_broken.sql").write_text("CREATE TABLE extra (id INTEGER);\nCREATE TABLE broken (id")
+    monkeypatch.setattr(store, "files", lambda package: directory)
+    with pytest.raises(sqlite3.Error):
+        store.open(root)
+    db = sqlite3.connect(root / "catalog.db")
+    assert db.execute("PRAGMA user_version").fetchone()[0] == 5
+    assert db.execute("SELECT name FROM sqlite_master WHERE name = 'extra'").fetchall() == []
+    db.close()
+
+
+def test_two_connections_contending_for_one_job_never_share_an_owner(db, tmp_path):
+    from concurrent.futures import ThreadPoolExecutor
+    from threading import Barrier
+
+    capture(db)
+    ready = Barrier(2)
+
+    def worker():
+        connection = store.open(tmp_path / "private")
+        try:
+            ready.wait(timeout=5)
+            return store.claim_job(connection, NOW)
+        finally:
+            connection.close()
+
+    with ThreadPoolExecutor(max_workers=2) as workers:
+        results = list(workers.map(lambda _: worker(), range(2)))
+    claimed = [result for result in results if result is not None]
+    assert len(claimed) == 1 and claimed[0]["attempts"] == 1
+    assert capture(db)["job"]["owner"] == claimed[0]["owner"]
