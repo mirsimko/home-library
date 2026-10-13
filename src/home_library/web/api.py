@@ -88,3 +88,23 @@ def capture_photo(request: Request, id: str):
 @router.get("/api/captures/{id}/tiles/{file}")
 def capture_tile(request: Request, id: str, file: str):
     return tile_response(request.app.state.data_root, call(request, store.capture, id)["capture"], file)
+
+
+@router.get("/api/observations")
+def observations(request: Request, status: str = "open", capture_id: str | None = None):
+    return call(request, store.observations, status, capture_id)
+
+
+@router.post("/api/observations/approve", status_code=201)
+def approve(request: Request, body: dict):
+    return call(request, store.approve, body.get("observation_ids"), body.get("fields", {}), request.state.user)
+
+
+@router.post("/api/observations/attach")
+def attach(request: Request, body: dict):
+    return call(request, store.attach, body.get("observation_ids"), body.get("book_id"), request.state.user)
+
+
+@router.post("/api/observations/dismiss")
+def dismiss(request: Request, body: dict):
+    return call(request, store.dismiss, body.get("observation_ids"), request.state.user)
