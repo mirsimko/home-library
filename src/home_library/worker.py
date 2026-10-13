@@ -17,7 +17,7 @@ EXTENSIONS = {"image/jpeg": "jpg", "image/png": "png", "image/webp": "webp"}
 COMMANDS = {"shelf": "run", "cover": "cover", "barcode": "barcode"}
 
 
-def _job(db, root, job, popen, heartbeat_interval, timeout, killpg):
+def _job(db, root, job, popen, heartbeat_interval, timeout, killpg, stop):
     capture = job["capture"]
     photo = root / "captures" / f"{capture['id']}.{EXTENSIONS[capture['media_type']]}"
     command = [sys.executable, "-m", "home_library.cli", "--work-root", str(root / "work"),
@@ -34,17 +34,14 @@ def _job(db, root, job, popen, heartbeat_interval, timeout, killpg):
             lease = threading.Thread(target=_heartbeat,
                                      args=(root, job, child, done, lost, heartbeat_interval, killpg))
             lease.start()
-            timed_out = False
             try:
-                try:
-                    code = child.wait(timeout=timeout)
-                except subprocess.TimeoutExpired:
-                    timed_out = True
-                    _kill(child, killpg)
-                    code = child.wait()
+                code, timed_out = _wait(child, timeout, stop, lost, killpg)
             finally:
                 done.set()
                 lease.join()
+            if stop.is_set():
+                LOG.info("job %s stopped for takeover", job["id"])
+                return
             if lost.is_set():
                 LOG.warning("job %s no longer owned", job["id"])
                 return
@@ -63,6 +60,24 @@ def _job(db, root, job, popen, heartbeat_interval, timeout, killpg):
             _fail(db, job, errors, "records.json is missing, unreadable or invalid, or the child could not start")
             return
     LOG.info("job %s capture %s finished", job["id"], capture["id"])
+
+
+def _wait(child, timeout, stop, lost, killpg):
+    deadline = time.monotonic() + timeout
+    while True:
+        if stop.is_set():
+            _kill(child, killpg)
+            return child.wait(), False
+        if lost.is_set():
+            return child.wait(), False
+        remaining = deadline - time.monotonic()
+        if remaining <= 0:
+            _kill(child, killpg)
+            return child.wait(), True
+        try:
+            return child.wait(timeout=min(0.1, remaining)), False
+        except subprocess.TimeoutExpired:
+            pass
 
 
 def _kill(child, killpg):
@@ -94,15 +109,18 @@ def _fail(db, job, errors, reason):
         LOG.warning("job %s no longer owned", job["id"])
 
 
-def run(root=None, *, once=False, popen=subprocess.Popen, heartbeat_interval=30, timeout=1200, killpg=os.killpg):
+def run(root=None, *, once=False, popen=subprocess.Popen, heartbeat_interval=30, timeout=1200,
+        idle_wait=5, killpg=os.killpg, stop=None):
     """Handle at most one job with once, or keep draining the queue in order."""
     root = maintenance.data_root(root)
+    stop = stop if stop is not None else threading.Event()
     with closing(store.open(root)) as db:
-        while True:
+        while not stop.is_set():
             job = store.claim_job(db)
             if job is not None:
-                _job(db, root, job, popen, heartbeat_interval, timeout, killpg)
+                _job(db, root, job, popen, heartbeat_interval, timeout, killpg, stop)
             if once:
                 return 0
             if job is None:
-                time.sleep(5)
+                stop.wait(idle_wait)
+    return 0
