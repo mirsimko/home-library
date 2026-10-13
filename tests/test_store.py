@@ -444,3 +444,29 @@ def test_a_rerun_never_changes_used_dismissed_or_edited_books(db):
     assert store.observations(db, "used") == used
     assert store.observations(db, "dismissed") == dismissed
     assert [r["id"] for r in store.observations(db, "superseded")] == [rows[2]["id"]]
+
+
+def test_books_move_together_and_each_editing_version_advances(db):
+    first = typed_book(db)
+    second = typed_book(db, title="The Glass Canoe")
+    box = store.add_location(db, "Box B", "box", now=NOW)
+    moved = store.move_books(db, [second["id"], first["id"]], box["id"], "Stored", by="mover", now=NOW)
+    assert [r["id"] for r in moved] == [second["id"], first["id"]]
+    for book in moved:
+        assert (book["location_id"], book["state"], book["version"], book["reviewed_by"]) == (
+            box["id"], "Stored", 2, "mover")
+    gone = store.move_books(db, [first["id"]], state="Gone", by="mover", now=NOW)[0]
+    assert gone["location_id"] == box["id"] and gone["version"] == 3
+    relocated = store.move_books(db, [second["id"]], location_id=1, by="mover", now=NOW)[0]
+    assert relocated["state"] == "Stored" and relocated["location_id"] == 1
+
+
+def test_an_invalid_batch_move_changes_no_book(db):
+    original = typed_book(db)
+    for ids, changes, error in [([original["id"], 999], {"state": "Stored"}, store.NotFound),
+                               ([original["id"]], {"location_id": 999}, store.NotFound),
+                               ([original["id"]], {"state": "lost"}, store.Invalid),
+                               ([original["id"]], {}, store.Invalid), ([], {"state": "Gone"}, store.Invalid)]:
+        with pytest.raises(error):
+            store.move_books(db, ids, **changes, by="mover", now=NOW)
+        assert store.book(db, original["id"]) == original
