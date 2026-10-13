@@ -232,3 +232,63 @@ def test_lost_heartbeat_kills_the_group_and_imports_nothing(tmp_path):
         finally:
             child.exited.set()
     assert child.kills == [(child.pid, signal.SIGKILL)]
+
+
+def test_timeout_kills_the_process_group_and_keeps_the_stderr_tail(tmp_path):
+    import signal
+
+    root = tmp_path / "private"
+    queued(root)
+    child = HangingChild()
+    child.stderr = "timeout detail"
+    assert worker.run(root, once=True, popen=child, timeout=0.03, killpg=child.killpg) == 0
+    assert child.kills == [(child.pid, signal.SIGKILL)]
+    db = store.open(root)
+    job = capture(db)["job"]
+    assert job["status"] == "queued" and "timeout" in job["error"]
+    assert job["error"].endswith("timeout detail") and store.observations(db) == []
+    db.close()
+
+
+def test_timeout_stops_a_real_fake_hl_and_its_descendant(tmp_path):
+    import os
+    import signal
+    import subprocess
+
+    root = tmp_path / "private"
+    queued(root)
+    script = tmp_path / "fake_hl.py"
+    pid_file = tmp_path / "descendant.pid"
+    script.write_text(
+        "import subprocess, sys, time\n"
+        "from pathlib import Path\n"
+        "child = subprocess.Popen([sys.executable, '-c', 'import time; time.sleep(60)'])\n"
+        f"Path({str(pid_file)!r}).write_text(str(child.pid))\n"
+        "print('invented hang diagnostic', file=sys.stderr, flush=True)\n"
+        "time.sleep(60)\n")
+    children, groups = [], []
+
+    def popen(command, **kwargs):
+        child = subprocess.Popen([sys.executable, str(script), *command[3:]], **kwargs)
+        children.append(child)
+        return child
+
+    def killpg(pid, sig):
+        groups.append((pid, sig))
+        os.killpg(pid, sig)
+
+    try:
+        assert worker.run(root, once=True, popen=popen, timeout=0.5, killpg=killpg) == 0
+        assert groups == [(children[0].pid, signal.SIGKILL)]
+        assert children[0].returncode == -signal.SIGKILL
+        descendant = Path(f"/proc/{pid_file.read_text()}/stat")
+        assert not descendant.exists() or descendant.read_text().split()[2] == "Z"
+        db = store.open(root)
+        assert capture(db)["job"]["error"].endswith("invented hang diagnostic\n")
+        assert store.observations(db) == []
+        db.close()
+    finally:
+        for child in children:
+            if child.poll() is None:
+                os.killpg(child.pid, signal.SIGKILL)
+            child.wait()
