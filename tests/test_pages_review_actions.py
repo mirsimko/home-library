@@ -53,6 +53,39 @@ def test_the_inbox_is_shown_when_nothing_else_is_open(client, tmp_path):
     assert "Approved as a new book" in client.get(response.headers["hx-redirect"]).text
 
 
+def test_unticking_a_paired_photo_takes_its_values_out_of_the_form_and_leaves_it_open(client, tmp_path):
+    shelf, cover, barcode = stock(tmp_path)
+    cover_id, barcode_id = cover[0]["id"], barcode[0]["id"]
+    both = client.get(f"/review/{cover_id}").text
+    assert form_values(both, "approve-form")["isbn"] == "9780000000002"
+    (box,) = [item for item in tags(both, "input") if item.get("name") == "also"]
+    assert "checked" in box and box["hx-get"] == f"/review/{cover_id}" and box["hx-target"] == "#review"
+    alone = client.get(f"/review/{cover_id}?without={barcode_id}").text
+    values = form_values(alone, "approve-form")
+    assert values["isbn"] == "" and values["title"] == "Paper Moon" and "also" not in values
+    (box,) = [item for item in tags(alone, "input") if item.get("name") == "also"]
+    assert box["value"] == str(barcode_id) and "checked" not in box
+    assert f'href="/review/{barcode_id}"' in alone  # still listed as the same book, only not ticked
+    response = client.post(f"/review/{cover_id}/approve", data=values, headers=HX)
+    assert response.status_code == 204
+    with closing(store.open(tmp_path)) as db:
+        assert store.book(db, 1)["isbn"] == ""
+    assert statuses(tmp_path)[cover_id] == "used" and statuses(tmp_path)[barcode_id] == "open"
+
+
+def test_ticking_both_photos_again_uses_both_and_a_bad_exclusion_is_refused(client, tmp_path):
+    _, cover, barcode = stock(tmp_path)
+    cover_id, barcode_id = cover[0]["id"], barcode[0]["id"]
+    barcode_alone = client.get(f"/review/{barcode_id}?without={cover_id}").text
+    assert form_values(barcode_alone, "approve-form")["title"] == "Paper Moon (catalogue)"
+    unrelated = client.get(f"/review/{cover_id}?without=999")  # not a paired photo: nothing to leave out
+    assert unrelated.status_code == 200 and form_values(unrelated.text, "approve-form")["isbn"] == "9780000000002"
+    assert client.get(f"/review/{cover_id}?without=abc").status_code == 400
+    values = form_values(client.get(f"/review/{cover_id}").text, "approve-form")
+    assert client.post(f"/review/{cover_id}/approve", data=values, headers=HX).status_code == 204
+    assert statuses(tmp_path)[cover_id] == "used" and statuses(tmp_path)[barcode_id] == "used"
+
+
 def test_a_refused_approval_says_why_and_changes_nothing(client, tmp_path):
     shelf, cover, _ = stock(tmp_path)
     values = form_values(client.get(f"/review/{shelf[0]['id']}").text, "approve-form")
