@@ -49,3 +49,66 @@ def test_token_refuses_checkout_and_symlinked_checkout_target(tmp_path, capsys):
         output = capsys.readouterr()
         assert output.out == "" and "git checkout" in output.err
     assert not (checkout / "secret").exists()
+
+
+@pytest.mark.parametrize("position", ["before", "after", "environment"])
+def test_backup_vacuums_rows_and_mirrors_private_directories(tmp_path, capsys, monkeypatch, position):
+    import sqlite3
+
+    from store_helpers import typed_book
+
+    from home_library import store
+
+    root, destination = tmp_path / "private", tmp_path / "backup"
+    db = store.open(root)
+    original = typed_book(db)
+    db.close()
+    destination.mkdir()
+    (destination / "catalog.db").write_text("older snapshot")
+    monkeypatch.setenv("HL_DATA", str(root))
+    args = ["backup", str(destination)]
+    if position != "environment":
+        index = 0 if position == "before" else len(args)
+        args[index:index] = ["--data-root", str(root)]
+    calls = []
+
+    def rsync(command, **kwargs):
+        calls.append((command, kwargs))
+
+    assert main(args, run=rsync) == 0
+    assert capsys.readouterr().err == ""
+    copy = sqlite3.connect(destination / "catalog.db")
+    copy.row_factory = sqlite3.Row
+    assert store.book(copy, original["id"]) == original
+    copy.close()
+    assert [call[0] for call in calls] == [
+        ["rsync", "-a", "--delete", f"{root}/captures/", f"{destination}/captures/"],
+        ["rsync", "-a", "--delete", f"{root}/work/", f"{destination}/work/"],
+    ]
+    assert all(call[1]["check"] is True for call in calls)
+
+
+def test_backup_refuses_checkout_and_overlapping_roots_before_copying(tmp_path, capsys):
+    root = tmp_path / "private"
+    root.mkdir()
+    checkout = tmp_path / "repo"
+    checkout.mkdir()
+    (checkout / ".git").write_text("gitdir: elsewhere")
+    called = []
+    for destination in (checkout / "backup", root, root / "backup", tmp_path):
+        assert main(["backup", str(destination), "--data-root", str(root)],
+                    run=lambda *a, **k: called.append(a)) == 1
+        assert len(capsys.readouterr().err.splitlines()) == 1
+    assert called == [] and not (root / "catalog.db").exists()
+
+
+def test_backup_reports_rsync_failure(tmp_path, capsys):
+    import subprocess
+
+    def rsync(command, **kwargs):
+        raise subprocess.CalledProcessError(12, command)
+
+    assert main(["backup", str(tmp_path / "backup"), "--data-root", str(tmp_path / "private")], run=rsync) == 1
+    output = capsys.readouterr()
+    assert output.out == "" and len(output.err.splitlines()) == 1
+    assert "12" in output.err
