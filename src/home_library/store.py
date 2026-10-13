@@ -553,3 +553,40 @@ def export_rows(db):
                         needs_review=bool(row["needs_review"]), notes=row["notes"])
         result.append(exported)
     return result
+
+
+def capture(db, id):
+    """Read a stored receipt with the number of observations still open."""
+    result = _receipt(db, id, False)
+    result["open_observations"] = db.execute(
+        "SELECT count(*) FROM observations WHERE capture_id = ? AND status = 'open'", (id,)).fetchone()[0]
+    return result
+
+
+def captures(db, ids=None):
+    """List recent receipts, optionally restricted to client capture ids."""
+    if ids is not None:
+        for id in ids:
+            _uuid(id, "capture id")
+    rows = db.execute("SELECT id FROM captures ORDER BY created_at DESC, id DESC")
+    return [capture(db, row[0]) for row in rows if ids is None or row[0] in ids]
+
+
+def jobs(db):
+    """List jobs in queue order with their saved heartbeats."""
+    return [dict(row) for row in db.execute("SELECT * FROM jobs ORDER BY id")]
+
+
+def health(db):
+    """Summarise worker activity without exposing any catalogue text."""
+    row = db.execute("""SELECT max(heartbeat_at), coalesce(sum(status = 'queued'), 0),
+                        coalesce(sum(status = 'failed'), 0) FROM jobs""").fetchone()
+    return {"ok": True, "worker_seen": row[0], "queued": row[1], "failed": row[2]}
+
+
+def observation(db, id):
+    """Read one observation, including its original record and capture."""
+    result = _get(db, "observations", id)
+    result["record"] = json.loads(result["record"])
+    result["capture"] = _get(db, "captures", result["capture_id"])
+    return result
