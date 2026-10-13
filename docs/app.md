@@ -2,7 +2,7 @@
 
 This is the contract of the app built on top of the shelf-photo pipeline: the catalog store, the job queue and worker, cover and barcode photos, the HTTP API, the pages, and how it runs. Why it is shaped this way is in the [implementation plan](plans/home-library-app-plan-20261013.html) (decisions D1 to D10) and the [framework research](research/app-framework.md). The pipeline's own contract is [pipeline.md](pipeline.md); the app depends only on the `hl` command line and the files it writes.
 
-Status: being built on branch `app/phase-1`, 2026-10-13. Not yet tried on the real devices (plan, phase 0).
+Status: built on branch `app/phase-1` on 2026-10-13 and reviewed by a council of three models (Opus 5.5, Fable 5.1, Grok 4.7). Not yet tried on the real devices (plan, phase 0).
 
 ## Rules that hold everywhere
 
