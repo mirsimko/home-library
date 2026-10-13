@@ -129,6 +129,9 @@ def test_a_japanese_isbn_uses_the_first_matching_catalogue_record_without_a_mode
     assert (record["candidate_count"], record["pick_verdict"], record["location"]) == (4, "match", "Shelf 3")
     assert summary["review"] == 1 and summary["seconds"] == {}
     assert len(asked) == 2 and all("isbn=9784000000000" in url for url in asked)
+    (book,) = json.loads((directory / "lookup/candidates.json").read_text())["books"]
+    assert (book["item"], book["title"], book["language"]) == (0, "", "ja")
+    assert all(query["step"] == "isbn" for query in book["queries"])
 
     asked.clear()
     barcode_photo(photo, tmp_path / "work", fetch=fetch, run_yaz=no_yaz)
