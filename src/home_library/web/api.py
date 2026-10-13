@@ -6,7 +6,8 @@ from starlette.concurrency import run_in_threadpool
 from starlette.responses import JSONResponse
 
 from home_library import store
-from home_library.web.uploads import incoming, publish
+from home_library.web.files import checked_file, photo_path, photo_response, tile_response
+from home_library.web.uploads import image_info, incoming, publish
 
 router = APIRouter()
 
@@ -64,3 +65,26 @@ async def add_capture(request: Request):
     async with incoming(request) as (path, upload):
         receipt = await run_in_threadpool(publish, request.app.state.data_root, path, upload, request.state.user)
     return JSONResponse(receipt, status_code=201 if receipt["created"] else 200)
+
+
+@router.get("/api/captures")
+def captures(request: Request, ids: str | None = None):
+    return call(request, store.captures, None if ids is None else ids.split(",") if ids else [])
+
+
+@router.get("/api/captures/{id}")
+def capture(request: Request, id: str):
+    receipt = call(request, store.capture, id)
+    root = request.app.state.data_root
+    path = checked_file(photo_path(root, receipt["capture"]), root / "captures")
+    return {**receipt, "image": image_info(path)}
+
+
+@router.get("/api/captures/{id}/photo")
+def capture_photo(request: Request, id: str):
+    return photo_response(request.app.state.data_root, call(request, store.capture, id)["capture"])
+
+
+@router.get("/api/captures/{id}/tiles/{file}")
+def capture_tile(request: Request, id: str, file: str):
+    return tile_response(request.app.state.data_root, call(request, store.capture, id)["capture"], file)
