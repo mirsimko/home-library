@@ -497,3 +497,23 @@ def search_books(db, query="", state=None, location_id=None, tag=None, limit=50,
     rows = db.execute(f"SELECT * FROM books{where} ORDER BY sort_key, title, id LIMIT ? OFFSET ?",
                       (*parameters, limit, offset))
     return [{**dict(row), "needs_review": bool(row["needs_review"])} for row in rows]
+
+
+def export_rows(db):
+    """Export catalog fields in spec 2.1 order, with portable relative cover paths."""
+    result = []
+    for row in db.execute("""SELECT books.*, locations.name AS location, captures.media_type AS cover_media
+                             FROM books JOIN locations ON locations.id = books.location_id
+                             LEFT JOIN captures ON captures.id = books.cover_capture_id
+                             ORDER BY sort_key, title, books.id"""):
+        exported = {key: row[key] for key in TEXT_FIELDS[:9]}
+        exported.update(age_from=row["age_from"], age_to=row["age_to"], tags=row["tags"], state=row["state"],
+                        location=row["location"])
+        cover = ""
+        if row["cover_capture_id"]:
+            extension = {"image/jpeg": "jpg", "image/png": "png", "image/webp": "webp"}[row["cover_media"]]
+            cover = f"captures/{row['cover_capture_id']}.{extension}"
+        exported.update(cover_photo=cover, source=row["source"], source_id=row["source_id"],
+                        needs_review=bool(row["needs_review"]), notes=row["notes"])
+        result.append(exported)
+    return result
