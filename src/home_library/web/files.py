@@ -49,3 +49,20 @@ def tile_response(root, capture, name):
     if media_type is None:
         raise HTTPException(404, "the tile was not found")
     return FileResponse(path, media_type=media_type, headers={"Cache-Control": "private"})
+
+
+def observation_candidates(root, observation):
+    """Match merged item indices by record order, never by a possibly repeated title."""
+    # Pipeline records begin with merged items; unreadable and loss rows follow them.
+    if observation["read_status"] in ("unreadable", "unparsed", "incomplete", "no_barcode"):
+        return []
+    item = observation["row"]
+    found = read_json(root / "work" / observation["capture_id"] / "lookup" / "candidates.json", {})
+    books = found.get("books", []) if isinstance(found, dict) else []
+    if not isinstance(books, list):
+        return []
+    for book in books:
+        if isinstance(book, dict) and type(book.get("item")) is int and book["item"] == item:
+            candidates = book.get("candidates", [])
+            return candidates if isinstance(candidates, list) else []
+    return []

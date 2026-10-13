@@ -6,7 +6,13 @@ from starlette.concurrency import run_in_threadpool
 from starlette.responses import JSONResponse
 
 from home_library import store
-from home_library.web.files import checked_file, photo_path, photo_response, tile_response
+from home_library.web.files import (
+    checked_file,
+    observation_candidates,
+    photo_path,
+    photo_response,
+    tile_response,
+)
 from home_library.web.uploads import image_info, incoming, publish
 
 router = APIRouter()
@@ -108,3 +114,8 @@ def attach(request: Request, body: dict):
 @router.post("/api/observations/dismiss")
 def dismiss(request: Request, body: dict):
     return call(request, store.dismiss, body.get("observation_ids"), request.state.user)
+
+
+@router.get("/api/observations/{id}/candidates")
+def candidates(request: Request, id: int):
+    return observation_candidates(request.app.state.data_root, call(request, store.observation, id))
