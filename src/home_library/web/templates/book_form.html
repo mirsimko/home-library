@@ -1,0 +1,65 @@
+{% extends "base.html" %}
+{% block title %}{% if book %}{{ book.title }}{% else %}Add a book{% endif %} · Home library{% endblock %}
+{% block main %}
+<p class="small"><a href="/books">‹ Books</a></p>
+<h1{% if book %}{{ lang(v.language) }}{% endif %}>{% if book %}{{ book.title }}{% else %}Add a book by hand{% endif %}</h1>
+{% if notice %}<div class="notice" role="status">{{ notice }}</div>{% endif %}
+{% if error %}<div class="notice error" role="alert">{{ error }}</div>{% endif %}
+
+<div class="detail-grid" style="grid-template-columns: {% if book and book.cover_capture_id %}minmax(10rem, 1fr) 3fr{% else %}1fr{% endif %}">
+  {% if book and book.cover_capture_id %}
+  <div class="evidence">
+    <a href="/api/captures/{{ book.cover_capture_id }}/photo"><img src="/api/captures/{{ book.cover_capture_id }}/photo" alt="Cover of {{ book.title }}"></a>
+  </div>
+  {% endif %}
+  <form id="book-form" method="post" action="{% if book %}/books/{{ book.id }}{% else %}/books{% endif %}" class="card">
+    {% if book %}<input type="hidden" name="version" value="{{ book.version }}">{% endif %}
+    {% if next %}<input type="hidden" name="next" value="{{ next }}">{% endif %}
+    {% for key in fields %}<input type="hidden" name="was_{{ key }}" value="{{ was[key] }}">{% endfor %}
+    <div class="fields">
+      <div class="span"><label for="f-title">Title</label><input type="text" id="f-title" name="title" value="{{ v.title }}"{{ lang(v.language) }} required></div>
+      <div><label for="f-sort_key">Sort as</label><input type="text" id="f-sort_key" name="sort_key" value="{{ v.sort_key }}"{{ lang(v.language) }}></div>
+      <div><label for="f-author">Author</label><input type="text" id="f-author" name="author" value="{{ v.author }}"{{ lang(v.language) }}></div>
+      <div><label for="f-illustrator">Illustrator</label><input type="text" id="f-illustrator" name="illustrator" value="{{ v.illustrator }}"{{ lang(v.language) }}></div>
+      <div><label for="f-publisher">Publisher</label><input type="text" id="f-publisher" name="publisher" value="{{ v.publisher }}"{{ lang(v.language) }}></div>
+      <div><label for="f-year">Year</label><input type="text" id="f-year" name="year" value="{{ v.year }}" inputmode="numeric"></div>
+      <div><label for="f-language">Language</label><input type="text" id="f-language" name="language" value="{{ v.language }}" list="languages" placeholder="ja, cs, en"></div>
+      <div><label for="f-isbn">ISBN</label><input type="text" id="f-isbn" name="isbn" value="{{ v.isbn }}" inputmode="numeric"></div>
+      <div><label for="f-series">Series</label><input type="text" id="f-series" name="series" value="{{ v.series }}"{{ lang(v.language) }}></div>
+      <div><label for="f-age_from">Age from</label><input type="number" id="f-age_from" name="age_from" value="{{ v.age_from }}" min="0" max="99"></div>
+      <div><label for="f-age_to">Age to</label><input type="number" id="f-age_to" name="age_to" value="{{ v.age_to }}" min="0" max="99"></div>
+      <div class="span"><label for="f-tags">Tags (comma separated)</label><input type="text" id="f-tags" name="tags" value="{{ v.tags }}"></div>
+      <div>
+        <label for="f-location_id">Location</label>
+        <select id="f-location_id" name="location_id">
+          {% for location in locations %}<option value="{{ location.id }}"{% if v.location_id == location.id|string %} selected{% endif %}>{{ location.name }}</option>{% endfor %}
+        </select>
+      </div>
+      <div>
+        <label for="f-state">State</label>
+        <select id="f-state" name="state">
+          {% for state in states %}<option value="{{ state }}"{% if v.state == state %} selected{% endif %}>{{ state }}</option>{% endfor %}
+        </select>
+      </div>
+      <div class="span">
+        <input type="hidden" name="needs_review" value="0">
+        <label class="check"><input type="checkbox" name="needs_review" value="1"{% if v.needs_review == "1" %} checked{% endif %}> Needs another look</label>
+      </div>
+      <div class="span"><label for="f-notes">Notes</label><textarea id="f-notes" name="notes"{{ lang(v.language) }}>{{ v.notes }}</textarea></div>
+      <details class="span">
+        <summary>Where the record came from</summary>
+        <div class="fields">
+          <div><label for="f-source">Catalogue source</label><input type="text" id="f-source" name="source" value="{{ v.source }}"></div>
+          <div><label for="f-source_id">Catalogue id</label><input type="text" id="f-source_id" name="source_id" value="{{ v.source_id }}"></div>
+        </div>
+      </details>
+    </div>
+    <datalist id="languages"><option value="ja"><option value="cs"><option value="en"><option value="zh"></datalist>
+    <div class="actions">
+      <button type="submit" class="primary">{% if book %}Save{% else %}Add book{% endif %}</button>
+      <a class="button" href="{% if book %}/books/{{ book.id }}{% else %}/books{% endif %}">Cancel</a>
+    </div>
+    {% if book %}<p class="muted small">Added by {{ book.created_by }}{% if book.reviewed_by %}, last looked at by {{ book.reviewed_by }}{% endif %} · version {{ book.version }}</p>{% endif %}
+  </form>
+</div>
+{% endblock %}

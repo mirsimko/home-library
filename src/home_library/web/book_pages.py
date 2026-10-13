@@ -5,7 +5,7 @@ from fastapi import APIRouter, Depends, Request
 
 from home_library import store
 from home_library.web.api import call
-from home_library.web.render import form_data, render
+from home_library.web.render import form_data, redirect, render
 
 router = APIRouter()
 
@@ -81,3 +81,113 @@ def move_books(request: Request, form=Depends(form_data)):
     if state:
         words.append(f"changed {'them' if location else count_of('book', len(moved))} to {state}")
     return results(request, values, message=" and ".join(words) if location else words[0].capitalize())
+
+
+# ---- adding and editing one book ----------------------------------------------------------------------
+
+FIELDS = (*store.TEXT_FIELDS, "age_from", "age_to", "state", "location_id", "needs_review")
+LABELS = {"title": "Title", "sort_key": "Sort as", "author": "Author", "illustrator": "Illustrator",
+          "publisher": "Publisher", "year": "Year", "language": "Language", "isbn": "ISBN", "series": "Series",
+          "tags": "Tags", "source": "Catalogue source", "source_id": "Catalogue id", "notes": "Notes",
+          "age_from": "Age from", "age_to": "Age to", "state": "State", "location_id": "Location",
+          "needs_review": "Needs review"}
+
+
+def display(book):
+    """A book's editable fields as the strings a form holds; the checkbox is 1 or 0."""
+    return {key: "" if book[key] is None else ("1" if book[key] else "0") if isinstance(book[key], bool)
+            else str(book[key]) for key in FIELDS}
+
+
+def convert(key, text):
+    """One posted value as the store expects it; the store itself checks the rest."""
+    if key == "location_id":
+        if not text.isdecimal():
+            raise store.Invalid("choose a location")
+        return int(text)
+    if key == "needs_review":
+        return text == "1"
+    return text
+
+
+def posted_fields(form):
+    """Every book field the form carries, as the store expects it."""
+    return {key: convert(key, form[key]) for key in FIELDS if key in form}
+
+
+def posted_changes(form):
+    """Only the fields that differ from what the person first saw, so a save never rewrites other people's work."""
+    return {key: value for key, value in posted_fields(form).items()
+            if f"was_{key}" not in form or form[f"was_{key}"] != form[key]}
+
+
+def safe_next(url):
+    """Where to go after adding a book; only a path on this site."""
+    return url if url and url.startswith("/") and not url.startswith("//") else None
+
+
+def book_form(request, book, values, was, error=None, status=200, notice=None, next=None):
+    return render(request, "book_form.html", status=status, active="books", book=book, v=values, was=was,
+                  error=error, notice=notice, next=next, locations=call(request, store.locations),
+                  states=store.STATES, fields=FIELDS)
+
+
+@router.get("/books/new")
+def new_book(request: Request, location_id: str = "", next: str = ""):
+    values = dict.fromkeys(FIELDS, "") | {"state": "Active", "needs_review": "0", "location_id": location_id}
+    return book_form(request, None, values, values, next=safe_next(next))
+
+
+@router.post("/books")
+def add_book(request: Request, form=Depends(form_data)):
+    values = {key: form.get(key, "") for key in FIELDS}
+    try:
+        book = call(request, store.add_book, posted_fields(form), request.state.user)
+    except store.Invalid as problem:
+        return book_form(request, None, values, values, str(problem), 400, next=safe_next(form.get("next")))
+    return redirect(request, safe_next(form.get("next")) or f"/books/{book['id']}")
+
+
+@router.get("/books/{id}")
+def book_page(request: Request, id: int, saved: str = ""):
+    book = call(request, store.book, id)
+    return book_form(request, book, display(book), display(book), notice="Saved." if saved else None)
+
+
+def conflict_page(request, id, mine):
+    """Both versions of what this person changed, beside each other, with a way to apply it to the stored book."""
+    stored = call(request, store.book, id)
+    rows = [{"key": key, "label": LABELS[key], "stored": display(stored)[key], "mine": display({**stored, key: value})[key]}
+            for key, value in mine.items()]
+    return render(request, "book_conflict.html", status=409, active="books", book=stored, rows=rows)
+
+
+@router.post("/books/{id}")
+def save_book(request: Request, id: int, form=Depends(form_data)):
+    current = call(request, store.book, id)
+    version = form.get("version", "")
+    changes = posted_changes(form)
+    try:
+        if not version.isdecimal():
+            raise store.Invalid("version must be a number")
+        if changes:
+            call(request, store.update_book, id, int(version), changes, request.state.user)
+    except store.Conflict:
+        return conflict_page(request, id, changes)
+    except store.Invalid as problem:
+        values = {key: form.get(key, display(current)[key]) for key in FIELDS}
+        was = {key: form.get(f"was_{key}", display(current)[key]) for key in FIELDS}
+        return book_form(request, {**current, "version": version}, values, was, str(problem), 400)
+    return redirect(request, f"/books/{id}?saved=1" if changes else f"/books/{id}")
+
+
+@router.post("/books/{id}/reapply")
+def reapply(request: Request, id: int, form=Depends(form_data)):
+    changes = posted_fields(form)
+    try:
+        if not form.get("version", "").isdecimal():
+            raise store.Invalid("version must be a number")
+        call(request, store.update_book, id, int(form["version"]), changes, request.state.user)
+    except store.Conflict:
+        return conflict_page(request, id, changes)
+    return redirect(request, f"/books/{id}?saved=1")
