@@ -130,3 +130,21 @@ def test_a_failed_migration_rolls_back_its_schema_and_version(tmp_path, monkeypa
     assert db.execute("PRAGMA user_version").fetchone()[0] == 5
     assert db.execute("SELECT name FROM sqlite_master WHERE name = 'extra'").fetchall() == []
     db.close()
+
+
+def test_opening_an_up_to_date_store_does_not_wait_for_another_writer(tmp_path):
+    import sqlite3
+    import time
+
+    root = tmp_path / "private"
+    store.open(root).close()
+    writer = sqlite3.connect(root / "catalog.db", isolation_level=None)
+    writer.execute("BEGIN IMMEDIATE")  # another process is in the middle of a write
+    try:
+        started = time.monotonic()
+        with store.open(root) as db:
+            assert db.execute("PRAGMA user_version").fetchone()[0] == 5
+        assert time.monotonic() - started < 1
+    finally:
+        writer.execute("ROLLBACK")
+        writer.close()
