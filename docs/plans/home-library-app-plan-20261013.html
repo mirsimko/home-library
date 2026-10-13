@@ -1,0 +1,418 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<meta name="robots" content="noindex">
+<title>Home library: capture and review app, implementation plan</title>
+<style>
+  :root {
+    --bg: #0f1419;
+    --surface: #171e26;
+    --surface-2: #1e2731;
+    --border: #2c3945;
+    --text: #d8e1e8;
+    --text-dim: #8b9aa7;
+    --accent: #4fc1ff;
+    --ok: #4ade80;
+    --warn: #fbbf24;
+    --risk: #f87171;
+    --code-bg: #10161c;
+  }
+  * { box-sizing: border-box; }
+  body {
+    margin: 0;
+    background: var(--bg);
+    color: var(--text);
+    font: 17px/1.65 system-ui, -apple-system, "Segoe UI", sans-serif;
+    -webkit-text-size-adjust: 100%;
+  }
+  main { max-width: 46rem; margin: 0 auto; padding: 1.5rem 1.25rem 4rem; }
+  h1 { font-size: 1.7rem; line-height: 1.25; margin: 0.5rem 0 0.25rem; }
+  h2 { font-size: 1.25rem; margin: 2.1rem 0 0.6rem; color: var(--accent); }
+  h3 { font-size: 1.05rem; margin: 1.4rem 0 0.4rem; }
+  p, li { max-width: 74ch; }
+  a { color: var(--accent); }
+  .meta { color: var(--text-dim); font-size: 0.85rem; margin-bottom: 1.5rem; }
+  .summary {
+    background: var(--surface); border: 1px solid var(--border);
+    border-left: 4px solid var(--accent); border-radius: 8px;
+    padding: 0.9rem 1.1rem; margin: 1.2rem 0;
+  }
+  nav.toc {
+    background: var(--surface); border: 1px solid var(--border);
+    border-radius: 8px; padding: 0.7rem 1.1rem; font-size: 0.9rem;
+  }
+  nav.toc a { display: inline-block; margin-right: 1rem; text-decoration: none; }
+  section { margin-top: 1.8rem; }
+  details {
+    background: var(--surface); border: 1px solid var(--border);
+    border-radius: 8px; margin: 0.7rem 0; padding: 0;
+  }
+  details > summary {
+    cursor: pointer; padding: 0.8rem 1.1rem; font-weight: 600;
+    list-style-position: inside;
+  }
+  details[open] > summary { border-bottom: 1px solid var(--border); }
+  details > div { padding: 0.4rem 1.1rem 0.9rem; }
+  ul, ol { padding-left: 1.4rem; }
+  li + li { margin-top: 0.35rem; }
+  code {
+    font: 0.85em/1.5 ui-monospace, "Cascadia Code", Consolas, monospace;
+    background: var(--code-bg); border: 1px solid var(--border);
+    border-radius: 4px; padding: 0.1em 0.35em;
+  }
+  pre {
+    background: var(--code-bg); border: 1px solid var(--border);
+    border-radius: 8px; padding: 0.9rem 1.1rem; overflow-x: auto;
+  }
+  pre code { background: none; border: none; padding: 0; }
+  table { border-collapse: collapse; width: 100%; margin: 0.8rem 0; display: block; overflow-x: auto; }
+  th, td { border: 1px solid var(--border); padding: 0.45rem 0.7rem; text-align: left; vertical-align: top; }
+  th { background: var(--surface-2); }
+  .badge {
+    display: inline-block; font-size: 0.72rem; font-weight: 700;
+    border-radius: 99px; padding: 0.1rem 0.6rem; vertical-align: middle;
+    text-transform: uppercase; letter-spacing: 0.04em;
+  }
+  .badge.ok { background: #143c26; color: var(--ok); }
+  .badge.warn { background: #3d2f0a; color: var(--warn); }
+  .badge.risk { background: #401b1b; color: var(--risk); }
+  hr { border: none; border-top: 1px solid var(--border); margin: 2rem 0; }
+  ol.questions > li { margin: 0.9rem 0; }
+  ol.questions .answer { margin: 0.3rem 0 0; color: var(--text-dim); }
+  ol.questions .answer .badge { margin-right: 0.45rem; }
+  .src { color: var(--text-dim); font-size: 0.85rem; }
+</style>
+</head>
+<body>
+<main>
+  <h1>Home library: capture and review app</h1>
+  <p class="meta">2026-10-13 · implementation plan for Miro · planning council: Opus 5.5, Fable 5.1, GPT-6.1 Sol, GPT-6 Astra · synthesis by Opus 5.5</p>
+
+  <nav class="toc">
+    <a href="#summary">Summary</a>
+    <a href="#decisions">Key decisions</a>
+    <a href="#phases">Phases</a>
+    <a href="#risks">Risks</a>
+    <a href="#questions">Open questions</a>
+  </nav>
+
+  <section id="summary">
+    <h2>Summary</h2>
+    <div class="summary">
+      <p>No native app. We build <strong>one small Python web app</strong> next to the existing <code>hl</code> pipeline:</p>
+      <ul>
+        <li><strong>Stack:</strong> FastAPI with server-rendered pages (Jinja and HTMX) and a little JavaScript for the capture page.</li>
+        <li><strong>Data:</strong> one SQLite file for the catalog and the job queue.</li>
+        <li><strong>Reading:</strong> one worker process runs <code>hl</code> on each new photo.</li>
+        <li><strong>Hosting:</strong> it runs in WSL on battlebox. Every device reaches it privately over Tailscale with HTTPS.</li>
+        <li><strong>Devices:</strong> on the Android phones it is installed to the home screen and used for photos. On the iPad and the laptop it is just a website, used for review with the keyboard.</li>
+        <li><strong>No Apple account, no Mac, no MacinCloud.</strong></li>
+      </ul>
+      <p>Before any real code, a few evenings of <strong>phase 0 tests</strong> check the facts the plan rests on. Do the phones upload full-resolution photos from the browser? Does battlebox stay reachable? Do cover and barcode photos work? Is Grist good enough to make our own review page unnecessary?</p>
+      <p>Then come three build phases: the back end, the web pages, and day-to-day operation. An Expo Android app stays in reserve for one case only: if taking photos in the browser fails.</p>
+      <p>All four council seats agreed on this overall shape. The real disagreements were about the data model, how photos are named, and how the worker calls the pipeline. Each is settled below, with its reason.</p>
+    </div>
+  </section>
+
+  <section id="decisions">
+    <h2>Key decisions</h2>
+    <table>
+      <tr><th>#</th><th>Decision</th><th>Strongest alternative, and why it lost</th></tr>
+      <tr><td>D1</td>
+        <td><strong>A web app, not a native app.</strong> FastAPI with Jinja templates and HTMX. The phones install it to the home screen (a PWA); the iPad and laptop use the browser.<br><span class="src">All 4 seats · research note: recommended stack</span></td>
+        <td>Expo (React Native).
+          <ul>
+            <li>iOS needs a paid Apple account, and TestFlight builds expire after 90 days.</li>
+            <li>The work Apple account means adding your wife to your employer's team.</li>
+            <li>Nothing yet shows that native photo capture is needed.</li>
+          </ul>
+          It stays as phase 4, for Android only.</td></tr>
+      <tr><td>D2</td>
+        <td><strong>Hosted at home on battlebox, in WSL2.</strong> Reached through Tailscale Serve, which gives the HTTPS a PWA needs. The app itself listens only on localhost.<br><span class="src">Fable, Sol, Astra; Opus flagged the laptop sleeping</span></td>
+        <td>A cloud web app with a worker at home. It would be a second deployment with its own login and a sync path between the two. The reading must stay at home anyway, because Codex and Pi run on your subscriptions. Battlebook, the laptop, loses because it sleeps and leaves the house.</td></tr>
+      <tr><td>D3</td>
+        <td><strong>The app's own SQLite file is the store, unless Grist wins a one-evening test in phase 0.</strong> There is only ever one catalog that people edit.<br><span class="src">Gate from Sol and Astra · one-evening time-box from Fable · Opus and Fable favoured SQLite</span></td>
+        <td>Grist as both store and review screen. R7 allows it, and the spec planned this test. It probably loses because review needs things specific to the pipeline: the tile the book was seen in, the second reading, and the catalogue candidates. Grist cannot show those. We still test it, cheaply, with 20 existing rows.</td></tr>
+      <tr><td>D4</td>
+        <td><strong>Three separate things: captures, observations and books.</strong>
+          <ul>
+            <li>A <em>capture</em> is a photo that was uploaded.</li>
+            <li>An <em>observation</em> is one row of <code>records.json</code>. It is evidence, not a book.</li>
+            <li>A <em>book</em> is one physical copy. It exists only once a person approves it, with a state and a location.</li>
+          </ul>
+          <span class="src">Sol, Astra</span></td>
+        <td>Importing every pipeline row as a book (Opus, Fable). That breaks the counts: <code>unparsed</code>, <code>incomplete</code> and <code>unreadable</code> rows are not books, and a shelf photo plus a cover photo describe the same book twice.</td></tr>
+      <tr><td>D5</td>
+        <td><strong>Each capture gets an ID from the phone.</strong> The phone makes up a unique ID (a UUID) for each upload. It is the upload's idempotency key, so a retried upload is recognised and not stored twice. It is also the photo's name in the pipeline's work directory. The SHA-256 of the file is stored too, but only to warn about duplicates.<br><span class="src">Sol, Astra</span></td>
+        <td>Naming each photo by its content hash (Opus, Fable). The same bytes can be sent twice on purpose, for example to fix a wrong location, and the hash would treat that as the same capture. The UUID needs no change to the pipeline either: <code>workspace.photo_dir</code> keys on the file stem.</td></tr>
+      <tr><td>D6</td>
+        <td><strong>One worker runs <code>hl</code> as a separate process</strong>, in its own process group.
+          <ul>
+            <li>It takes jobs from a SQLite job table.</li>
+            <li>It reports a heartbeat while it works. A job counts as stuck after 20 minutes.</li>
+            <li>A results write from an attempt that has since been superseded is refused.</li>
+          </ul>
+          <span class="src">Subprocess from Sol and Astra · timeout from Fable · queue from the research note</span></td>
+        <td>Calling the pipeline functions directly from Python (Opus, Fable). That is simpler, but a hung <code>codex</code> or <code>pi</code> call could not be killed cleanly, and a crash would take the worker down. The <code>hl</code> command is the documented, stable contract. Celery and Redis lose too: they are too much machinery for one worker.</td></tr>
+      <tr><td>D7</td>
+        <td><strong>Cover and barcode photos go into phase 1.</strong>
+          <ul>
+            <li>A new <code>hl cover</code> command does two blind reads of a single image.</li>
+            <li>Barcodes are decoded on the server with <code>zxing-cpp</code>. The ISBN is checked and passed to the ISBN look-up path, which is already built.</li>
+          </ul>
+          <span class="src">All 4 seats</span></td>
+        <td>Scanning barcodes live in the browser. Its behaviour on your phones is untested. Shelf photos alone are not enough either: many thin books have no spine text (spec 2.4).</td></tr>
+      <tr><td>D8</td>
+        <td><strong>Photos are uploaded while the page is open, with retries. The phone keeps no queue of its own in version 1.</strong> The capture page offers two ways in: pick several photos from the gallery, or take one with the camera. Photos taken with the normal camera app stay in the camera roll, so nothing is lost if an upload fails. Phase 0 decides which of the two ways is the main one.<br><span class="src">Fable, Sol; Opus and Astra wanted the queue now</span></td>
+        <td>A queue stored on the phone (IndexedDB) from day one. How reliable it is has not been checked. Capture mostly happens on home Wi-Fi, and the camera roll already serves as the backup. The queue becomes a later slice if uploads get lost in practice.</td></tr>
+      <tr><td>D9</td>
+        <td><strong>Login comes from Tailscale.</strong> Tailscale Serve passes on who is connecting (its <code>Tailscale-User-Login</code> header). The app allows exactly two logins, protects edits against cross-site requests, and gives harness agents a separate token.<br><span class="src">Sol, Astra</span></td>
+        <td>Just a name cookie (Fable): it records nobody reliably. A public site with its own login: more code, and it is exposed to the internet. The bookshop check works over Tailscale anyway.</td></tr>
+      <tr><td>D10</td>
+        <td><strong>Agents use the JSON API, or <code>hl catalog …</code> commands that go through the same checks.</strong> This meets R3.<br><span class="src">Astra, Opus</span></td>
+        <td>Agents writing to SQLite directly. That skips the checks, for example that an approved book has a state and a location.</td></tr>
+    </table>
+  </section>
+
+  <section id="phases">
+    <h2>Phases</h2>
+    <p>Every build step follows your red, green, review and refactor loop with small commits. Each phase ends with a check on the real devices. The work goes on a new branch taken from <code>t3code/implement-home-library</code>. Photos, the database and work files live under <code>~/home-library/</code> on battlebox, never in the repository. The existing <code>refuse_inside_checkout</code> guard and <code>tests/test_repo_privacy.py</code> extend to them.</p>
+
+    <details open>
+      <summary>Phase 0: tests that de-risk the plan, no production code <span class="badge ok">S–M · 2–3 evenings</span></summary>
+      <div>
+        <ol>
+          <li><strong>Host check.</strong> On battlebox's WSL:
+            <ul>
+              <li>Install Tailscale and turn on systemd.</li>
+              <li>Check that <code>codex exec</code>, <code>pi</code> and <code>yaz-client</code> run headless.</li>
+              <li>Reboot Windows without logging in, and check that WSL and a test service come back.</li>
+            </ul>
+            <em>Kill criterion:</em> if battlebox can't run unattended, pick another host (question 1).</li>
+          <li><strong>Capture test.</strong> A throwaway FastAPI page of about 40 lines, served with <code>tailscale serve</code>.
+            <ul>
+              <li>On both phones, upload the same shelf twice: once through <code>&lt;input type=file accept=image/* capture=environment&gt;</code>, and once through a gallery pick with <code>multiple</code>.</li>
+              <li>Compare size (should be 4080×3072), EXIF orientation, format (JPEG or HEIC) and sharpness against the original in the camera roll.</li>
+              <li>Install it as a PWA on both phones, and open it on the iPad.</li>
+            </ul>
+            <em>Kill criterion:</em> if the photos arrive smaller than the original, phase 4 (Expo) moves ahead of phase 2's capture page.</li>
+          <li><strong>Cover and barcode test.</strong> Take 10 cover photos and 10 barcode photos, in all three languages.
+            <ul>
+              <li>Read the covers with the existing <code>hl read</code> on one image.</li>
+              <li>Decode the barcodes with <code>zxing-cpp</code>, then call <code>find_candidates(isbn=…)</code>.</li>
+            </ul>
+            This settles whether covers need two reads, and the cover prompt.</li>
+          <li><strong>Store test, one evening only.</strong> Put 20 rows from an existing <code>records.csv</code> into Grist and into Sheets, and correct them on the iPad with the keyboard. If Grist feels good, decide D3 for Grist: phase 2 then shrinks to the capture and status pages, and the worker writes to Grist.</li>
+          <li><strong>Answer key.</strong> You confirm the provisional answer key for the four test shelves (spec §3.2), so later accuracy numbers mean something.</li>
+        </ol>
+        <p><strong>Output:</strong> <code>docs/research/app-spikes.md</code>, with what was measured and a go or no-go for each kill criterion.</p>
+      </div>
+    </details>
+
+    <details>
+      <summary>Phase 1: back end with uploads, worker and catalog <span class="badge warn">L</span></summary>
+      <div>
+        <h3>1.1 Layout</h3>
+        <ul>
+          <li>New modules: <code>home_library/store.py</code> (SQLite, numbered SQL migrations), <code>home_library/worker.py</code> and <code>home_library/web/</code> (FastAPI app, templates, static files).</li>
+          <li>New dependencies: <code>fastapi</code>, <code>uvicorn</code>, <code>jinja2</code>, <code>python-multipart</code>, <code>zxing-cpp</code>. Add <code>pillow-heif</code> only if phase 0 shows HEIC files.</li>
+          <li>Data root: <code>~/home-library/</code>, holding <code>catalog.db</code>, <code>captures/</code> and <code>work/</code>.</li>
+        </ul>
+        <h3>1.2 Schema</h3>
+        <table>
+          <tr><th>Table</th><th>Holds</th></tr>
+          <tr><td><code>locations</code></td><td>name ("Box 3", "Shelf A2"), kind (shelf or box)</td></tr>
+          <tr><td><code>captures</code></td><td>the UUID from the phone, kind (shelf, cover or barcode), location, default state, who uploaded it, original name, sha256, size, time, and <code>group_id</code>, which pairs a cover with its barcode</td></tr>
+          <tr><td><code>jobs</code></td><td>capture, status, attempt, owner token, heartbeat, last error, started and finished times</td></tr>
+          <tr><td><code>observations</code></td><td>one row of <code>records.json</code>: capture, attempt, row index, <code>read_status</code>, title, <code>other_reading</code>, the remaining columns as JSON, a link to its candidates, status (open, used or dismissed), and the book it became</td></tr>
+          <tr><td><code>books</code></td><td>the fields of spec 2.1, plus state, location, cover capture, <code>needs_review</code>, a version number for edit conflicts, and who created and who reviewed it</td></tr>
+        </table>
+        <p>A full-text index (SQLite FTS5 with the <code>trigram</code> tokenizer) over title, sort key, author and series. Trigrams handle kana and kanji, and Czech text with diacritics, without a word splitter.</p>
+        <h3>1.3 Upload</h3>
+        <ul>
+          <li><code>POST /api/captures</code> sends the file, the capture UUID, kind, location, default state and an optional group.</li>
+          <li>The server writes the file to a temporary file, flushes it to disk and moves it into place. It then records the capture and its job in one transaction and returns <code>201</code> with a receipt.</li>
+          <li>The same UUID sent again returns the same receipt and adds nothing.</li>
+          <li>Type and size are checked. The original file name is never used as a path.</li>
+        </ul>
+        <h3>1.4 Worker (<code>hl worker</code>)</h3>
+        <ul>
+          <li>It claims a job in a short <code>BEGIN IMMEDIATE</code> transaction and commits before any model work starts.</li>
+          <li>It runs <code>hl run captures/&lt;uuid&gt;.jpg --location … --work-root …</code> as a separate process with a timeout, and reports a heartbeat every 30 s.</li>
+          <li>When the run ends, it imports <code>records.json</code> as observations and marks the job done, in one transaction. The import is refused if the job's owner token has changed.</li>
+          <li>It makes at most 3 attempts. A failure shows in the app, including after a restart.</li>
+          <li>Only one job runs at a time, which respects the home uplink rule in <code>docs/pipeline.md</code>.</li>
+          <li>A rerun adds new observations and never overwrites a book a person has edited.</li>
+        </ul>
+        <h3>1.5 Covers and barcodes</h3>
+        <ul>
+          <li><code>hl cover</code>: one image, scaled to at most 2000 px on its longest side, and a new <code>prompts/cover_read.txt</code>. It runs the same two blind reads and merge, then a look-up with author and title, then the pick.</li>
+          <li><code>hl barcode</code>: decode with <code>zxing-cpp</code>, validate the ISBN-13 checksum and the 978/979 prefix, and guess the language from the registration group (4 Japanese, 80 Czech, 0 and 1 English; otherwise try all sources). Then use the ISBN path of <code>lookup.find_candidates</code>.</li>
+          <li>A cover and a barcode with the same <code>group_id</code> give one observation. A barcode that cannot be decoded falls back to typing the number in.</li>
+        </ul>
+        <h3>1.6 API for agents</h3>
+        <p>JSON endpoints for books, observations, locations and jobs, plus <code>hl catalog list|show|edit|move</code> calling the same functions. A short <code>docs/harness.md</code> tells Claude Code and Codex how to use them (R3).</p>
+        <h3>1.7 Tests</h3>
+        <ul>
+          <li>The worker gets a fake <code>hl</code> runner, the same way <code>tests/test_reader.py</code> fakes <code>codex</code>. Images are generated, and catalogue answers come from fixtures.</li>
+          <li>Cases to cover:
+            <ul>
+              <li>a repeated POST;</li>
+              <li>the same file name with different bytes;</li>
+              <li>a crash after the upload or after the import;</li>
+              <li>a worker that dies;</li>
+              <li>a stale attempt completing late;</li>
+              <li>a broken image and an invalid barcode;</li>
+              <li>an edit that conflicts with another;</li>
+              <li>a rerun that must keep a human's correction.</li>
+            </ul>
+          </li>
+          <li><strong>Real check:</strong> upload the four test photos with <code>curl</code>. The observations must match what <code>hl run</code> produced on 2026-10-05, and a second upload must add no job.</li>
+        </ul>
+      </div>
+    </details>
+
+    <details>
+      <summary>Phase 2: web pages for capture and review <span class="badge warn">L · S if Grist won</span></summary>
+      <div>
+        <ul>
+          <li><strong>Shell.</strong> A base template, a PWA manifest and a minimal service worker that exists only so the app can be installed. It does no offline caching. Big touch targets, plus keyboard shortcuts on the larger screens.</li>
+          <li><strong>Capture page (phones).</strong>
+            <ul>
+              <li>Pick a location and a default state once; they are remembered.</li>
+              <li>Choose a mode: shelf, or one book. One book means a cover photo, then an optional barcode photo, then the next book.</li>
+              <li>The photos to send show as thumbnails, then upload with a progress bar and retries.</li>
+              <li>Each photo shows a clear status: <em>on this phone</em>, <em>received</em>, <em>reading</em>, <em>needs attention</em> or <em>ready for review</em>.</li>
+            </ul>
+          </li>
+          <li><strong>Review page (iPad and laptop).</strong>
+            <ul>
+              <li>An inbox of open observations, grouped by photo and location.</li>
+              <li>Each detail shows:
+                <ul>
+                  <li>the tile from <code>where</code>, with the full photo a tap away;</li>
+                  <li>both readings, and the reason for the review;</li>
+                  <li>the catalogue candidates from <code>candidates.json</code>, with "use this record";</li>
+                  <li>editable fields.</li>
+                </ul>
+              </li>
+              <li>Actions: approve as a new book, merge into an existing book, dismiss, attach a cover, or add a book by hand.</li>
+              <li>Shortcuts: <kbd>j</kbd>/<kbd>k</kbd> to move, <kbd>Enter</kbd> to approve and go to the next, <kbd>e</kbd> to edit.</li>
+              <li>Moving or changing the state of several books at once.</li>
+            </ul>
+          </li>
+          <li><strong>Catalog.</strong> Search by title, author, ISBN or series, and filter by state, location and tag. It works on a phone for the bookshop check.</li>
+          <li><strong>Locations and status.</strong> A page to create, rename and list locations. A status page shows the job queue, the worker's heartbeat and the last error, for example "Codex needs a new login".</li>
+          <li><strong>Tests.</strong>
+            <ul>
+              <li>FastAPI's <code>TestClient</code> on the HTMX fragments.</li>
+              <li>A Playwright smoke test in Chromium and in WebKit, which is close to Safari: capture with a generated image, upload, review with the keyboard and search.</li>
+              <li>Two people editing the same book at the same time.</li>
+            </ul>
+          </li>
+          <li><strong>Real check.</strong> Both adults photograph one shelf and five covers, and review them on the iPad until nothing is left open. Then search for a book on a phone over mobile data. Time a whole shelf taken cover by cover (spec §3.1).</li>
+        </ul>
+      </div>
+    </details>
+
+    <details>
+      <summary>Phase 3: running it, backups and export <span class="badge ok">M</span></summary>
+      <div>
+        <ul>
+          <li><strong>Services.</strong> systemd user services in WSL for <code>web</code> and <code>worker</code>. Windows Task Scheduler starts WSL at boot. The PC is set not to sleep. A <code>/health</code> page.</li>
+          <li><strong>Access.</strong> Tailscale on both phones, the iPad and the laptop. Tailscale's access rules let only the two family logins in. A token for harness agents that can be revoked.</li>
+          <li><strong>Backups.</strong>
+            <ul>
+              <li>Every night, a consistent database snapshot with <code>VACUUM INTO</code>, plus <code>captures/</code> and <code>work/</code>.</li>
+              <li>Copied to Battlebook over Tailscale. A cloud copy only if the family agrees (question 2).</li>
+              <li>A restore onto a clean directory is tested once.</li>
+            </ul>
+          </li>
+          <li><strong>Export.</strong> <code>/export.csv</code> in UTF-8 with a BOM, using the formula escaping <code>records.py</code> already does, plus a complete JSON export with a list of photos. So a spreadsheet stays a possible end state (R7).</li>
+          <li><strong>Real check.</strong> Reboot battlebox and see the app come back with nobody logged in. Reach it over mobile data. A device outside the tailnet is refused. Restore from backup on Battlebook.</li>
+        </ul>
+      </div>
+    </details>
+
+    <details>
+      <summary>Phase 4, only if needed: Expo Android capture app <span class="badge warn">M · conditional</span></summary>
+      <div>
+        <p>Only if phase 0 or real use shows that capture in the browser keeps failing.</p>
+        <ul>
+          <li>EAS Build makes an APK in Expo's cloud. It is installed from a link, with no Play Store account.</li>
+          <li>It talks to the same <code>POST /api/captures</code>.</li>
+          <li>The iPad stays on Safari. No Apple account is needed.</li>
+        </ul>
+      </div>
+    </details>
+
+    <details>
+      <summary>After the build: cataloging the collection</summary>
+      <div>
+        <p>Do one real shelf and one real box end to end (spec §3.5), fix what hurts, then the whole collection. The work is done when every book is in the catalog with a state and a location (spec §1.2), not when the photos have been processed.</p>
+      </div>
+    </details>
+  </section>
+
+  <section id="risks">
+    <h2>Risks</h2>
+    <table>
+      <tr><th>Risk</th><th>Mitigation</th></tr>
+      <tr><td><span class="badge risk">high</span> The browser sends photos smaller than the original, and that breaks the 1560×2000 tiling</td><td>Phase 0 test 2 before any code for the capture page. Gallery pick as a second way in. Phase 4 if both fail.</td></tr>
+      <tr><td><span class="badge risk">high</span> The host is unstable: the PC sleeps, Windows updates, WSL stops, the network drops after waking</td><td>Phase 0 host check. systemd plus starting WSL at boot. A health page. Jobs that resume. The whole thing is one folder and can move to any Linux machine.</td></tr>
+      <tr><td><span class="badge warn">med</span> The headless Codex or Pi login expires, or a rate limit is hit</td><td>Failures show with their stderr. A banner on the status page. At most 3 attempts. Never a silent switch to a paid API.</td></tr>
+      <tr><td><span class="badge warn">med</span> Two reads that agree are taken as the whole shelf</td><td>The shelf is counted against the physical books. Unreadable books and books only one read saw stay visible as open observations.</td></tr>
+      <tr><td><span class="badge warn">med</span> Duplicates between shelf and cover photos</td><td>Observations are evidence, books are copies (D4). The app suggests a match by ISBN or match key, and a person decides.</td></tr>
+      <tr><td><span class="badge warn">med</span> Private photos leak into git, logs or the public web</td><td>Data outside the checkout, the privacy test extended, photos served only after login, no titles in logs.</td></tr>
+      <tr><td><span class="badge ok">low</span> The back-end branch changes while the app is built</td><td>The worker depends only on the <code>hl</code> command line and the contracts in <code>docs/pipeline.md</code>, and tests pin both.</td></tr>
+      <tr><td><span class="badge ok">low</span> Scope creep into rotation plans, more metadata, a native iPad app</td><td>Out of scope until the collection is cataloged.</td></tr>
+    </table>
+  </section>
+
+  <section id="questions">
+    <h2>Open questions</h2>
+    <p>Answer with a number and "default" or "alt", for example "1 default, 3 alt".</p>
+    <ol class="questions">
+      <li>Which machine runs the app and the worker, always on?
+        <p class="answer"><span class="badge ok">default</span> battlebox, in WSL2. Battlebook holds the backup copy.</p>
+        <p class="answer"><span class="badge warn">alt</span> A small always-on Linux box at home, for example a mini PC. It is more reliable than WSL, but it's new hardware.</p>
+      </li>
+      <li>May photos of the home and the catalog leave the house, for a cloud backup or hosted Grist?
+        <p class="answer"><span class="badge ok">default</span> No. Backups go to the second machine over Tailscale only.</p>
+        <p class="answer"><span class="badge warn">alt</span> Yes, as an encrypted backup to Google Drive.</p>
+      </li>
+      <li>Is it fine for your wife's phone and the iPad to run Tailscale?
+        <p class="answer"><span class="badge ok">default</span> Yes. It is a one-time setup, and it gives the bookshop check from anywhere.</p>
+        <p class="answer"><span class="badge warn">alt</span> No. Then the app works only on home Wi-Fi, with no access away from home.</p>
+      </li>
+      <li>Is the one-evening Grist test (phase 0, test 4) still worth doing, given that a custom review page is planned?
+        <p class="answer"><span class="badge ok">default</span> Yes, time-boxed. If Grist feels good on the iPad, it saves most of phase 2.</p>
+        <p class="answer"><span class="badge warn">alt</span> Skip it and go straight to the SQLite store and our own review page.</p>
+      </li>
+      <li>Is a cover photo required for every book?
+        <p class="answer"><span class="badge ok">default</span> No. A cover photo is required only for books the shelf photo couldn't identify. Others are optional.</p>
+        <p class="answer"><span class="badge warn">alt</span> Yes, for every book, because it doubles as the catalog picture.</p>
+      </li>
+      <li>A book that leaves the house, sold or given away: keep it or delete it?
+        <p class="answer"><span class="badge ok">default</span> Keep it with a fourth state, "Gone", so the bookshop check still answers "we had it".</p>
+        <p class="answer"><span class="badge warn">alt</span> Delete it.</p>
+      </li>
+      <li>How are locations named on the physical labels?
+        <p class="answer"><span class="badge ok">default</span> "Shelf A1", "A2" and so on per bookcase, and "Box 1" to "Box 7". They are created in the app's locations page.</p>
+        <p class="answer"><span class="badge warn">alt</span> Free names chosen by the family, such as "Hallway top".</p>
+      </li>
+      <li>Should the second, checking read stay Muse Spark 1.3 through Pi?
+        <p class="answer"><span class="badge ok">default</span> Yes, as built. A different model catches misreadings that Sol repeats.</p>
+        <p class="answer"><span class="badge warn">alt</span> A second Sol session (<code>--second-reader codex-exec</code>), with one subscription fewer to keep logged in.</p>
+      </li>
+      <li>Should the Apple account from your work be used at all?
+        <p class="answer"><span class="badge ok">default</span> No. This plan needs no Apple account.</p>
+        <p class="answer"><span class="badge warn">alt</span> If a native iPad app is ever wanted, use a personal $99/yr account.</p>
+      </li>
+    </ol>
+  </section>
+</main>
+</body>
+</html>
