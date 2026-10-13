@@ -1,0 +1,18 @@
+{% if books is none %}
+<p class="muted small">Type a few letters of the title, the author or the ISBN.</p>
+{% elif not books %}
+<p class="muted small">No books match.</p>
+{% else %}
+<ul class="rows">
+  {% for book in books %}
+  <li>
+    <div style="display:grid; grid-template-columns: 1fr auto; gap:0.6rem; align-items:center; padding:0.25rem 0; border-top:1px solid var(--line)">
+      <span class="title"><span{{ lang(book.language) }}>{{ book.title }}</span>
+        <span class="muted small">{{ [book.author, names[book.location_id], book.state]|select|join(" · ") }}</span></span>
+      <button type="button" hx-post="/review/{{ observation_id }}/attach" hx-vals='{"book_id": {{ book.id }}}'
+              hx-include="[name='also']" hx-target="#notice" hx-swap="innerHTML">Attach</button>
+    </div>
+  </li>
+  {% endfor %}
+</ul>
+{% endif %}

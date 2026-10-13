@@ -1,7 +1,7 @@
 """Approve, attach and dismiss from the review page, and where each one leaves the reviewer."""
 from contextlib import closing
 
-from store_helpers import CAPTURE_ID, SECOND_ID, typed_book
+from store_helpers import SECOND_ID, typed_book
 from test_pages_book_edit import form_values
 from test_pages_review import stock
 from web_helpers import anonymous as anonymous

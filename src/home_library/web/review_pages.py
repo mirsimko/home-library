@@ -1,13 +1,15 @@
 """The review pages: the inbox of open observations, one observation at a time, and the actions on it."""
 import re
 from datetime import datetime, timezone
+from urllib.parse import urlencode
 
-from fastapi import APIRouter, Request
+from fastapi import APIRouter, Depends, Request
 
 from home_library import store
 from home_library.web.api import call
+from home_library.web.book_pages import posted_fields
 from home_library.web.files import observation_candidates, read_json
-from home_library.web.render import render
+from home_library.web.render import form_data, redirect, render
 from home_library.web.status_pages import ago, seconds_since
 
 router = APIRouter()
@@ -47,8 +49,19 @@ def row_view(observation):
             "note": note, "isbn": observation["record"].get("isbn", ""), "status": observation["read_status"], "kind": observation["capture"]["kind"]}
 
 
+def landing_notice(request, outcome, book_id):
+    """What to say after an action, from the `done` and `book` the redirect carried."""
+    if outcome not in NOTICES:
+        return None
+    try:
+        found = call(request, store.book, book_id) if book_id else None
+    except store.NotFound:
+        found = None
+    return {"text": NOTICES[outcome], "book": found}
+
+
 @router.get("/review")
-def inbox(request: Request):
+def inbox(request: Request, done: str = "", book: int | None = None):
     now = datetime.now(timezone.utc)
     names = {row["id"]: row["name"] for row in call(request, store.locations)}
     groups = []
@@ -60,7 +73,7 @@ def inbox(request: Request):
             "location": names.get(capture["location_id"], ""), "by": capture["uploaded_by"],
             "when": ago(seconds_since(max(o["capture"]["created_at"] for o in members), now)),
             "rows": [row_view(o) for o in members]})
-    return render(request, "review.html", active="review", groups=groups,
+    return render(request, "review.html", active="review", groups=groups, notice=landing_notice(request, done, book),
                   open_count=sum(len(group["rows"]) for group in groups))
 
 
@@ -145,8 +158,84 @@ def detail(request, id, status=200, **extra):
 
 @router.get("/review/{id}")
 def review_detail(request: Request, id: int, done: str = "", book: int | None = None):
-    notice = None
-    if done in NOTICES:
-        found = call(request, store.book, book) if book else None
-        notice = {"text": NOTICES[done], "book": found}
-    return detail(request, id, notice=notice)
+    return detail(request, id, notice=landing_notice(request, done, book))
+
+
+# ---- the actions ---------------------------------------------------------------------------------------
+
+
+def open_order(request):
+    """The ids of every open observation in the order the inbox shows them."""
+    return [o["id"] for members in inbox_order(call(request, store.observations)) for o in members]
+
+
+def next_after(order, consumed, current):
+    """The open observation to show after an action: the next one, else the nearest one before."""
+    index = order.index(current) if current in order else len(order)
+    return next((id for id in [*order[index + 1:], *reversed(order[:index])] if id not in consumed), None)
+
+
+def done(request, order, consumed, current, outcome, book_id=None):
+    """Go to the next open observation, or to the inbox when none is left, saying what just happened."""
+    query = urlencode({"done": outcome, **({"book": book_id} if book_id else {})})
+    target = next_after(order, set(consumed), current)
+    return redirect(request, f"/review/{target}?{query}" if target else f"/review?{query}")
+
+
+def refused(request, status, problem):
+    return render(request, "review_error.html", status=status, error=str(problem))
+
+
+def chosen(id, form):
+    """The observation on this page and any others the person ticked for the same book."""
+    if not all(other.isdecimal() for other in form.getlist("also")):
+        raise store.Invalid("observation ids must be numbers")
+    return [id, *(int(other) for other in form.getlist("also"))]
+
+
+@router.post("/review/{id}/approve")
+def approve(request: Request, id: int, form=Depends(form_data)):
+    order = open_order(request)
+    try:
+        ids = chosen(id, form)
+        book = call(request, store.approve, ids, posted_fields(form), request.state.user)
+    except store.Invalid as problem:
+        return refused(request, 400, problem)
+    except store.NotFound as problem:
+        return refused(request, 404, problem)
+    return done(request, order, ids, id, "approved", book["id"])
+
+
+@router.post("/review/{id}/dismiss")
+def dismiss(request: Request, id: int):
+    order = open_order(request)
+    try:
+        call(request, store.dismiss, [id], request.state.user)
+    except store.Invalid as problem:
+        return refused(request, 400, problem)
+    except store.NotFound as problem:
+        return refused(request, 404, problem)
+    return done(request, order, [id], id, "dismissed")
+
+
+@router.get("/review/{id}/attach-search")
+def attach_search(request: Request, id: int, q: str = ""):
+    names = {row["id"]: row["name"] for row in call(request, store.locations)}
+    books = call(request, store.search_books, q.strip(), None, None, None, 8) if q.strip() else None
+    return render(request, "review_attach_results.html", observation_id=id, books=books, names=names)
+
+
+@router.post("/review/{id}/attach")
+def attach(request: Request, id: int, form=Depends(form_data)):
+    order = open_order(request)
+    try:
+        book_id = form.get("book_id", "")
+        if not book_id.isdecimal():
+            raise store.Invalid("choose a book to attach this to")
+        ids = chosen(id, form)
+        book = call(request, store.attach, ids, int(book_id), request.state.user)
+    except store.Invalid as problem:
+        return refused(request, 400, problem)
+    except store.NotFound as problem:
+        return refused(request, 404, problem)
+    return done(request, order, ids, id, "attached", book["id"])

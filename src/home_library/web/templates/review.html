@@ -3,6 +3,7 @@
 {% block body_class %}review wide{% endblock %}
 {% block main %}
 <h1>Review <span class="badge" data-open-count="{{ open_count }}">{{ open_count }} open</span></h1>
+{% if notice %}<div class="notice" role="status">{{ notice.text }}{% if notice.book %}: <a href="/books/{{ notice.book.id }}"><span{{ lang(notice.book.language) }}>{{ notice.book.title }}</span></a>{% endif %}.</div>{% endif %}
 {% if groups %}
 <div class="groups" data-rows>
   {% for group in groups %}
