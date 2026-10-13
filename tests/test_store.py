@@ -266,3 +266,46 @@ def test_reruns_keep_evidence_and_supersede_earlier_open_rows(db):
     store.finish_job(db, third["id"], third["owner"], [], NOW)
     assert store.observations(db) == []
     assert len(store.observations(db, "superseded")) == 2
+
+
+def typed_book(db, **changes):
+    if not store.locations(db):
+        store.add_location(db, "Shelf A", "shelf", now=NOW)
+    return store.add_book(db, {"title": " Měsíční člun ", "location_id": 1, **changes}, "parent", now=NOW)
+
+
+def test_a_book_typed_by_hand_is_a_plain_versioned_record(db):
+    added = typed_book(db, author="Lenka Testová", age_from="3", age_to="8", tags="moon, boats")
+    assert isinstance(added, dict)
+    assert added["title"] == added["sort_key"] == "Měsíční člun"
+    assert added["state"] == "Active"
+    assert added["version"] == 1
+    assert added["created_by"] == "parent"
+    assert added["created_at"] == added["updated_at"] == NOW
+    assert added["age_from"] == 3 and added["age_to"] == 8
+    assert isinstance(added["needs_review"], bool)
+    assert store.book(db, added["id"]) == added
+    with pytest.raises(store.NotFound):
+        store.book(db, 999)
+    for state in ("Stored", "Retired", "Gone"):
+        assert typed_book(db, state=state)["state"] == state
+
+
+@pytest.mark.parametrize("changes", [
+    {"title": " \n\t "}, {"title": None}, {"state": "lost"}, {"unknown": "x"}, {"version": 7},
+    {"author": []}, {"age_from": "three"}, {"age_to": 2.5}, {"needs_review": "false"},
+])
+def test_invalid_book_fields_leave_no_book(db, changes):
+    with pytest.raises(store.Invalid):
+        typed_book(db, **changes)
+    assert db.execute("SELECT count(*) FROM books").fetchone()[0] == 0
+
+
+def test_books_require_a_location_and_a_cover_capture_when_given(db):
+    with pytest.raises(store.NotFound):
+        typed_book(db, location_id=999)
+    with pytest.raises(store.Invalid, match="location"):
+        store.add_book(db, {"title": "Hvězdná bárka"}, "parent", now=NOW)
+    with pytest.raises(store.NotFound):
+        typed_book(db, cover_capture_id=CAPTURE_ID)
+    assert db.execute("SELECT count(*) FROM books").fetchone()[0] == 0
