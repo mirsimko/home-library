@@ -3,8 +3,8 @@ import hashlib
 
 import pytest
 from store_helpers import CAPTURE_ID, SECOND_ID
-from web_helpers import photo
 from web_helpers import client as client
+from web_helpers import photo
 
 
 def upload(client, content, **fields):
@@ -51,4 +51,5 @@ def test_unsupported_or_broken_photos_are_not_recorded(client, tmp_path, content
 def test_upload_metadata_errors_use_store_messages_before_publishing(client, tmp_path, fields, message):
     response = upload(client, photo(size=(20, 10)), **fields)
     assert response.status_code == 400 and response.json() == {"error": message}
-    assert not list((tmp_path / "captures").glob("*.*"))
+    assert not [path for path in (tmp_path / "captures").iterdir() if path.is_file()]
+

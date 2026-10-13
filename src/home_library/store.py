@@ -165,29 +165,39 @@ def _receipt(db, id, created):
     return receipt
 
 
+def validate_capture(db, id, kind, location_id, default_state, uploaded_by, original_name, media_type,
+                     sha256, bytes, group_id=None):
+    """Check upload metadata before publishing its file, without changing the store."""
+    _uuid(id, "capture id")
+    existing = db.execute("SELECT sha256 FROM captures WHERE id = ?", (id,)).fetchone()
+    if existing:
+        if existing[0] != sha256:
+            raise Conflict("this capture id already has a different photo hash")
+        return _receipt(db, id, False)
+    _choice(kind, ("shelf", "cover", "barcode"), "capture kind")
+    _choice(default_state, STATES, "state")
+    if group_id is not None:
+        _uuid(group_id, "group id")
+    _get(db, "locations", location_id)
+    if not isinstance(sha256, str) or len(sha256) != 64 or any(c not in "0123456789abcdef" for c in sha256):
+        raise Invalid("sha256 must be 64 lowercase hexadecimal characters")
+    if type(bytes) is not int or bytes < 0:
+        raise Invalid("bytes must be a non-negative integer")
+    _choice(media_type, ("image/jpeg", "image/png", "image/webp"), "media type")
+    uploaded_by = _name(uploaded_by, "uploaded by")
+    if not isinstance(original_name, str):
+        raise Invalid("original_name must be text")
+
+
 def add_capture(db, id, kind, location_id, default_state, uploaded_by, original_name, media_type, sha256,
                 bytes, group_id=None, *, now=None):
     """Record an uploaded photo and its job atomically; repeated uploads keep their receipt."""
     _uuid(id, "capture id")
     with _write(db):
-        existing = db.execute("SELECT sha256 FROM captures WHERE id = ?", (id,)).fetchone()
-        if existing:
-            if existing[0] != sha256:
-                raise Conflict("this capture id already has a different photo hash")
-            return _receipt(db, id, False)
-        _choice(kind, ("shelf", "cover", "barcode"), "capture kind")
-        _choice(default_state, STATES, "state")
-        if group_id is not None:
-            _uuid(group_id, "group id")
-        _get(db, "locations", location_id)
-        if not isinstance(sha256, str) or len(sha256) != 64 or any(c not in "0123456789abcdef" for c in sha256):
-            raise Invalid("sha256 must be 64 lowercase hexadecimal characters")
-        if type(bytes) is not int or bytes < 0:
-            raise Invalid("bytes must be a non-negative integer")
-        _choice(media_type, ("image/jpeg", "image/png", "image/webp"), "media type")
-        uploaded_by = _name(uploaded_by, "uploaded by")
-        if not isinstance(original_name, str):
-            raise Invalid("original_name must be text")
+        existing = validate_capture(db, id, kind, location_id, default_state, uploaded_by,
+                                    original_name, media_type, sha256, bytes, group_id)
+        if existing is not None:
+            return existing
         db.execute("""INSERT INTO captures
                       (id, kind, location_id, default_state, uploaded_by, original_name, media_type,
                        sha256, bytes, group_id, created_at) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)""",

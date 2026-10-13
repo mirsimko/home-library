@@ -2,8 +2,11 @@
 from contextlib import closing
 
 from fastapi import APIRouter, Request
+from starlette.concurrency import run_in_threadpool
+from starlette.responses import JSONResponse
 
 from home_library import store
+from home_library.web.uploads import incoming, publish
 
 router = APIRouter()
 
@@ -54,3 +57,10 @@ def book(request: Request, id: int):
 @router.patch("/api/books/{id}")
 def update_book(request: Request, id: int, body: dict):
     return call(request, store.update_book, id, body.get("version"), body.get("changes"), request.state.user)
+
+
+@router.post("/api/captures")
+async def add_capture(request: Request):
+    async with incoming(request) as (path, upload):
+        receipt = await run_in_threadpool(publish, request.app.state.data_root, path, upload, request.state.user)
+    return JSONResponse(receipt, status_code=201 if receipt["created"] else 200)
