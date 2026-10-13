@@ -1,0 +1,13 @@
+<tr id="location-{{ location.id }}" data-books="{{ location.books }}">
+  <td colspan="4">
+    <form class="inline" hx-post="/locations/{{ location.id }}/rename" hx-target="#location-{{ location.id }}" hx-swap="outerHTML">
+      <div>
+        <label for="rename-{{ location.id }}">Rename</label>
+        <input type="text" id="rename-{{ location.id }}" name="name" value="{{ location.name }}" required autocomplete="off" autofocus>
+      </div>
+      <button type="submit" class="primary">Save</button>
+      <button type="button" hx-get="/locations/{{ location.id }}/row" hx-target="#location-{{ location.id }}" hx-swap="outerHTML">Cancel</button>
+    </form>
+    {% if error %}<div class="notice error" role="alert">{{ error }}</div>{% endif %}
+  </td>
+</tr>

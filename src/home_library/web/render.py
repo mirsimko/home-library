@@ -2,6 +2,7 @@
 from pathlib import Path
 
 from markupsafe import Markup
+from starlette.requests import Request
 from starlette.responses import RedirectResponse, Response
 from starlette.templating import Jinja2Templates
 
@@ -30,3 +31,8 @@ def redirect(request, url):
     if request.headers.get("hx-request") == "true":
         return Response(status_code=204, headers={"HX-Redirect": url})
     return RedirectResponse(url, status_code=303)
+
+
+async def form_data(request: Request):
+    """The posted form, read before a plain handler runs in a worker thread."""
+    return await request.form()

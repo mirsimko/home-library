@@ -1,0 +1,15 @@
+<div id="locations">
+  {% if error %}<div class="notice error" role="alert">{{ error }}</div>{% endif %}
+  {% if locations %}
+  <div class="table-wrap">
+    <table>
+      <thead><tr><th>Name</th><th>Kind</th><th class="num">Books</th><th></th></tr></thead>
+      <tbody>
+        {% for location in locations %}{% include "location_row.html" %}{% endfor %}
+      </tbody>
+    </table>
+  </div>
+  {% else %}
+  <p class="muted">No locations yet. Add the first one above.</p>
+  {% endif %}
+</div>
