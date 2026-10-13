@@ -166,3 +166,17 @@ def test_review_actions_need_access_and_the_same_origin(client, anonymous, tmp_p
         assert foreign.status_code == 403
     assert anonymous.get(f"/review/{shelf[0]['id']}/attach-search").status_code == 401
     assert set(statuses(tmp_path).values()) == {"open"}
+
+
+def test_only_a_plain_path_on_this_site_is_followed_after_adding_a_book(client, tmp_path):
+    hand = {"title": "Tin Comet", "author": "", "location_id": "1", "state": "Active"}
+    stock(tmp_path)
+    hostile = ["//evil.example/x", "/\\evil.example", "/\\\\evil.example", "http://evil.example/", "https://evil.example/",
+               "evil.example", "javascript:alert(1)", "/ok\\path", "/\t/evil.example", "/\n/evil.example", "///evil.example", ""]
+    for index, url in enumerate(hostile, start=1):
+        response = client.post("/books", data={**hand, "title": f"Tin Comet {index}", "next": url}, follow_redirects=False)
+        assert response.status_code == 303 and response.headers["location"] == f"/books/{index}", url
+    fine = client.post("/books", data={**hand, "title": "Tin Comet fine", "next": "/review/5?done=added"}, follow_redirects=False)
+    assert fine.headers["location"] == "/review/5?done=added"
+    assert 'value="/review/5"' in client.get("/books/new", params={"next": "/review/5"}).text
+    assert "evil" not in client.get("/books/new", params={"next": "/\\evil.example"}).text
