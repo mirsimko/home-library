@@ -3,6 +3,7 @@ import json
 import logging
 import os
 import signal
+import sqlite3
 import subprocess
 import sys
 import tempfile
@@ -15,6 +16,7 @@ from home_library.workspace import refuse_inside_checkout
 
 LOG = logging.getLogger(__name__)
 EXTENSIONS = {"image/jpeg": "jpg", "image/png": "png", "image/webp": "webp"}
+HEARTBEAT_FAILURES = 3  # consecutive failed renewals after which the lease counts as lost
 COMMANDS = {"shelf": "run", "cover": "cover", "barcode": "barcode"}
 
 
@@ -92,10 +94,21 @@ def _kill(child, killpg):
 
 def _heartbeat(root, job, child, done, lost, interval, killpg):
     # SQLite connections belong to the thread that opened them.
+    failures = 0
     try:
         with closing(store.open(root)) as db:
             while not done.wait(interval):
-                if not store.heartbeat(db, job["id"], job["owner"]):
+                try:
+                    kept = store.heartbeat(db, job["id"], job["owner"])
+                    failures = 0
+                except sqlite3.Error:
+                    # A busy database passes; only a lease that cannot be renewed three times running is lost.
+                    failures += 1
+                    LOG.warning("job %s heartbeat failed (%s in a row)", job["id"], failures)
+                    if failures < HEARTBEAT_FAILURES:
+                        continue
+                    raise
+                if not kept:
                     lost.set()
                     _kill(child, killpg)
                     return

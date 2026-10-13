@@ -75,7 +75,7 @@ One process that drains the job queue, one job at a time (the home uplink carrie
   - `shelf`: `hl --work-root <work> run <captures>/<id>.jpg --location <name>`
   - `cover`: `hl --work-root <work> cover <captures>/<id>.jpg --location <name>`
   - `barcode`: `hl --work-root <work> barcode <captures>/<id>.jpg --location <name>`
-- While the child runs, a thread calls `heartbeat` every 30 seconds. After 20 minutes the whole process group is killed and the job fails with a timeout. If `heartbeat` reports the job lost, the child is killed and nothing is imported.
+- While the child runs, a thread calls `heartbeat` every 30 seconds. After 20 minutes the whole process group is killed and the job fails with a timeout. If `heartbeat` reports the job lost, the child is killed and nothing is imported. An error from `heartbeat` (a busy database) is logged and tried again at the next beat; only three errors in a row count as a lost lease.
 - When the child exits 0, the worker reads `work/<id>/records.json` and calls `finish_job`. A non-zero exit, a missing or unreadable `records.json`, or a timeout calls `fail_job` with the last 2000 characters of the child's standard error.
 - With nothing to do it waits 5 seconds and looks again. It stops cleanly on SIGTERM or SIGINT: a running child is killed and its job is left `running`, to be taken over once its heartbeat is stale.
 - `hl worker --once` handles at most one job and exits; tests and a harness use it.
