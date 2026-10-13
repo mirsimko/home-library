@@ -8,12 +8,15 @@ import sys
 from contextlib import closing
 from pathlib import Path
 
-from home_library import maintenance, records, store
+from home_library import maintenance, records, store, worker
 
 
 def add_commands(parser, commands):
     """Add catalog commands without changing the photo pipeline's arguments."""
     parser.add_argument("--data-root", type=Path, help="private data directory (default: $HL_DATA or ~/home-library)")
+    worker_command = commands.add_parser("worker", help="Drain queued captures one at a time.")
+    worker_command.add_argument("--once", action="store_true")
+    data_root(worker_command)
     data_root(commands.add_parser("token", help="Rotate and print the agent token."))
     backup = commands.add_parser("backup", help="Snapshot the catalog and mirror private photos and work.")
     backup.add_argument("destination", type=Path)
@@ -120,9 +123,11 @@ def _catalog(db, args):
         _print(store.add_location(db, args.name, args.kind))
 
 
-def execute(args, *, run=subprocess.run, **kwargs):
+def execute(args, *, run=subprocess.run, popen=subprocess.Popen):
     """Report store errors on one line so shell and agent callers can handle them."""
     try:
+        if args.command == "worker":
+            return worker.run(args.data_root, once=args.once, popen=popen)
         if args.command == "token":
             print(maintenance.rotate_token(args.data_root))
         elif args.command == "backup":
