@@ -12,6 +12,19 @@ from home_library import store
 from home_library.web.api import router
 from home_library.web.auth import Access
 from home_library.web.pages import router as pages
+from home_library.web.render import render
+
+HEADINGS = {400: "Something is wrong with this request", 404: "Not found", 409: "Someone else changed this"}
+
+
+def fail(request, message, status):
+    """Answer a browser navigation with a page, and scripts, the API and HTMX with JSON."""
+    wants_page = ("text/html" in request.headers.get("accept", "") and "hx-request" not in request.headers
+                  and not request.url.path.startswith("/api/"))
+    if wants_page:
+        return render(request, "error.html", status=status, heading=HEADINGS.get(status, "Something went wrong"),
+                      message=message)
+    return JSONResponse({"error": message}, status_code=status)
 
 
 def create_app(data_root, users, dev_user=None):
@@ -23,16 +36,16 @@ def create_app(data_root, users, dev_user=None):
     app.add_middleware(Access, data_root=app.state.data_root, users=users, dev_user=dev_user)
     for error, status in ((store.Invalid, 400), (store.NotFound, 404), (store.Conflict, 409)):
         async def store_error(request, exception, status=status):
-            return JSONResponse({"error": str(exception)}, status_code=status)
+            return fail(request, str(exception), status)
         app.add_exception_handler(error, store_error)
 
     @app.exception_handler(RequestValidationError)
     async def invalid_request(request, exception):
-        return JSONResponse({"error": exception.errors()[0]["msg"]}, status_code=400)
+        return fail(request, exception.errors()[0]["msg"], 400)
 
     @app.exception_handler(HTTPException)
     async def http_error(request, exception):
-        return JSONResponse({"error": str(exception.detail)}, status_code=exception.status_code)
+        return fail(request, str(exception.detail), exception.status_code)
 
     app.include_router(router)
     app.include_router(pages)
