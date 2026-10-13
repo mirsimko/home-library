@@ -149,3 +149,76 @@ def test_an_isbn_without_a_matching_candidate_is_kept_with_a_note(tmp_path):
     assert (record["read_status"], record["isbn"], record["catalogue_title"], record["author"]) == (
         "barcode", "9784000000000", "", "")
     assert "no catalogue match" in record["notes"].lower()
+
+
+@pytest.mark.parametrize("isbn, language, sources", [
+    ("9784000000000", "ja", ["ndl", "openbd"]),
+    ("9788000000008", "cs", ["nkcr"]),
+    ("9780000000002", "en", ["openlibrary", "loc"]),
+    ("9781000000009", "en", ["openlibrary", "loc"]),
+    ("9798000000007", "en", ["openlibrary", "loc"]),
+])
+def test_the_registration_group_selects_only_its_language_sources(tmp_path, isbn, language, sources):
+    from home_library.pipeline import barcode_photo
+
+    photo = tmp_path / "barcode.png"
+    ean13(isbn).save(photo)
+    asked = []
+
+    def fetch(url):
+        if "ndlsearch" in url:
+            asked.append("ndl")
+            return b'<rss><channel/></rss>'
+        if "openbd" in url:
+            asked.append("openbd")
+            return b'[null]'
+        if "openlibrary" in url:
+            asked.append("openlibrary")
+            return b'{}'
+        asked.append("loc")
+        return b'<searchRetrieveResponse xmlns="http://www.loc.gov/zing/srw/"/>'
+
+    def yaz(commands):
+        asked.append("nkcr")
+        return 'Number of hits: 0\n'
+
+    barcode_photo(photo, tmp_path / "work", fetch=fetch, run_yaz=yaz)
+    (record,) = json.loads((tmp_path / "work/barcode/records.json").read_text())
+    assert (record["language"], record["isbn"], record["read_status"]) == (language, isbn, "barcode")
+    assert asked == sources
+
+
+@pytest.mark.parametrize("stop_at", ["ja", "cs", "en", None])
+def test_an_unknown_group_tries_japanese_czech_then_english_until_records_are_returned(tmp_path, stop_at):
+    from home_library.pipeline import barcode_photo
+
+    photo = tmp_path / "barcode.png"
+    ean13("9782000000006").save(photo)
+    asked = []
+
+    def fetch(url):
+        if "ndlsearch" in url:
+            asked.append("ndl")
+            return b'<rss><channel/></rss>'
+        if "openbd" in url:
+            asked.append("openbd")
+            return b'[{"summary": {"isbn": "9782000000006", "title": "Amber Balloon"}}]' if stop_at == "ja" else b'[null]'
+        if "openlibrary" in url:
+            asked.append("openlibrary")
+            return b'{"ISBN:9782000000006": {"key": "/books/invented", "title": "Amber Balloon"}}' if stop_at == "en" else b'{}'
+        asked.append("loc")
+        return b'<searchRetrieveResponse xmlns="http://www.loc.gov/zing/srw/"/>'
+
+    def yaz(commands):
+        asked.append("nkcr")
+        return 'Number of hits: 1\n001 invented\n020    $a 9782000000006\n245    $a Amber Balloon\n' if stop_at == "cs" else 'Number of hits: 0\n'
+
+    barcode_photo(photo, tmp_path / "work", fetch=fetch, run_yaz=yaz)
+    (record,) = json.loads((tmp_path / "work/barcode/records.json").read_text())
+    expected = ["ndl", "openbd"] + ([] if stop_at == "ja" else ["nkcr"])
+    if stop_at not in ("ja", "cs"):
+        expected += ["openlibrary", "loc"]
+    assert asked == expected
+    assert record["language"] == (stop_at or "unknown")
+    assert record["catalogue_title"] == ("Amber Balloon" if stop_at else "")
+    assert record["isbn"] == "9782000000006" and record["title"] == ""
