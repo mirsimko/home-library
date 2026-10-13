@@ -1,3 +1,4 @@
+import json
 from types import SimpleNamespace
 
 import pytest
@@ -62,3 +63,28 @@ def test_only_the_first_valid_isbn_in_an_ean13_code_is_selected(tmp_path):
     result = decode_photo(photo, decode=lambda image: codes)
     assert result["isbn"] == "9798000000007"
     assert len(result["codes"]) == 5
+
+
+def test_a_barcode_photo_with_no_isbn_writes_a_row_asking_for_the_number(tmp_path):
+    from home_library.pipeline import barcode_photo
+
+    for name, image, codes in (("blank", Image.new("RGB", (476, 280), "white"), []),
+                               ("product", ean13("4000000000006"),
+                                [{"format": "EAN-13", "text": "4000000000006"}])):
+        photo = tmp_path / (name + ".png")
+        image.save(photo)
+
+        def no_fetch(url):
+            raise AssertionError("a photo without an ISBN must not ask a catalogue")
+
+        summary = barcode_photo(photo, tmp_path / "work", location="Box 4", fetch=no_fetch, run_yaz=no_fetch)
+        directory = tmp_path / "work" / name
+        decoded = json.loads((directory / "barcode.json").read_text())
+        (record,) = json.loads((directory / "records.json").read_text())
+        assert decoded == {"file": photo.name, "codes": codes, "isbn": None}
+        assert (record["read_status"], record["isbn"], record["title"], record["location"]) == (
+            "no_barcode", "", "", "Box 4")
+        assert record["photo"] == photo.name and record["needs_review"] is True
+        assert "type the number in" in record["notes"].lower()
+        assert (directory / "records.csv").read_bytes().startswith(b'\xef\xbb\xbf')
+        assert (summary["photo"], summary["unreadable"], summary["directory"]) == (photo.name, 1, str(directory))
