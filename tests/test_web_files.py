@@ -1,5 +1,6 @@
 """Capture receipts and manifest-listed images stay behind access checks."""
 import json
+from contextlib import closing
 
 from fastapi.testclient import TestClient
 from store_helpers import CAPTURE_ID, SECOND_ID
@@ -22,7 +23,7 @@ def test_capture_details_listing_and_photos_report_the_stored_content(client, tm
     assert details.status_code == 200
     assert details.json() == {**receipt, "created": False, "open_observations": 0}
     assert details.json()["image"]["orientation"] is None
-    with store.open(tmp_path) as db:
+    with closing(store.open(tmp_path)) as db:
         job = store.claim_job(db)
         store.finish_job(db, job["id"], job["owner"], [{"title": "Paper Moon"}])
     listed = client.get("/api/captures").json()

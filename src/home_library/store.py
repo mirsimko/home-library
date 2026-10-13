@@ -310,7 +310,6 @@ def finish_job(db, job_id, owner, records, now=None):
                    (stamp, job_id))
         return _get(db, "jobs", job_id)
 
-
 def observations(db, status="open", capture_id=None):
     """List evidence with its original record and capture for review."""
     _choice(status, ("open", "used", "dismissed", "superseded"), "observation status")
@@ -548,8 +547,15 @@ def search_books(db, query="", state=None, location_id=None, tag=None, limit=50,
 
 def export_rows(db):
     """Export catalog fields in spec 2.1 order, with portable relative cover paths."""
+    return _export_rows(db, False)
+
+
+def _export_rows(db, include_captures):
+    """Read catalogue fields and evidence together so each export has one SQLite snapshot."""
     result = []
-    for row in db.execute("""SELECT books.*, locations.name AS location, captures.media_type AS cover_media
+    for row in db.execute("""SELECT books.*, locations.name AS location, captures.media_type AS cover_media,
+                             (SELECT group_concat(DISTINCT capture_id) FROM observations
+                              WHERE book_id = books.id) AS evidence_ids
                              FROM books JOIN locations ON locations.id = books.location_id
                              LEFT JOIN captures ON captures.id = books.cover_capture_id
                              ORDER BY sort_key, title, books.id"""):
@@ -562,6 +568,11 @@ def export_rows(db):
             cover = f"captures/{row['cover_capture_id']}.{extension}"
         exported.update(cover_photo=cover, source=row["source"], source_id=row["source_id"],
                         needs_review=bool(row["needs_review"]), notes=row["notes"])
+        if include_captures:
+            ids = set(row["evidence_ids"].split(",")) if row["evidence_ids"] else set()
+            if row["cover_capture_id"] is not None:
+                ids.add(row["cover_capture_id"])
+            exported["capture_ids"] = sorted(ids)
         result.append(exported)
     return result
 
@@ -599,7 +610,6 @@ def health(db):
             "failed": sum(job["status"] == "failed" for job in queue)}
 
 
-
 def observation(db, id):
     """Read one observation, including its original record and capture."""
     result = _get(db, "observations", id)
@@ -610,12 +620,4 @@ def observation(db, id):
 
 def export_books(db):
     """Add all evidence and cover capture ids to the portable catalogue export."""
-    result = export_rows(db)
-    books = db.execute("SELECT id, cover_capture_id FROM books ORDER BY sort_key, title, id")
-    for exported, book in zip(result, books):
-        captures = {row[0] for row in db.execute(
-            "SELECT DISTINCT capture_id FROM observations WHERE book_id = ?", (book["id"],))}
-        if book["cover_capture_id"] is not None:
-            captures.add(book["cover_capture_id"])
-        exported["capture_ids"] = sorted(captures)
-    return result
+    return _export_rows(db, True)
