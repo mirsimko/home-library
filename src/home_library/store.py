@@ -455,8 +455,10 @@ def approve(db, observation_ids, fields, by, *, now=None):
         inherited = {}
         for key in (*TEXT_FIELDS, "age_from", "age_to"):
             inherited[key] = next((row[key] for row in records if row.get(key) not in (None, "")), "")
-        inherited["title"] = next((row["title"] for row in records
-                                   if isinstance(row.get("title"), str) and row["title"].strip()), "")
+        inherited["notes"] = ""  # the pipeline's notes say why a row needs a look; they are not about the book
+        # A barcode reads no title, so a book made from one alone is named by its catalogue record.
+        titles = [row.get(key) for key in ("title", "catalogue_title") for row in records]
+        inherited["title"] = next((title for title in titles if isinstance(title, str) and title.strip()), "")
         catalogue = next((row for row in records if row.get("source") or row.get("catalogue_title")), None)
         if catalogue is not None:
             for key in ("sort_key", "author", "publisher", "year", "isbn", "series", "source", "source_id",
