@@ -1,4 +1,4 @@
-"""Build the private web app shared by JSON routes and future pages."""
+"""Build the private web app shared by the JSON routes and the pages."""
 from contextlib import closing
 from pathlib import Path
 
@@ -6,10 +6,12 @@ from fastapi import FastAPI
 from fastapi.exceptions import RequestValidationError
 from starlette.exceptions import HTTPException
 from starlette.responses import JSONResponse
+from starlette.staticfiles import StaticFiles
 
 from home_library import store
 from home_library.web.api import router
 from home_library.web.auth import Access
+from home_library.web.pages import router as pages
 
 
 def create_app(data_root, users, dev_user=None):
@@ -33,4 +35,6 @@ def create_app(data_root, users, dev_user=None):
         return JSONResponse({"error": str(exception.detail)}, status_code=exception.status_code)
 
     app.include_router(router)
+    app.include_router(pages)
+    app.mount("/static", StaticFiles(directory=Path(__file__).parent / "static"), name="static")
     return app

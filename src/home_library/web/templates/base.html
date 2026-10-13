@@ -1,0 +1,30 @@
+<!doctype html>
+<html lang="en">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
+  <meta name="color-scheme" content="light dark">
+  <meta name="theme-color" content="#f5f3ee" media="(prefers-color-scheme: light)">
+  <meta name="theme-color" content="#151917" media="(prefers-color-scheme: dark)">
+  <title>{% block title %}Home library{% endblock %}</title>
+  <link rel="manifest" href="/manifest.webmanifest">
+  <link rel="apple-touch-icon" href="/icons/icon-180.png">
+  <link rel="stylesheet" href="/static/app.css">
+  <script src="/static/htmx.min.js" defer></script>
+  <script src="/static/app.js" defer></script>
+</head>
+<body class="{% block body_class %}{% endblock %}">
+  <header class="bar">
+    <a class="brand" href="/">Home library</a>
+    <nav aria-label="Pages">
+      {% for key, path, label in (("capture", "/capture", "Capture"), ("review", "/review", "Review"), ("books", "/books", "Books"), ("locations", "/locations", "Locations"), ("status", "/status", "Status")) %}
+      <a href="{{ path }}"{% if active == key %} aria-current="page"{% endif %}>{{ label }}</a>
+      {% endfor %}
+    </nav>
+  </header>
+  <main>
+    {% block main %}{% endblock %}
+  </main>
+  {% block scripts %}{% endblock %}
+</body>
+</html>

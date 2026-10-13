@@ -1,0 +1,12 @@
+{% extends "base.html" %}
+{% block main %}
+<h1>Home library</h1>
+<p class="muted">Signed in as {{ user }}.</p>
+<ul class="tiles">
+  <li><a class="tile-link" href="/capture"><strong>Capture</strong><span>Photograph shelves and single books.</span></a></li>
+  <li><a class="tile-link" href="/review"><strong>Review</strong><span data-open-count="{{ open_count }}">{{ open_count }} open to look at</span></a></li>
+  <li><a class="tile-link" href="/books"><strong>Books</strong><span>Search, move and edit.</span></a></li>
+  <li><a class="tile-link" href="/locations"><strong>Locations</strong><span>Shelves and boxes.</span></a></li>
+  <li><a class="tile-link" href="/status"><strong>Status</strong><span>The queue and the worker.</span></a></li>
+</ul>
+{% endblock %}
