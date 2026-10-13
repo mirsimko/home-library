@@ -218,7 +218,7 @@ def barcode_photo(photo, work_root=DEFAULT_WORK_ROOT, *, location="", fetch=None
     if decoded["isbn"]:
         found = lookup_isbn(decoded["isbn"], fetch=fetch or Fetcher(), run_yaz=run_yaz,
                             cache_dir=directory / "lookup" / "cache")
-        _store(directory / "lookup" / "candidates.json", {"file": decoded["file"], "books": [{"item": 0, **found}]})
+        _store(directory / "lookup" / "candidates.json", {"file": decoded["file"], "books": [{"item": 0, "title": "", **found}]})
     record = build_barcode_record(decoded["file"], decoded["isbn"], found, location=location)
     write_records(directory, [record])
     return {"photo": decoded["file"], "directory": str(directory), "accepted": 0, "review": int(bool(decoded["isbn"])),
