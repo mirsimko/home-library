@@ -119,3 +119,13 @@ def dismiss(request: Request, body: dict):
 @router.get("/api/observations/{id}/candidates")
 def candidates(request: Request, id: int):
     return observation_candidates(request.app.state.data_root, call(request, store.observation, id))
+
+
+@router.get("/api/jobs")
+def jobs(request: Request):
+    return call(request, store.jobs)
+
+
+@router.post("/api/jobs/{id}/retry")
+def retry_job(request: Request, id: int):
+    return call(request, store.retry_job, id)
