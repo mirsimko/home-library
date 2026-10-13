@@ -58,3 +58,13 @@ def test_serve_refuses_a_data_root_inside_a_checkout_before_starting(tmp_path, c
     with pytest.raises(SystemExit):
         main(["serve", "--data-root", str(tmp_path / "private")])
     assert "git checkout" in capsys.readouterr().err and calls == []
+
+
+def test_serve_refuses_to_start_when_both_a_development_user_and_tailscale_logins_are_set(tmp_path, monkeypatch, calls, capsys):
+    monkeypatch.setenv("HL_DEV_USER", "developer")
+    monkeypatch.setenv("HL_USERS", "parent@example.test")
+    with pytest.raises(SystemExit) as error:
+        main(["serve", "--data-root", str(tmp_path)])
+    message = capsys.readouterr().err
+    assert error.value.code == 2 and "HL_DEV_USER" in message and "HL_USERS" in message
+    assert calls == []
