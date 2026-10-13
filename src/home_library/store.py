@@ -600,3 +600,16 @@ def observation(db, id):
     result["record"] = json.loads(result["record"])
     result["capture"] = _get(db, "captures", result["capture_id"])
     return result
+
+
+def export_books(db):
+    """Add all evidence and cover capture ids to the portable catalogue export."""
+    result = export_rows(db)
+    books = db.execute("SELECT id, cover_capture_id FROM books ORDER BY sort_key, title, id")
+    for exported, book in zip(result, books):
+        captures = {row[0] for row in db.execute(
+            "SELECT DISTINCT capture_id FROM observations WHERE book_id = ?", (book["id"],))}
+        if book["cover_capture_id"] is not None:
+            captures.add(book["cover_capture_id"])
+        exported["capture_ids"] = sorted(captures)
+    return result
