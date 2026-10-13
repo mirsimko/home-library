@@ -65,7 +65,8 @@ def lookup_photo(photo_dir, *, fetch=None, run_yaz=run_yaz_client):
     books, down = [], set()  # a source that could not be reached is not asked again for this photo
     for index, item in enumerate(merged["items"]):
         if item["reason"] in LOOKED_UP:
-            found = find_candidates(item["title"], item["language"], fetch=fetch, run_yaz=run_yaz,
+            found = find_candidates(item["title"], item["language"],
+                                    author=item["readings"][0].get("author", ""), fetch=fetch, run_yaz=run_yaz,
                                     cache_dir=photo_dir / "lookup" / "cache", skip=down)
             down.update(query["source"] for query in found["queries"]
                         if query["status"] in ("unavailable", "rate_limited"))

@@ -26,7 +26,7 @@ def _item_record(photo: str, item: dict, location: str) -> dict:
     record = _empty()
     record.update(title=item["title"], sort_key=item["title"], language=item["language"], photo=photo,
                   read_status=item["reason"], location=location, other_text=first["other_text"],
-                  where=first["where"],
+                  where=first["where"], author=first.get("author", ""),
                   read_ids="; ".join(r["read_id"] for r in item["readings"]))
     if len(item["readings"]) > 1 and item["readings"][1]["title"] != item["readings"][0]["title"]:
         record["other_reading"] = item["readings"][1]["title"]
