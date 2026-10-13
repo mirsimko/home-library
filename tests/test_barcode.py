@@ -88,3 +88,64 @@ def test_a_barcode_photo_with_no_isbn_writes_a_row_asking_for_the_number(tmp_pat
         assert "type the number in" in record["notes"].lower()
         assert (directory / "records.csv").read_bytes().startswith(b'\xef\xbb\xbf')
         assert (summary["photo"], summary["unreadable"], summary["directory"]) == (photo.name, 1, str(directory))
+
+
+def test_a_japanese_isbn_uses_the_first_matching_catalogue_record_without_a_model(tmp_path):
+    from home_library.pipeline import barcode_photo
+    from home_library.records import COLUMNS
+
+    photo = tmp_path / "barcode.jpg"
+    ean13("9784000000000").save(photo)
+    asked = []
+
+    def fetch(url):
+        asked.append(url)
+        if "openbd" in url:
+            return b'[{"summary": {"isbn": "9784000000000", "title": "Later Balloon"}}]'
+        return b'''<rss xmlns:dc="http://purl.org/dc/elements/1.1/" xmlns:dcndl="http://ndl.go.jp/dcndl/terms/"
+                       xmlns:xsi="http://www.w3.org/2001/XMLSchema-instance"><channel>
+          <item><dc:title>Wrong Balloon</dc:title><dc:identifier xsi:type="dcndl:ISBN">9784000000017</dc:identifier></item>
+          <item><dc:title>Amber Balloon</dc:title><dc:creator>Ada Reed</dc:creator><dc:publisher>Cloud Press</dc:publisher>
+            <dc:date>2026</dc:date><dcndl:titleTranscription>AMBER BALLOON</dcndl:titleTranscription>
+            <dcndl:seriesTitle>Invented Skies</dcndl:seriesTitle>
+            <dc:identifier xsi:type="dcndl:ISBN">978-4-0000-0000-0</dc:identifier>
+            <dc:identifier xsi:type="dcndl:NDLBibID">invented-2</dc:identifier></item>
+          <item><dc:title>Second Balloon</dc:title><dc:identifier xsi:type="dcndl:ISBN">9784000000000</dc:identifier></item>
+        </channel></rss>'''
+
+    def no_yaz(commands):
+        raise AssertionError("a Japanese ISBN must not use the Czech catalogue")
+
+    summary = barcode_photo(photo, tmp_path / "work", location="Shelf 3", fetch=fetch, run_yaz=no_yaz)
+    directory = tmp_path / "work" / "barcode"
+    (record,) = json.loads((directory / "records.json").read_text())
+    assert list(record) == COLUMNS
+    assert (record["read_status"], record["isbn"], record["title"], record["language"]) == (
+        "barcode", "9784000000000", "", "ja")
+    assert (record["catalogue_title"], record["author"], record["publisher"], record["year"]) == (
+        "Amber Balloon", "Ada Reed", "Cloud Press", "2026")
+    assert (record["source"], record["source_id"], record["sort_key"], record["series"]) == (
+        "ndl", "invented-2", "AMBER BALLOON", "Invented Skies")
+    assert (record["candidate_count"], record["pick_verdict"], record["location"]) == (4, "match", "Shelf 3")
+    assert summary["review"] == 1 and summary["seconds"] == {}
+    assert len(asked) == 2 and all("isbn=9784000000000" in url for url in asked)
+
+    asked.clear()
+    barcode_photo(photo, tmp_path / "work", fetch=fetch, run_yaz=no_yaz)
+    assert asked == []  # ISBN catalogue answers are cached as in the shelf pipeline
+
+
+def test_an_isbn_without_a_matching_candidate_is_kept_with_a_note(tmp_path):
+    from home_library.pipeline import barcode_photo
+
+    photo = tmp_path / "barcode.png"
+    ean13("9784000000000").save(photo)
+
+    def fetch(url):
+        return b'<rss><channel/></rss>' if "ndlsearch" in url else b'[{"summary": {"isbn": "9784000000017", "title": "Wrong Balloon"}}]'
+
+    barcode_photo(photo, tmp_path / "work", fetch=fetch)
+    (record,) = json.loads((tmp_path / "work/barcode/records.json").read_text())
+    assert (record["read_status"], record["isbn"], record["catalogue_title"], record["author"]) == (
+        "barcode", "9784000000000", "", "")
+    assert "no catalogue match" in record["notes"].lower()
