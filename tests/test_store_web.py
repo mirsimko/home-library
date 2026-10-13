@@ -57,3 +57,9 @@ def test_health_chooses_the_latest_heartbeat_at_full_saved_precision(db):
     second = store.claim_job(db, "2026-01-02T03:04:05.000001Z")
     assert first["id"] != second["id"]
     assert store.health(db)["worker_seen"] == "2026-01-02T03:04:05.000001Z"
+
+
+def test_recent_captures_are_ordered_by_time_including_fractional_seconds(db):
+    capture(db, now="2026-01-02T03:04:05.000001Z")
+    capture(db, SECOND_ID, now="2026-01-02T03:04:05Z")
+    assert [row["capture"]["id"] for row in store.captures(db)] == [CAPTURE_ID, SECOND_ID]
