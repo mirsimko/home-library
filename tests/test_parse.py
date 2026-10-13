@@ -102,7 +102,8 @@ def test_answer_cut_off_between_entries_is_incomplete_without_an_error():
 def test_missing_fields_are_filled_with_empty_strings_and_all_nine_are_present():
     raw = '{"file": "shelf-1.jpg", "books": [{"n": 1, "title": "The Blue Kite", "readable": "yes"}]}'
     book = parse_read(raw)["books"][0]
-    assert list(book) == FIELDS
+    assert list(book) == [*FIELDS, "author"]
+    assert book["author"] == ""
     assert book["title"] == "The Blue Kite"
     assert book["where"] == ""
     assert book["inferred"] == ""
@@ -276,3 +277,9 @@ def test_deeply_nested_titles_never_make_parse_read_raise_and_every_entry_is_acc
         assert read["complete"] is (read["errors"] == []), depth
         for error in read["errors"]:
             assert (error["position"], error["raw"]) == (1, '{"title":' + nested + "}"), depth
+
+
+def test_the_optional_author_is_kept_as_printed_and_defaults_to_empty():
+    read = parse_read(answer(entry(author="山田 花子"), entry(2, author=None), entry(3)))
+    assert [book["author"] for book in read["books"]] == ["山田 花子", "", ""]
+    assert read["complete"] is True and read["errors"] == []
