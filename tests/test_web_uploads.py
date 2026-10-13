@@ -9,6 +9,8 @@ from store_helpers import CAPTURE_ID, SECOND_ID
 from web_helpers import client as client
 from web_helpers import photo
 
+from home_library.web import create_app
+
 
 def upload(client, content, **fields):
     location = client.post("/api/locations", json={"name": "Shelf A", "kind": "shelf"})
@@ -202,3 +204,17 @@ def test_incomplete_and_duplicate_multipart_fields_leave_no_temporary_files(clie
     assert response.status_code == 400 and list(response.json()) == ["error"]
     assert client.get("/api/captures").json() == []
     assert not list((tmp_path / "captures" / ".incoming").glob("*.tmp"))
+
+
+def test_a_captures_directory_that_is_a_symlink_still_takes_and_serves_photos(tmp_path):
+    root, disk = tmp_path / "private", tmp_path / "bigger-disk" / "captures"
+    root.mkdir()
+    disk.mkdir(parents=True)
+    (root / "captures").symlink_to(disk, target_is_directory=True)
+    content = photo(size=(40, 30))
+    with TestClient(create_app(root, [], dev_user="parent"), headers={"Sec-Fetch-Site": "same-origin"}) as client:
+        response = upload(client, content)
+        assert response.status_code == 201
+        assert (disk / f"{CAPTURE_ID}.jpg").read_bytes() == content
+        served = client.get(f"/api/captures/{CAPTURE_ID}/photo")
+        assert served.status_code == 200 and served.content == content
