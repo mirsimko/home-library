@@ -251,6 +251,12 @@ def finish_job(db, job_id, owner, records, now=None):
         if not isinstance(records, list):
             raise Invalid("records must be a list of row objects")
         stamp = _stamp(now)
+        previous = db.execute("SELECT coalesce(max(attempt), 0) FROM observations WHERE capture_id = ?",
+                              (job["capture_id"],)).fetchone()[0]
+        # retry_job resets the retry budget, but imported evidence must keep distinct attempt numbers.
+        attempt = max(job["attempts"], previous + 1)
+        db.execute("UPDATE observations SET status = 'superseded' WHERE capture_id = ? AND status = 'open'",
+                   (job["capture_id"],))
         for index, row in enumerate(records):
             if not isinstance(row, dict) or any(not isinstance(row.get(key, ""), str)
                                                 for key in ("title", "read_status", "other_reading")):
@@ -262,7 +268,7 @@ def finish_job(db, job_id, owner, records, now=None):
             db.execute("""INSERT INTO observations
                           (capture_id, attempt, row, read_status, title, other_reading, record, status, created_at)
                           VALUES (?, ?, ?, ?, ?, ?, ?, 'open', ?)""",
-                       (job["capture_id"], job["attempts"], index, row.get("read_status", ""),
+                       (job["capture_id"], attempt, index, row.get("read_status", ""),
                         row.get("title", ""), row.get("other_reading", ""), encoded, stamp))
         db.execute("UPDATE jobs SET status = 'done', owner = NULL, finished_at = ?, error = NULL WHERE id = ?",
                    (stamp, job_id))
