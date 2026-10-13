@@ -150,3 +150,51 @@ def test_approving_a_barcode_alone_takes_the_catalogue_title_and_leaves_pipeline
     book = store.approve(db, [barcode["id"]], {}, "reviewer", now=NOW)
     assert book["title"] == "The Invented Lighthouse" and book["isbn"] == "9780000000002"
     assert book["notes"] == ""
+
+
+THIRD_ID = "10000000-0000-4000-8000-000000000003"
+
+
+def paired_evidence(db):
+    """A cover read by the models, then its barcode: one matched with blanks, one not matched but decoded."""
+    (cover,) = finish(db, [record("Měsíční člun", author="read author", publisher="read press", series="read series")],
+                      kind="cover", default_state="Stored", now="2026-01-02T03:04:05Z")
+    (barcode,) = finish(db, [record("", read_status="barcode", isbn="9780000000002", catalogue_title="Catalogue title")],
+                        SECOND_ID, kind="barcode", sha256="b" * 64, now="2026-01-02T03:04:09Z")
+    (matched,) = finish(db, [record("", read_status="barcode", isbn="", catalogue_title="Matched title", sort_key="",
+                                   author="Lenka Testová", publisher="", year="2020", source="test", source_id="42")],
+                        THIRD_ID, kind="barcode", sha256="c" * 64, now="2026-01-02T03:04:12Z")
+    return cover, barcode, matched
+
+
+def test_default_fields_prefer_the_catalogue_match_then_any_row_and_keep_a_decoded_isbn(db):
+    cover, barcode, matched = paired_evidence(db)
+    fields = store.default_fields(db, [cover["id"], barcode["id"], matched["id"]])
+    assert fields["author"] == "Lenka Testová" and fields["year"] == "2020"  # the match beats the earlier reading
+    assert (fields["source"], fields["source_id"]) == ("test", "42")
+    assert fields["publisher"] == "read press" and fields["series"] == "read series"  # the match is blank there
+    assert fields["isbn"] == "9780000000002"  # decoded from a barcode that matched nothing
+    assert fields["title"] == "Měsíční člun" and fields["sort_key"] == "Měsíční člun"
+    assert fields["notes"] == "" and fields["language"] == "cs"
+    assert (fields["location_id"], fields["state"], fields["cover_capture_id"]) == (1, "Stored", CAPTURE_ID)
+
+
+def test_default_fields_use_the_catalogue_title_when_nothing_was_read_and_do_not_depend_on_the_order_given(db):
+    cover, barcode, matched = paired_evidence(db)
+    assert store.default_fields(db, [barcode["id"], matched["id"]])["title"] == "Catalogue title"
+    ids = [cover["id"], barcode["id"], matched["id"]]
+    assert store.default_fields(db, ids) == store.default_fields(db, ids[::-1]) == store.default_fields(db, ids[1:] + ids[:1])
+    with pytest.raises(store.NotFound):
+        store.default_fields(db, [999])
+    with pytest.raises(store.Invalid):
+        store.default_fields(db, [])
+
+
+def test_approval_fills_a_book_with_the_same_rule_whatever_order_the_evidence_comes_in(db):
+    cover, barcode, matched = paired_evidence(db)
+    expected = store.default_fields(db, [cover["id"], barcode["id"], matched["id"]])
+    book = store.approve(db, [matched["id"], barcode["id"], cover["id"]], {"author": "Typed Author"}, "reviewer", now=NOW)
+    assert book["author"] == "Typed Author"
+    for key in ("title", "sort_key", "publisher", "year", "isbn", "series", "source", "source_id", "language",
+                "location_id", "state", "cover_capture_id"):
+        assert book[key] == expected[key], key
