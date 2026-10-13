@@ -7,11 +7,16 @@
 //   x          dismiss
 //   Esc        leave a field, so the single keys work again
 //
+// While an input method is composing text, every key is left alone.
+//
 // The key rules are a plain function, exported for Node, where the tests run them.
 (function () {
   "use strict";
 
   function keyAction(event, context) {
+    // An input method (Japanese, Chinese) uses Esc to cancel a conversion and Enter to commit it; those keys are
+    // not ours. Some browsers report the last keydown of a composition as keyCode 229 with isComposing already false.
+    if (event.isComposing || event.keyCode === 229) return null;
     if (event.key === "Escape") return context.typing ? "blur" : null;
     if (event.key === "Enter" && (event.ctrlKey || event.metaKey)) return "approve";
     if (event.ctrlKey || event.metaKey || event.altKey) return null;
