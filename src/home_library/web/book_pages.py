@@ -1,5 +1,5 @@
 """The books pages: live search, filters, and moving or changing the state of several books at once."""
-from urllib.parse import urlencode
+from urllib.parse import urlencode, urlsplit
 
 from fastapi import APIRouter, Depends, Request
 
@@ -124,8 +124,17 @@ def posted_changes(form):
 
 
 def safe_next(url):
-    """Where to go after adding a book; only a path on this site."""
-    return url if url and url.startswith("/") and not url.startswith("//") else None
+    """Where to go after adding a book; only a plain path on this site.
+
+    A browser reads `/\\host` like `//host`, and drops tabs and newlines inside a URL, so a path that holds a
+    backslash or a control character, or that `urlsplit` gives a host, is not followed.
+    """
+    if not url or not url.startswith("/") or url.startswith("//") or "\\" in url:
+        return None
+    if any(ord(character) < 32 or ord(character) == 127 for character in url):
+        return None
+    parts = urlsplit(url)
+    return url if not parts.netloc and not parts.scheme else None
 
 
 def book_form(request, book, values, was, error=None, status=200, notice=None, next=None):
