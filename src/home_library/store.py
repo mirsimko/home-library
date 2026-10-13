@@ -446,26 +446,64 @@ def _use(db, observations, book_id):
                    (book_id, observation["id"]))
 
 
+def _in_photo_order(evidence):
+    """Evidence in the order it was photographed, so the order a caller names it in changes nothing."""
+    def key(observation):
+        taken = datetime.fromisoformat(observation["capture"]["created_at"].replace("Z", "+00:00"))
+        return taken, observation["capture_id"], observation["attempt"], observation["row"]
+    return sorted(evidence, key=key)
+
+
+CATALOGUE_FIELDS = ("sort_key", "author", "illustrator", "publisher", "year", "language", "isbn", "series",
+                    "source", "source_id", "age_from", "age_to")
+
+
+def _defaults(evidence):
+    evidence = _in_photo_order(evidence)
+    records = [observation["record"] for observation in evidence]
+    matched = [row for row in records if row.get("source")]
+
+    def first(rows, key):
+        return next((row[key] for row in rows if row.get(key) not in (None, "")), "")
+
+    fields = {}
+    for key in CATALOGUE_FIELDS:
+        fields[key] = first(matched, key)
+        if fields[key] == "":
+            fields[key] = first(records, key)
+    fields["tags"] = first(records, "tags")
+    # A barcode reads no title, so a book made from one alone is named by its catalogue record.
+    titles = [row.get(key) for key in ("title", "catalogue_title") for row in records]
+    fields["title"] = next((title for title in titles if isinstance(title, str) and title.strip()), "")
+    fields["sort_key"] = fields["sort_key"] or fields["title"]
+    fields["notes"] = ""  # the pipeline's notes say why a row needs a look; they are not about the book
+    capture = evidence[0]["capture"]
+    fields.update(location_id=capture["location_id"], state=capture["default_state"], cover_capture_id=_cover(evidence))
+    return fields
+
+
+def default_fields(db, observation_ids):
+    """The book fields that the evidence suggests; the one rule for the API, `approve` and the review page.
+
+    For each catalogue field the first non-empty value from the rows that matched a catalogue record, else from
+    any row; the title is the first one read, else the first the catalogue gave; the location, the state and the
+    cover come from the photos. The evidence counts in the order it was photographed, whichever way it is named.
+    """
+    evidence = []
+    for id in _ids(observation_ids):
+        found = _get(db, "observations", id)
+        found["record"] = json.loads(found["record"])
+        found["capture"] = _get(db, "captures", found["capture_id"])
+        evidence.append(found)
+    return _defaults(evidence)
+
+
 def approve(db, observation_ids, fields, by, *, now=None):
     """Create one reviewed physical copy from evidence chosen by a person."""
     with _write(db):
         _fields(fields)
         evidence = _open_observations(db, observation_ids)
-        records = [observation["record"] for observation in evidence]
-        inherited = {}
-        for key in (*TEXT_FIELDS, "age_from", "age_to"):
-            inherited[key] = next((row[key] for row in records if row.get(key) not in (None, "")), "")
-        inherited["notes"] = ""  # the pipeline's notes say why a row needs a look; they are not about the book
-        # A barcode reads no title, so a book made from one alone is named by its catalogue record.
-        titles = [row.get(key) for key in ("title", "catalogue_title") for row in records]
-        inherited["title"] = next((title for title in titles if isinstance(title, str) and title.strip()), "")
-        catalogue = next((row for row in records if row.get("source") or row.get("catalogue_title")), None)
-        if catalogue is not None:
-            for key in ("sort_key", "author", "publisher", "year", "isbn", "series", "source", "source_id",
-                        "age_from", "age_to"):
-                inherited[key] = catalogue.get(key, "")
-        inherited.update(location_id=evidence[0]["capture"]["location_id"],
-                         state=evidence[0]["capture"]["default_state"], cover_capture_id=_cover(evidence))
+        inherited = _defaults(evidence)
         inherited.update(fields)
         inherited["needs_review"] = False
         result = _insert_book(db, inherited, by, _stamp(now))
