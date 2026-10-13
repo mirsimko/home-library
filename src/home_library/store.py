@@ -579,8 +579,10 @@ def captures(db, ids=None):
     if ids is not None:
         for id in ids:
             _uuid(id, "capture id")
-    rows = db.execute("SELECT id FROM captures ORDER BY created_at DESC, id DESC")
-    return [capture(db, row[0]) for row in rows if ids is None or row[0] in ids]
+    rows = list(db.execute("SELECT id, created_at FROM captures"))
+    rows.sort(key=lambda row: (datetime.fromisoformat(row["created_at"].replace("Z", "+00:00")), row["id"]),
+              reverse=True)
+    return [capture(db, row["id"]) for row in rows if ids is None or row["id"] in ids]
 
 
 def jobs(db):
