@@ -61,3 +61,21 @@ def test_keys_act_only_when_the_person_is_not_typing():
 def test_row_focus_moves_one_step_and_stops_at_the_ends():
     moves = run_node("out([hl.moveFocus(-1, 5, 'next'), hl.moveFocus(0, 5, 'next'), hl.moveFocus(4, 5, 'next'), hl.moveFocus(0, 5, 'prev'), hl.moveFocus(3, 5, 'prev'), hl.moveFocus(-1, 5, 'prev'), hl.moveFocus(-1, 0, 'next')]);")
     assert moves == [0, 1, 4, 0, 2, 4, -1]
+
+
+def test_both_review_pages_load_the_script_and_show_the_key_legend(client, tmp_path):
+    from contextlib import closing
+
+    from store_helpers import finish, record
+
+    from home_library import store
+
+    with closing(store.open(tmp_path)) as db:
+        (row,) = finish(db, [record("Paper Moon")])
+    for path in ("/review", f"/review/{row['id']}"):
+        page = client.get(path).text
+        assert '<script src="/static/review.js"' in page
+        assert page.count("<kbd>") >= 3 and "<kbd>j</kbd>" in page and "<kbd>k</kbd>" in page
+    detail = client.get(f"/review/{row['id']}").text
+    for key in ("Enter", "e", "x", "Esc"):
+        assert f"<kbd>{key}</kbd>" in detail
