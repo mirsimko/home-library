@@ -1,12 +1,14 @@
 """The review inbox: open observations grouped by photo, and by book for one-book photos, newest first."""
+import json
 from contextlib import closing
 
 from store_helpers import CAPTURE_ID, SECOND_ID, finish, record
 from web_helpers import anonymous as anonymous
 from web_helpers import client as client
-from web_helpers import tags
+from web_helpers import form_values, tags
 
 from home_library import store
+from home_library.lookup.candidate import new_candidate
 
 THIRD_ID = "10000000-0000-4000-8000-000000000003"
 GROUP = "20000000-0000-4000-8000-000000000001"
@@ -53,10 +55,6 @@ def test_an_empty_inbox_says_so_and_pages_need_access(client, anonymous):
 
 # ---- the detail of one observation -------------------------------------------------------------------
 
-import json  # noqa: E402
-
-from home_library.lookup.candidate import new_candidate  # noqa: E402
-
 
 def write_work(tmp_path, id, tiles=("r1c1-r0.jpg", "r1c2-r0.jpg"), kind=None, candidates=None):
     directory = tmp_path / "work" / id
@@ -70,8 +68,6 @@ def write_work(tmp_path, id, tiles=("r1c1-r0.jpg", "r1c2-r0.jpg"), kind=None, ca
 
 
 def fields_of(page, form_id="approve-form"):
-    from web_helpers import form_values
-
     return form_values(page, form_id)
 
 

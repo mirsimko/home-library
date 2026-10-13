@@ -6,7 +6,7 @@
   <nav class="pager" aria-label="Observations">
     <a class="button" href="/review">‹ Inbox</a>
     <span class="muted small">{% if position %}{{ position }} of {{ total }} open{% endif %}</span>
-    <span class="inline" style="flex:0 0 auto; gap:0.4rem">
+    <span class="pager-links">
       {% if previous %}<a class="button" href="{{ previous }}" rel="prev">Previous <kbd>k</kbd></a>{% endif %}
       {% if following %}<a class="button" href="{{ following }}" rel="next">Next <kbd>j</kbd></a>{% endif %}
     </span>
