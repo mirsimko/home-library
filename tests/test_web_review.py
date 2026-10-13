@@ -51,3 +51,21 @@ def test_candidates_match_record_item_order_even_when_titles_repeat(client, tmp_
     assert client.get("/api/observations/999/candidates").status_code == 404
     candidates.unlink()
     assert client.get(f"/api/observations/{rows[0]['id']}/candidates").json() == []
+
+
+def test_old_observations_never_get_candidates_from_a_newer_attempt(client, tmp_path):
+    import json
+
+    with closing(store.open(tmp_path)) as db:
+        (old,) = finish(db, [record("Paper Moon")])
+        store.approve(db, [old["id"]], {}, "parent")
+        store.retry_job(db, store.capture(db, CAPTURE_ID)["job"]["id"])
+        job = store.claim_job(db)
+        store.finish_job(db, job["id"], job["owner"], [record("Glass Cloud")])
+        (new,) = store.observations(db)
+    directory = tmp_path / "work" / CAPTURE_ID / "lookup"
+    directory.mkdir(parents=True)
+    (directory / "candidates.json").write_text(json.dumps({"books": [
+        {"item": 0, "title": "Glass Cloud", "candidates": [{"id": "test:new"}]}]}))
+    assert client.get(f"/api/observations/{old['id']}/candidates").json() == []
+    assert client.get(f"/api/observations/{new['id']}/candidates").json() == [{"id": "test:new"}]

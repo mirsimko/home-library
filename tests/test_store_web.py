@@ -63,3 +63,18 @@ def test_recent_captures_are_ordered_by_time_including_fractional_seconds(db):
     capture(db, now="2026-01-02T03:04:05.000001Z")
     capture(db, SECOND_ID, now="2026-01-02T03:04:05Z")
     assert [row["capture"]["id"] for row in store.captures(db)] == [CAPTURE_ID, SECOND_ID]
+
+
+def test_candidate_evidence_is_available_only_for_the_latest_completed_attempt(db):
+    (old,) = finish(db, [record("Paper Moon")])
+    assert store.candidate_observation(db, old["id"]) == old
+    store.approve(db, [old["id"]], {}, "parent")
+    store.retry_job(db, store.capture(db, CAPTURE_ID)["job"]["id"])
+    assert store.candidate_observation(db, old["id"]) is None
+    job = store.claim_job(db, NOW)
+    store.finish_job(db, job["id"], job["owner"], [record("Glass Cloud")], NOW)
+    (new,) = store.observations(db)
+    assert store.candidate_observation(db, old["id"]) is None
+    assert store.candidate_observation(db, new["id"]) == new
+    with pytest.raises(store.NotFound):
+        store.candidate_observation(db, 999)
