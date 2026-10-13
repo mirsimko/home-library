@@ -137,7 +137,7 @@ def test_the_form_is_filled_from_the_record_the_capture_and_a_paired_barcode(cli
     assert [(item.get("value"), "checked" in item) for item in tags(page, "input") if item.get("name") == "also"] == [
         (str(barcode[0]["id"]), True)]
     barcode_page = client.get(f"/review/{barcode[0]['id']}").text
-    assert fields_of(barcode_page)["title"] == "Paper Moon (catalogue)"
+    assert fields_of(barcode_page)["title"] == "Paper Moon"
     assert [item.get("value") for item in tags(barcode_page, "input") if item.get("name") == "also"] == [str(cover[0]["id"])]
     assert not [item for item in tags(client.get(f"/review/{shelf[0]['id']}").text, "input") if item.get("name") == "also"]
 

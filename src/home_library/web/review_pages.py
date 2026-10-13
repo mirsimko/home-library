@@ -1,10 +1,12 @@
 """The review pages: the inbox of open observations, one observation at a time, and the actions on it."""
+import re
 from datetime import datetime, timezone
 
 from fastapi import APIRouter, Request
 
 from home_library import store
 from home_library.web.api import call
+from home_library.web.files import observation_candidates, read_json
 from home_library.web.render import render
 from home_library.web.status_pages import ago, seconds_since
 
@@ -60,3 +62,91 @@ def inbox(request: Request):
             "rows": [row_view(o) for o in members]})
     return render(request, "review.html", active="review", groups=groups,
                   open_count=sum(len(group["rows"]) for group in groups))
+
+
+# ---- one observation ----------------------------------------------------------------------------------
+
+FORM_FIELDS = (*store.TEXT_FIELDS, "age_from", "age_to", "state", "location_id")
+NOTICES = {"approved": "Approved as a new book", "attached": "Attached to the book", "dismissed": "Dismissed",
+           "added": "Book added by hand"}
+
+
+def evidence(root, observation):
+    """The picture to look at: the tile named in `where`, else a cover's one tile, else the whole photo."""
+    capture = observation["capture"]
+    photo = f"/api/captures/{capture['id']}/photo"
+    manifest = read_json(root / "work" / capture["id"] / "tiles.json", {})
+    entries = manifest.get("tiles", []) if isinstance(manifest, dict) else []
+    files = [entry["file"] for entry in entries if isinstance(entry, dict) and isinstance(entry.get("file"), str)] \
+        if isinstance(entries, list) else []
+    words = re.split(r"[\s,;]+", str(observation["record"].get("where") or "").strip())
+    is_cover = isinstance(manifest, dict) and manifest.get("kind") == "cover"
+    tile = words[0] if words[0] in files else files[0] if files and is_cover else None
+    return {"src": f"/api/captures/{capture['id']}/tiles/{tile}" if tile else photo, "photo": photo,
+            "tile": tile is not None}
+
+
+def prefill(observations, capture):
+    """The book form's starting values: the first non-empty value from the evidence in order, else the capture's."""
+    records = [observation["record"] for observation in observations]
+    values = dict.fromkeys(FORM_FIELDS, "")
+    for key in (*store.TEXT_FIELDS, "age_from", "age_to"):
+        values[key] = next((str(row[key]) for row in records if row.get(key) not in (None, "")), "")
+    values["title"] = next((row["title"] for row in records if str(row.get("title") or "").strip()), "") \
+        or next((row["catalogue_title"] for row in records if row.get("catalogue_title")), "")
+    # The pipeline's note says why the row needs a look; it is shown beside the form, not saved into the book.
+    values["notes"] = ""
+    values.update(state=capture["default_state"], location_id=str(capture["location_id"]))
+    return values
+
+
+def fill_from(candidate):
+    """What "Use this record" puts into the form: the candidate's non-empty catalogue fields."""
+    fill = {"title": candidate.get("title"), "author": ", ".join(candidate.get("authors") or []),
+            "publisher": candidate.get("publisher"), "year": candidate.get("year"), "isbn": candidate.get("isbn"),
+            "series": candidate.get("series"), "language": candidate.get("language"),
+            "source": candidate.get("source"), "source_id": candidate.get("source_id")}
+    return {key: value for key, value in fill.items() if value}
+
+
+def neighbours(order, id):
+    """The links to the observation before and after this one in the inbox order."""
+    if id not in order:
+        return None, None
+    index = order.index(id)
+    return (f"/review/{order[index - 1]}" if index else None,
+            f"/review/{order[index + 1]}" if index + 1 < len(order) else None)
+
+
+def detail(request, id, status=200, **extra):
+    """Render one observation with everything a person needs to decide, or why it has no actions."""
+    root = request.app.state.data_root
+    observation = call(request, store.observation, id)
+    capture = observation["capture"]
+    open_ones = call(request, store.observations)
+    order = [o["id"] for members in inbox_order(open_ones) for o in members]
+    siblings = [o for o in open_ones if capture["group_id"] and o["capture"]["group_id"] == capture["group_id"]
+                and o["id"] != id]
+    siblings.sort(key=lambda o: (captured_at(o), o["row"]))
+    current = call(request, store.candidate_observation, id)
+    candidates = observation_candidates(root, current) if current is not None else []
+    previous, following = neighbours(order, id)
+    names = {row["id"]: row["name"] for row in call(request, store.locations)}
+    book = call(request, store.book, observation["book_id"]) if observation["book_id"] else None
+    return render(request, "review_detail.html", status=status, active="review", observation=observation,
+                  record=observation["record"], capture=capture, location=names.get(capture["location_id"], ""),
+                  evidence=evidence(root, observation), book=book,
+                  siblings=[{**row_view(o), "photo": f"/api/captures/{o['capture_id']}/photo"} for o in siblings],
+                  candidates=[{**c, "fill": fill_from(c)} for c in candidates],
+                  values=prefill([observation, *siblings], capture), locations=call(request, store.locations),
+                  states=store.STATES, previous=previous, following=following,
+                  position=order.index(id) + 1 if id in order else None, total=len(order), **extra)
+
+
+@router.get("/review/{id}")
+def review_detail(request: Request, id: int, done: str = "", book: int | None = None):
+    notice = None
+    if done in NOTICES:
+        found = call(request, store.book, book) if book else None
+        notice = {"text": NOTICES[done], "book": found}
+    return detail(request, id, notice=notice)

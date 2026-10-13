@@ -1,0 +1,157 @@
+{% extends "base.html" %}
+{% block title %}{{ record.title or "Review" }} · Home library{% endblock %}
+{% block body_class %}review wide{% endblock %}
+{% block main %}
+<div id="review"{% if previous %} data-prev="{{ previous }}"{% endif %}{% if following %} data-next="{{ following }}"{% endif %}>
+  <nav class="pager" aria-label="Observations">
+    <a class="button" href="/review">‹ Inbox</a>
+    <span class="muted small">{% if position %}{{ position }} of {{ total }} open{% endif %}</span>
+    <span class="inline" style="flex:0 0 auto; gap:0.4rem">
+      {% if previous %}<a class="button" href="{{ previous }}" rel="prev">Previous <kbd>k</kbd></a>{% endif %}
+      {% if following %}<a class="button" href="{{ following }}" rel="next">Next <kbd>j</kbd></a>{% endif %}
+    </span>
+  </nav>
+
+  <div id="notice" role="status" aria-live="polite">
+    {% if notice %}<div class="notice">{{ notice.text }}{% if notice.book %}: <a href="/books/{{ notice.book.id }}"><span{{ lang(notice.book.language) }}>{{ notice.book.title }}</span></a>{% endif %}.</div>{% endif %}
+  </div>
+
+  <div class="detail-grid">
+    <section class="evidence" aria-label="The photo">
+      <a href="{{ evidence.photo }}" target="_blank" rel="noopener"><img src="{{ evidence.src }}" alt="{% if evidence.tile %}The part of the photo where this book was read{% else %}The photo{% endif %}"></a>
+      <p class="small"><a href="{{ evidence.photo }}" target="_blank" rel="noopener">Open the full photo</a>{% if evidence.tile %} · this is the tile <code>{{ record.where }}</code>{% endif %}</p>
+      {% if siblings %}
+      <h3>Same book</h3>
+      <ul class="rows card" style="padding:0">
+        {% for sibling in siblings %}
+        <li><a href="/review/{{ sibling.id }}"><span class="row-no"><img src="{{ sibling.photo }}" alt="" width="40" height="40" style="object-fit:cover;border-radius:4px"></span><span class="title">{{ sibling.kind|capitalize }}: <span{{ lang(sibling.language) }}>{{ sibling.title }}</span></span><span class="badge">{{ sibling.status }}</span></a></li>
+        {% endfor %}
+      </ul>
+      {% endif %}
+    </section>
+
+    <section aria-label="The book">
+      <h1 class="title"><span{{ lang(record.language) }}>{{ record.title or "(nothing read)" }}</span></h1>
+      <p class="muted small">{{ capture.kind|capitalize }} photo · {{ location }} · sent by {{ capture.uploaded_by }}</p>
+
+      {% if observation.status != "open" %}
+        <div class="notice warn">
+          {% if observation.status == "used" %}This observation is already used for a book{% if book %}: <a href="/books/{{ book.id }}"><span{{ lang(book.language) }}>{{ book.title }}</span></a>{% endif %}.
+          {% elif observation.status == "dismissed" %}This observation was dismissed.
+          {% else %}A newer reading of this photo replaced this one.{% endif %}
+        </div>
+      {% endif %}
+
+      <dl class="readings">
+        <dt>Read as</dt><dd><span{{ lang(record.language) }}>{{ record.title or "(empty)" }}</span> <span class="badge">{{ observation.read_status }}</span></dd>
+        {% if observation.other_reading %}<dt>Second reading</dt><dd><span{{ lang(record.language) }}>{{ observation.other_reading }}</span></dd>{% endif %}
+        {% if record.other_text %}<dt>Other text</dt><dd><span{{ lang(record.language) }}>{{ record.other_text }}</span></dd>{% endif %}
+        {% if record.catalogue_title %}<dt>Catalogue says</dt><dd>{{ record.catalogue_title }}</dd>{% endif %}
+        {% if record.isbn %}<dt>ISBN</dt><dd>{{ record.isbn }}</dd>{% endif %}
+        {% if record.where %}<dt>Where</dt><dd>{{ record.where }}</dd>{% endif %}
+      </dl>
+      {% if record.notes %}<div class="notice warn"><strong>Why it needs a look.</strong> {{ record.notes }}</div>{% endif %}
+
+      {% if observation.status == "open" %}
+      <h3>Catalogue candidates</h3>
+      {% if candidates %}
+      <div class="candidates">
+        {% for c in candidates %}
+        <div class="candidate">
+          <div class="title">
+            <strong{{ lang(c.language) }}>{{ c.title }}</strong><br>
+            <span class="muted small">{{ [c.authors|join(", "), c.publisher, c.year, c.isbn, c.source]|select|join(" · ") }}</span>
+            {% if c.url and c.url.startswith(("http://", "https://")) %} <a class="small" href="{{ c.url }}" target="_blank" rel="noopener noreferrer">source</a>{% endif %}
+          </div>
+          <button type="button" data-fill='{{ c.fill|tojson }}'>Use this record</button>
+        </div>
+        {% endfor %}
+      </div>
+      {% else %}
+      <p class="muted small">No catalogue candidates for this one.</p>
+      {% endif %}
+
+      <h3>New book</h3>
+      <form id="approve-form" hx-post="/review/{{ observation.id }}/approve" hx-target="#notice" hx-swap="innerHTML">
+        <div class="fields">
+          <div class="span"><label for="f-title">Title</label><input type="text" id="f-title" name="title" value="{{ values.title }}"{{ lang(values.language) }} autocomplete="off"></div>
+          <div><label for="f-sort_key">Sort as</label><input type="text" id="f-sort_key" name="sort_key" value="{{ values.sort_key }}"{{ lang(values.language) }} autocomplete="off"></div>
+          <div><label for="f-author">Author</label><input type="text" id="f-author" name="author" value="{{ values.author }}"{{ lang(values.language) }} autocomplete="off"></div>
+          <div><label for="f-illustrator">Illustrator</label><input type="text" id="f-illustrator" name="illustrator" value="{{ values.illustrator }}"{{ lang(values.language) }} autocomplete="off"></div>
+          <div><label for="f-publisher">Publisher</label><input type="text" id="f-publisher" name="publisher" value="{{ values.publisher }}"{{ lang(values.language) }} autocomplete="off"></div>
+          <div><label for="f-year">Year</label><input type="text" id="f-year" name="year" value="{{ values.year }}" inputmode="numeric" autocomplete="off"></div>
+          <div><label for="f-language">Language</label><input type="text" id="f-language" name="language" value="{{ values.language }}" list="languages" autocomplete="off"></div>
+          <div><label for="f-isbn">ISBN</label><input type="text" id="f-isbn" name="isbn" value="{{ values.isbn }}" inputmode="numeric" autocomplete="off"></div>
+          <div><label for="f-series">Series</label><input type="text" id="f-series" name="series" value="{{ values.series }}"{{ lang(values.language) }} autocomplete="off"></div>
+          <div><label for="f-age_from">Age from</label><input type="number" id="f-age_from" name="age_from" value="{{ values.age_from }}" min="0" max="99"></div>
+          <div><label for="f-age_to">Age to</label><input type="number" id="f-age_to" name="age_to" value="{{ values.age_to }}" min="0" max="99"></div>
+          <div><label for="f-tags">Tags</label><input type="text" id="f-tags" name="tags" value="{{ values.tags }}" autocomplete="off"></div>
+          <div>
+            <label for="f-location_id">Location</label>
+            <select id="f-location_id" name="location_id">
+              {% for place in locations %}<option value="{{ place.id }}"{% if values.location_id == place.id|string %} selected{% endif %}>{{ place.name }}</option>{% endfor %}
+            </select>
+          </div>
+          <div>
+            <label for="f-state">State</label>
+            <select id="f-state" name="state">
+              {% for state in states %}<option value="{{ state }}"{% if values.state == state %} selected{% endif %}>{{ state }}</option>{% endfor %}
+            </select>
+          </div>
+          <div class="span"><label for="f-notes">Notes</label><textarea id="f-notes" name="notes"{{ lang(values.language) }}>{{ values.notes }}</textarea></div>
+          <input type="hidden" id="f-source" name="source" value="{{ values.source }}">
+          <input type="hidden" id="f-source_id" name="source_id" value="{{ values.source_id }}">
+        </div>
+        <datalist id="languages"><option value="ja"><option value="cs"><option value="en"><option value="zh"></datalist>
+        {% for sibling in siblings %}
+        <label class="check"><input type="checkbox" name="also" value="{{ sibling.id }}" checked> Use the {{ sibling.kind }} photo for the same book</label>
+        {% endfor %}
+        <div class="actions">
+          <button type="submit" class="primary" id="approve">Approve as new book <kbd>Enter</kbd></button>
+          <button type="button" class="danger" id="dismiss" hx-post="/review/{{ observation.id }}/dismiss" hx-target="#notice" hx-swap="innerHTML">Dismiss <kbd>x</kbd></button>
+        </div>
+      </form>
+
+      <h3>Or attach to a book you already have</h3>
+      <div class="card">
+        <label for="attach-q">Search your books</label>
+        <input type="search" id="attach-q" name="q" autocomplete="off" placeholder="Title, author, ISBN"
+               hx-get="/review/{{ observation.id }}/attach-search" hx-trigger="input changed delay:300ms, search" hx-target="#attach-results">
+        <div id="attach-results" aria-live="polite"></div>
+      </div>
+
+      <details class="card">
+        <summary>Add a book by hand</summary>
+        <p class="muted small">For a book the photo missed. This observation stays open.</p>
+        <form method="post" action="/books">
+          <input type="hidden" name="next" value="/review/{{ observation.id }}?done=added">
+          <div class="fields">
+            <div class="span"><label for="hand-title">Title</label><input type="text" id="hand-title" name="title" required autocomplete="off"></div>
+            <div><label for="hand-author">Author</label><input type="text" id="hand-author" name="author" autocomplete="off"></div>
+            <div>
+              <label for="hand-location">Location</label>
+              <select id="hand-location" name="location_id">
+                {% for place in locations %}<option value="{{ place.id }}"{% if values.location_id == place.id|string %} selected{% endif %}>{{ place.name }}</option>{% endfor %}
+              </select>
+            </div>
+            <div>
+              <label for="hand-state">State</label>
+              <select id="hand-state" name="state">
+                {% for state in states %}<option value="{{ state }}"{% if values.state == state %} selected{% endif %}>{{ state }}</option>{% endfor %}
+              </select>
+            </div>
+          </div>
+          <div class="actions"><button type="submit">Add this book</button></div>
+        </form>
+      </details>
+      {% endif %}
+
+      <div class="keys" aria-label="Keyboard shortcuts">
+        <span><kbd>j</kbd> next</span><span><kbd>k</kbd> previous</span><span><kbd>Enter</kbd> approve and go to the next</span>
+        <span><kbd>e</kbd> edit the first field</span><span><kbd>x</kbd> dismiss</span><span><kbd>Esc</kbd> leave a field</span>
+      </div>
+    </section>
+  </div>
+</div>
+{% endblock %}
+{% block scripts %}<script src="/static/review.js" defer></script>{% endblock %}
