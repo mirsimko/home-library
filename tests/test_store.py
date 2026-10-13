@@ -545,3 +545,36 @@ def test_export_is_flat_in_spec_order_and_uses_the_current_location_name(db):
     exported = store.export_rows(db)
     assert [r["title"] for r in exported] == ["The Glass Canoe", "=Invented title"]
     assert exported[0]["cover_photo"] == "" and exported[0]["age_from"] is None
+
+
+def test_open_uses_the_environment_or_home_default_at_call_time(tmp_path, monkeypatch):
+    from pathlib import Path
+
+    root = tmp_path / "environment"
+    monkeypatch.setenv("HL_DATA", str(root))
+    db = store.open()
+    db.close()
+    assert (root / "catalog.db").exists()
+    monkeypatch.delenv("HL_DATA")
+    monkeypatch.setattr(Path, "home", lambda: tmp_path / "home")
+    db = store.open()
+    db.close()
+    assert (tmp_path / "home" / "home-library" / "catalog.db").exists()
+
+
+@pytest.mark.parametrize("child", ["captures", "work", "catalog.db"])
+def test_open_refuses_private_targets_symlinked_into_a_checkout(tmp_path, child):
+    repo = tmp_path / "repo"
+    (repo / ".git").mkdir(parents=True)
+    root = tmp_path / "private"
+    root.mkdir()
+    target = repo / child
+    if child == "catalog.db":
+        target.touch()
+    else:
+        target.mkdir()
+    (root / child).symlink_to(target)
+    with pytest.raises(ValueError, match="git checkout"):
+        store.open(root)
+    assert not (root / "catalog.db-wal").exists()
+    assert list(target.iterdir()) == [] if target.is_dir() else target.read_bytes() == b""
