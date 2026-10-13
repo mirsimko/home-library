@@ -645,3 +645,10 @@ def candidate_observation(db, id):
             or result["created_at"] != job["finished_at"]):
         return None
     return result
+
+
+def locations_with_counts(db):
+    """List locations by name, each with the number of books it holds in any state."""
+    return [dict(row) for row in db.execute("""SELECT locations.*, count(books.id) AS books FROM locations
+                                               LEFT JOIN books ON books.location_id = locations.id
+                                               GROUP BY locations.id ORDER BY locations.name""")]
