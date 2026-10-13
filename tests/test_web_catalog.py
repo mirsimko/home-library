@@ -39,3 +39,24 @@ def test_store_and_request_errors_are_actionable_json(client):
         assert list(response.json()) == ["error"]
     assert client.get("/missing").status_code == 404
     assert list(client.get("/missing").json()) == ["error"]
+
+
+def test_books_can_be_filtered_paged_and_moved_without_partial_changes(client):
+    shelf = client.post("/api/locations", json={"name": "Shelf A", "kind": "shelf"}).json()["id"]
+    box = client.post("/api/locations", json={"name": "Box B", "kind": "box"}).json()["id"]
+    books = [client.post("/api/books", json={"title": title, "location_id": shelf,
+                                           "tags": tag, "sort_key": str(index)}).json()
+             for index, (title, tag) in enumerate([("ぐぽ", "moon"), ("Paper Moon", "moon"), ("Glass Cloud", "sky")])]
+    assert client.get("/api/books?q=ぐぽ").json() == [books[0]]
+    assert client.get("/api/books?q=Moon&tag=moon&state=Active&location_id=1").json() == [books[1]]
+    assert client.get("/api/books?limit=1&offset=1").json() == [books[1]]
+    bad = client.post("/api/books/move", json={"book_ids": [books[0]["id"], 999], "state": "Stored"})
+    assert bad.status_code == 404 and client.get(f"/api/books/{books[0]['id']}").json() == books[0]
+    moved = client.post("/api/books/move", json={"book_ids": [books[0]["id"], books[1]["id"]],
+                                              "location_id": box, "state": "Stored"})
+    assert moved.status_code == 200
+    assert [(b["state"], b["location_id"], b["reviewed_by"]) for b in moved.json()] == [
+        ("Stored", box, "parent"), ("Stored", box, "parent")]
+    assert client.get(f"/api/books?state=Stored&location_id={box}&tag=moon").json() == moved.json()
+    assert client.post("/api/books/move", json={"book_ids": [books[0]["id"]]}).status_code == 400
+    assert client.get("/api/books?limit=-1").status_code == 400
