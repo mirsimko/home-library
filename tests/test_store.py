@@ -1,4 +1,5 @@
 """The catalog store keeps private evidence separate from the family's books."""
+from datetime import datetime, timedelta, timezone
 from importlib.resources import files
 
 import pytest
@@ -607,3 +608,55 @@ def test_search_treats_user_text_as_literal_and_tags_as_trimmed_tokens(db):
     assert store.search_books(db, '"Canoe"') == [underscore]
     assert store.search_books(db, 'Canoe" OR "missing') == []
     assert store.search_books(db, tag="paper boats") == [percent]
+
+
+def test_every_stamped_write_accepts_an_injected_utc_time(db):
+    local = datetime(2026, 1, 2, 12, 4, 5, tzinfo=timezone(timedelta(hours=9)))
+    assert store.add_location(db, "Shelf A", "shelf", now=local)["created_at"] == NOW
+    receipt = capture(db, now=local)
+    assert receipt["capture"]["created_at"] == NOW
+    job = store.claim_job(db, local)
+    assert job["started_at"] == job["heartbeat_at"] == NOW
+    assert store.heartbeat(db, job["id"], job["owner"], local + timedelta(seconds=1))
+    assert capture(db)["job"]["heartbeat_at"] == "2026-01-02T03:04:06Z"
+    assert store.fail_job(db, job["id"], job["owner"], "test", local)["finished_at"] == NOW
+    job = store.claim_job(db, local)
+    assert store.finish_job(db, job["id"], job["owner"], [record()], local)["finished_at"] == NOW
+    (observation,) = store.observations(db)
+    assert observation["created_at"] == NOW
+    approved = store.approve(db, [observation["id"]], {}, "reviewer", now=local)
+    assert approved["created_at"] == approved["updated_at"] == NOW
+    added = typed_book(db)
+    calls = []
+
+    def clock():
+        calls.append(1)
+        return local + timedelta(days=1)
+
+    updated = store.update_book(db, added["id"], 1, {"notes": "Timed edit"}, "editor", now=clock)
+    assert updated["updated_at"] == "2026-01-03T03:04:05Z" and calls == [1]
+    (cover,) = finish(db, [record()], SECOND_ID, kind="cover", now=local)
+    attached = store.attach(db, [cover["id"]], added["id"], "reviewer", now=local)
+    assert attached["updated_at"] == NOW
+    moved = store.move_books(db, [added["id"], approved["id"]], state="Gone", by="mover", now=clock)
+    assert [b["updated_at"] for b in moved] == ["2026-01-03T03:04:05Z"] * 2
+    assert calls == [1, 1]
+
+
+@pytest.mark.parametrize("now", ["bad time", "2026-01-02T03:04:05", datetime(2026, 1, 2), 42])
+def test_naive_or_malformed_times_do_not_create_a_location(db, now):
+    with pytest.raises(store.Invalid, match="time"):
+        store.add_location(db, "Shelf A", "shelf", now=now)
+    assert store.locations(db) == []
+
+
+def test_claim_order_and_the_stale_boundary_preserve_microseconds(db):
+    capture(db, now="2026-01-02T03:04:05.000002Z")
+    capture(db, SECOND_ID, now="2026-01-02T03:04:05.000001Z")
+    first = store.claim_job(db, NOW)
+    assert first["capture_id"] == SECOND_ID
+    second = store.claim_job(db, NOW)
+    assert second["capture_id"] == CAPTURE_ID
+    assert store.claim_job(db, "2026-01-02T03:24:05Z") is None
+    reclaimed = store.claim_job(db, "2026-01-02T03:24:05.000001Z")
+    assert reclaimed["id"] == first["id"] and reclaimed["attempts"] == 2
