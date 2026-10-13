@@ -176,7 +176,8 @@ def build_records(merged: dict, candidates: dict | None = None, picks: dict | No
     return records + _lost_records(merged["file"], merged, location)
 
 
-def _cell(value) -> str:
+def csv_cell(value) -> str:
+    """Escape formula prefixes so a spreadsheet treats evidence as text."""
     if value is True:
         return "true"
     text = str(value)
@@ -191,7 +192,7 @@ def write_records(photo_dir, records: list) -> None:
         writer = csv.writer(f)
         writer.writerow(COLUMNS)
         for record in records:
-            writer.writerow([_cell(record[column]) for column in COLUMNS])
+            writer.writerow([csv_cell(record[column]) for column in COLUMNS])
 
 
 def build_barcode_record(photo: str, isbn: str | None, lookup: dict | None = None, *, location: str = "") -> dict:
