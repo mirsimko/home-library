@@ -727,3 +727,46 @@ def test_two_connections_contending_for_one_job_never_share_an_owner(db, tmp_pat
     claimed = [result for result in results if result is not None]
     assert len(claimed) == 1 and claimed[0]["attempts"] == 1
     assert capture(db)["job"]["owner"] == claimed[0]["owner"]
+
+
+@pytest.mark.parametrize("id", ["1", [], True, None])
+def test_book_and_location_ids_must_be_integer_keys(db, id):
+    original = typed_book(db)
+    with pytest.raises(store.Invalid, match="integer"):
+        store.book(db, id)
+    with pytest.raises(store.Invalid, match="integer"):
+        store.update_book(db, original["id"], 1, {"location_id": id}, "editor", now=NOW)
+    assert store.book(db, original["id"]) == original
+
+
+@pytest.mark.parametrize("version", [True, "1", None, 1.0])
+def test_an_editing_version_must_be_an_integer(db, version):
+    original = typed_book(db)
+    with pytest.raises(store.Invalid, match="version"):
+        store.update_book(db, original["id"], version, {"notes": "bad version"}, "editor", now=NOW)
+    assert store.book(db, original["id"]) == original
+
+
+def test_observation_filters_and_selections_validate_status_and_capture_ids(db):
+    (observation,) = finish(db, [record()])
+    with pytest.raises(store.Invalid):
+        store.observations(db, status="missing")
+    with pytest.raises(store.Invalid):
+        store.observations(db, capture_id="../elsewhere")
+    for ids in ([], [True], [str(observation["id"])]):
+        with pytest.raises(store.Invalid):
+            store.dismiss(db, ids, "reviewer")
+    assert store.observations(db) == [observation]
+
+
+def test_superseded_observations_cannot_be_approved_or_attached(db):
+    (old,) = finish(db, [record()])
+    original = typed_book(db)
+    store.retry_job(db, capture(db)["job"]["id"])
+    finish(db, [record("Hvězdná bárka")])
+    for action in (lambda: store.approve(db, [old["id"]], {}, "reviewer", now=NOW),
+                   lambda: store.attach(db, [old["id"]], original["id"], "reviewer", now=NOW)):
+        with pytest.raises(store.Invalid, match="open"):
+            action()
+    assert store.book(db, original["id"]) == original
+    assert len(store.observations(db)) == 1
