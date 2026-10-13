@@ -99,17 +99,12 @@ def evidence(root, observation):
             "tile": tile is not None}
 
 
-def prefill(observations, capture):
-    """The book form's starting values: the first non-empty value from the evidence in order, else the capture's."""
-    records = [observation["record"] for observation in observations]
+def prefill(suggested):
+    """The book form's starting values: what the store's rule suggests for this evidence, as the form's text."""
     values = dict.fromkeys(FORM_FIELDS, "")
-    for key in (*store.TEXT_FIELDS, "age_from", "age_to"):
-        values[key] = next((str(row[key]) for row in records if row.get(key) not in (None, "")), "")
-    values["title"] = next((row["title"] for row in records if str(row.get("title") or "").strip()), "") \
-        or next((row["catalogue_title"] for row in records if row.get("catalogue_title")), "")
-    # The pipeline's note says why the row needs a look; it is shown beside the form, not saved into the book.
-    values["notes"] = ""
-    values.update(state=capture["default_state"], location_id=str(capture["location_id"]))
+    for key in FORM_FIELDS:
+        if suggested.get(key) not in (None, ""):
+            values[key] = str(suggested[key])
     return values
 
 
@@ -151,7 +146,7 @@ def detail(request, id, status=200, **extra):
                   evidence=evidence(root, observation), book=book,
                   siblings=[{**row_view(o), "photo": f"/api/captures/{o['capture_id']}/photo"} for o in siblings],
                   candidates=[{**c, "fill": fill_from(c)} for c in candidates],
-                  values=prefill([observation, *siblings], capture), locations=call(request, store.locations),
+                  values=prefill(call(request, store.default_fields, [id, *(o['id'] for o in siblings)])), locations=call(request, store.locations),
                   states=store.STATES, previous=previous, following=following,
                   position=order.index(id) + 1 if id in order else None, total=len(order), **extra)
 
