@@ -392,3 +392,55 @@ def test_approval_requires_nonempty_open_observations_and_is_atomic(db):
         store.approve(db, [rows[1]["id"], rows[0]["id"]], {}, "reviewer", now=NOW)
     assert [r["id"] for r in store.observations(db)] == [rows[1]["id"]]
     assert db.execute("SELECT count(*) FROM books").fetchone()[0] == 1
+
+
+def test_attach_sets_only_a_missing_cover_and_preserves_personal_edits(db):
+    original = typed_book(db, title="The Glass Canoe", notes="person's note", author="Typed Author")
+    (cover,) = finish(db, [record("different title")], kind="cover")
+    attached = store.attach(db, [cover["id"]], original["id"], "reviewer", now="2026-01-03T00:00:00Z")
+    assert attached["cover_capture_id"] == CAPTURE_ID
+    assert (attached["title"], attached["notes"], attached["author"]) == (
+        "The Glass Canoe", "person's note", "Typed Author")
+    assert attached["version"] == 2 and attached["updated_at"] == "2026-01-03T00:00:00Z"
+    assert store.observations(db, "used")[0]["book_id"] == original["id"]
+    (another,) = finish(db, [record()], SECOND_ID, kind="cover")
+    assert store.attach(db, [another["id"]], original["id"], "reviewer", now=NOW) == attached
+    with pytest.raises(store.Invalid, match="open"):
+        store.attach(db, [another["id"]], original["id"], "reviewer", now=NOW)
+
+
+def test_dismiss_and_attach_validate_the_whole_selection(db):
+    rows = finish(db, [record(), record("The Glass Canoe"), record("Hvězdná bárka")])
+    original = typed_book(db)
+    for action in (lambda ids: store.dismiss(db, ids, "reviewer"),
+                   lambda ids: store.attach(db, ids, original["id"], "reviewer", now=NOW)):
+        with pytest.raises(store.NotFound):
+            action([rows[0]["id"], 999])
+        assert store.observations(db) == rows
+    dismissed = store.dismiss(db, [rows[0]["id"], rows[1]["id"]], "reviewer")
+    assert [r["status"] for r in dismissed] == ["dismissed", "dismissed"]
+    assert [r["id"] for r in store.observations(db, "dismissed")] == [rows[0]["id"], rows[1]["id"]]
+    with pytest.raises(store.Invalid, match="open"):
+        store.approve(db, [rows[0]["id"]], {}, "reviewer", now=NOW)
+    with pytest.raises(store.Invalid, match="open"):
+        store.attach(db, [rows[2]["id"], rows[0]["id"]], original["id"], "reviewer", now=NOW)
+    with pytest.raises(store.NotFound):
+        store.attach(db, [rows[2]["id"]], 999, "reviewer", now=NOW)
+    assert [r["id"] for r in store.observations(db)] == [rows[2]["id"]]
+    assert store.book(db, original["id"]) == original
+
+
+def test_a_rerun_never_changes_used_dismissed_or_edited_books(db):
+    rows = finish(db, [record(), record("The Glass Canoe"), record("Hvězdná bárka")])
+    approved = store.approve(db, [rows[0]["id"]], {}, "reviewer", now=NOW)
+    edited = store.update_book(db, approved["id"], 1, {"title": "Personal title", "notes": "Keep my edit"},
+                               "editor", now=NOW)
+    store.dismiss(db, [rows[1]["id"]], "reviewer")
+    used = store.observations(db, "used")
+    dismissed = store.observations(db, "dismissed")
+    store.retry_job(db, capture(db)["job"]["id"])
+    finish(db, [record("Machine's new guess")])
+    assert store.book(db, edited["id"]) == edited
+    assert store.observations(db, "used") == used
+    assert store.observations(db, "dismissed") == dismissed
+    assert [r["id"] for r in store.observations(db, "superseded")] == [rows[2]["id"]]
