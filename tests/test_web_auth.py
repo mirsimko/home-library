@@ -54,3 +54,31 @@ def test_browser_writes_require_same_origin_including_in_development(tmp_path, m
     client = client_for(tmp_path, dev_user="local")
     assert client.request(method, "/identity", headers=proof).status_code == status
     assert client.head("/identity").status_code == 200
+
+
+def test_browser_and_development_access_still_work_when_a_bearer_token_is_invalid(tmp_path):
+    headers = {"Authorization": "Bearer wrong", "Tailscale-User-Login": "parent@example.test"}
+    client = client_for(tmp_path)
+    assert client.get("/identity", headers=headers).json() == {"user": "parent@example.test"}
+    assert client.post("/identity", headers=headers).status_code == 403
+    local = client_for(tmp_path, dev_user="local")
+    assert local.get("/identity", headers={"Authorization": "Bearer wrong"}).json() == {"user": "local"}
+
+
+def test_bearer_hashes_use_the_constant_time_comparison(tmp_path, monkeypatch):
+    import hmac
+
+    compare = hmac.compare_digest
+    comparisons = []
+
+    def checked_compare(actual, expected):
+        comparisons.append((actual, expected))
+        return compare(actual, expected)
+
+    monkeypatch.setattr(hmac, "compare_digest", checked_compare)
+    expected = hashlib.sha256(b"invented-secret").hexdigest()
+    (tmp_path / "agent-token").write_text(expected)
+    client = client_for(tmp_path)
+    assert client.get("/identity", headers={"Authorization": "Bearer invented-secret"}).status_code == 200
+    assert client.get("/identity", headers={"Authorization": "Bearer wrong"}).status_code == 401
+    assert len(comparisons) == 2 and all(saved == expected for _, saved in comparisons)
