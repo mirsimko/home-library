@@ -56,6 +56,12 @@ def add_book(request: Request, body: dict):
     return call(request, store.add_book, body, request.state.user)
 
 
+@router.post("/api/books/move")
+def move_books(request: Request, body: dict):
+    return call(request, store.move_books, body.get("book_ids"), body.get("location_id"), body.get("state"),
+                by=request.state.user)
+
+
 @router.get("/api/books/{id}")
 def book(request: Request, id: int):
     return call(request, store.book, id)
