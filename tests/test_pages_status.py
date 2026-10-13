@@ -60,7 +60,7 @@ def test_failed_jobs_show_their_error_and_can_be_retried(client, tmp_path):
     with closing(store.open(tmp_path)) as db:
         assert store.jobs(db)[0]["status"] == "queued" and store.jobs(db)[0]["attempts"] == 0
     again = client.post("/status/jobs/1/retry", headers={"HX-Request": "true"})
-    assert again.status_code == 400 and "only a done or failed job" in again.text
+    assert again.status_code == 409 and "only a failed job" in again.text
     assert client.post("/status/jobs/99/retry").status_code == 404
     assert 'data-failed="0"' in client.get("/status/panel").text
 

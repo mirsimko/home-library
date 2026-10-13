@@ -83,7 +83,7 @@ def test_a_superseded_worker_cannot_fail_or_retry_a_running_job(db):
     with pytest.raises(store.Conflict):
         store.fail_job(db, old["id"], old["owner"], "late failure", NOW)
     assert capture(db)["job"] == before
-    with pytest.raises(store.Invalid):
+    with pytest.raises(store.Conflict):
         store.retry_job(db, current["id"])
     assert capture(db)["job"] == before
     with pytest.raises(store.NotFound):
@@ -256,3 +256,15 @@ def test_only_the_owner_of_a_running_job_can_release_it(db):
     store.finish_job(db, job["id"], job["owner"], [record()], NOW)
     with pytest.raises(store.Conflict):
         store.release_job(db, job["id"], job["owner"])
+
+
+def test_only_a_failed_job_can_be_retried(db):
+    """A done capture re-imported would re-open rows already approved as duplicates."""
+    (row,) = finish(db, [record()])
+    done = capture(db)["job"]
+    queued = capture(db, SECOND_ID, sha256="b" * 64)["job"]
+    for job, state in ((done, "done"), (queued, "queued")):
+        with pytest.raises(store.Conflict, match="only a failed job"):
+            store.retry_job(db, job["id"])
+        assert store.jobs(db)[job["id"] - 1]["status"] == state
+    assert store.observations(db) == [row]

@@ -21,11 +21,12 @@ def test_queue_heartbeats_and_retries_use_the_shared_store(client, tmp_path):
     assert jobs[1]["heartbeat_at"] == NOW and jobs[1]["error"] == "invented failure"
     health = client.get("/health").json()
     assert health == {"ok": True, "worker_seen": NOW, "queued": 0, "failed": 1}
-    for job in jobs:
-        retried = client.post(f"/api/jobs/{job['id']}/retry")
-        assert retried.status_code == 200 and retried.json()["status"] == "queued"
-        assert retried.json()["attempts"] == 0
-    assert client.get("/health").json()["queued"] == 2
-    assert client.post(f"/api/jobs/{queued['job']['id']}/retry").status_code == 400
+    done = client.post(f"/api/jobs/{jobs[0]['id']}/retry")  # finished work is not redone
+    assert done.status_code == 409 and "only a failed job" in done.json()["error"]
+    retried = client.post(f"/api/jobs/{jobs[1]['id']}/retry")
+    assert retried.status_code == 200 and retried.json()["status"] == "queued"
+    assert retried.json()["attempts"] == 0
+    assert client.get("/health").json()["queued"] == 1
+    assert client.post(f"/api/jobs/{queued['job']['id']}/retry").status_code == 409
     assert client.post("/api/jobs/999/retry").status_code == 404
     assert len(client.get(f"/api/observations?capture_id={CAPTURE_ID}").json()) == 1
