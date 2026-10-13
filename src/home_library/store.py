@@ -89,6 +89,10 @@ def _choice(value, choices, field):
 
 
 def _get(db, table, id):
+    if table == "captures":
+        _uuid(id, "capture id")
+    elif type(id) is not int:
+        raise Invalid(f"{table} id must be an integer")
     row = db.execute(f"SELECT * FROM {table} WHERE id = ?", (id,)).fetchone()
     if row is None:
         raise NotFound(f"{table}: {id} was not found")
@@ -341,7 +345,7 @@ def _book_fields(db, fields):
         result["sort_key"] = result["title"]
     _choice(result["state"], STATES, "state")
     if result.get("location_id") is None:
-        raise Invalid("a book must have a location_id")
+        raise Invalid("a book must have an integer location_id")
     _get(db, "locations", result["location_id"])
     if result["cover_capture_id"] is not None:
         _uuid(result["cover_capture_id"], "cover capture id")
@@ -394,6 +398,8 @@ def _update_book(db, original, changes, by, stamp):
 
 def update_book(db, id, version, changes, by, *, now=None):
     """Apply a partial edit only to the version the person actually saw."""
+    if type(version) is not int:
+        raise Invalid("version must be an integer")
     with _write(db):
         original = book(db, id)
         if original["version"] != version:
