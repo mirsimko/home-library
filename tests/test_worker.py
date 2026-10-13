@@ -332,3 +332,26 @@ def test_idle_wait_is_injectable_and_can_be_interrupted(tmp_path, interval):
     stop.waits = []
     assert worker.run(tmp_path / "private", stop=stop, idle_wait=interval, popen=child) == 0
     assert stop.waits == [interval] and child.calls == []
+
+
+def test_a_heartbeat_connection_failure_stops_the_child_and_preserves_the_lease(tmp_path, caplog):
+    root = tmp_path / "private"
+    queued(root)
+    child = HangingChild()
+
+    def unavailable(command, **kwargs):
+        result = child(command, **kwargs)
+        (root / ".git").mkdir()  # The heartbeat's own store connection must now refuse this root.
+        return result
+
+    try:
+        assert worker.run(root, once=True, popen=unavailable, heartbeat_interval=0.01,
+                          timeout=0.1, killpg=child.killpg) == 0
+    finally:
+        (root / ".git").rmdir()
+    db = store.open(root)
+    assert capture(db)["job"]["status"] == "running"
+    assert store.observations(db) == []
+    db.close()
+    assert "job 1" in caplog.text and "The Copper Comet" not in caplog.text
+    assert len(child.kills) == 1
