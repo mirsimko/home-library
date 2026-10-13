@@ -355,3 +355,20 @@ def test_a_heartbeat_connection_failure_stops_the_child_and_preserves_the_lease(
     db.close()
     assert "job 1" in caplog.text and "The Copper Comet" not in caplog.text
     assert len(child.kills) == 1
+
+
+def test_worker_refuses_symlinked_work_in_a_checkout_before_removing_old_evidence(tmp_path):
+    root = tmp_path / "private"
+    queued(root)
+    checkout = tmp_path / "repo"
+    checkout.mkdir()
+    (checkout / ".git").mkdir()
+    old = checkout / "records.json"
+    old.write_text("old evidence")
+    (root / "work" / CAPTURE_ID).symlink_to(checkout, target_is_directory=True)
+    child = Child()
+    assert worker.run(root, once=True, popen=child) == 0
+    assert child.calls == [] and old.read_text() == "old evidence"
+    db = store.open(root)
+    assert capture(db)["job"]["status"] == "queued" and store.observations(db) == []
+    db.close()
