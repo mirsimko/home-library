@@ -104,14 +104,15 @@ def test_detail_shows_both_readings_and_why_the_row_needs_a_look(client, tmp_pat
 
 def test_candidates_are_listed_with_a_button_that_fills_the_form(client, tmp_path):
     candidate = new_candidate("test", "1", title="Paper Moon", authors=["A. Writer", "B. Painter"], publisher="Moon Press",
-                              year="2020", isbn="9780000000002", series="Night", language="en")
+                              year="2020", isbn="9780000000002", series="Night", language="en",
+                              title_reading="Moon, Paper")
     with closing(store.open(tmp_path)) as db:
         (row,) = finish(db, [record("Paper Moon")])
     write_work(tmp_path, CAPTURE_ID, candidates=[{"item": 0, "title": "Paper Moon", "candidates": [candidate]}])
     page = client.get(f"/review/{row['id']}").text
     assert "Use this record" in page and "Moon Press" in page
     (button,) = [item for item in tags(page, "button") if "data-fill" in item]
-    assert json.loads(button["data-fill"]) == {"title": "Paper Moon", "author": "A. Writer, B. Painter", "publisher": "Moon Press",
+    assert json.loads(button["data-fill"]) == {"title": "Paper Moon", "author": "A. Writer; B. Painter", "sort_key": "Moon, Paper", "publisher": "Moon Press",
                                                "year": "2020", "isbn": "9780000000002", "series": "Night", "language": "en",
                                                "source": "test", "source_id": "1"}
     (other,) = finish_other(tmp_path)
