@@ -212,3 +212,32 @@ def heartbeat(db, job_id, owner, now=None):
                                 WHERE id = ? AND status = 'running' AND owner = ?""",
                              (_stamp(now), job_id, owner)).rowcount
         return changed == 1
+
+
+def _owned(db, job_id, owner):
+    job = _get(db, "jobs", job_id)
+    if job["status"] != "running" or job["owner"] != owner:
+        raise Conflict("this worker no longer owns the running job")
+    return job
+
+
+def fail_job(db, job_id, owner, error, now=None):
+    """Keep a failure visible and requeue it while attempts remain."""
+    with _write(db):
+        job = _owned(db, job_id, owner)
+        status = "queued" if job["attempts"] < 3 else "failed"
+        db.execute("UPDATE jobs SET status = ?, owner = NULL, error = ?, finished_at = ? WHERE id = ?",
+                   (status, error, _stamp(now), job_id))
+        return _get(db, "jobs", job_id)
+
+
+def retry_job(db, job_id):
+    """Restart a completed or failed job with a fresh retry allowance."""
+    with _write(db):
+        job = _get(db, "jobs", job_id)
+        if job["status"] not in ("done", "failed"):
+            raise Invalid("only a done or failed job can be retried")
+        db.execute("""UPDATE jobs SET status = 'queued', attempts = 0, owner = NULL,
+                      heartbeat_at = NULL, started_at = NULL, finished_at = NULL, error = NULL WHERE id = ?""",
+                   (job_id,))
+        return _get(db, "jobs", job_id)
