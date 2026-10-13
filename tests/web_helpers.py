@@ -44,3 +44,49 @@ def tags(page, name):
 
     Collect().feed(page)
     return found
+
+
+def form_values(page, form_id="book-form"):
+    """What a browser would post for the page's form: every named input, select (first option unless selected) and text area."""
+    from html.parser import HTMLParser
+
+    values = {}
+
+    class Collect(HTMLParser):
+        def __init__(self):
+            super().__init__()
+            self.inside = False
+            self.select = None
+            self.area = None
+
+        def handle_starttag(self, tag, attrs):
+            attrs = dict(attrs)
+            if tag == "form":
+                self.inside = attrs.get("id") == form_id
+            if not self.inside:
+                return
+            if tag == "input" and attrs.get("name") and attrs.get("type") != "checkbox":
+                values[attrs["name"]] = attrs.get("value", "")
+            if tag == "input" and attrs.get("type") == "checkbox" and "checked" in attrs:
+                values[attrs["name"]] = attrs.get("value", "on")
+            if tag == "select":
+                self.select = attrs["name"]
+                values.setdefault(self.select, None)
+            if tag == "option" and self.select and (values[self.select] is None or "selected" in attrs):
+                values[self.select] = attrs.get("value", "")
+            if tag == "textarea":
+                self.area = attrs["name"]
+                values[self.area] = ""
+
+        def handle_data(self, data):
+            if self.area:
+                values[self.area] += data
+
+        def handle_endtag(self, tag):
+            if tag == "select":
+                self.select = None
+            if tag == "textarea":
+                self.area = None
+
+    Collect().feed(page)
+    return values

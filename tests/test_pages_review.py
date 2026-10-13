@@ -70,7 +70,7 @@ def write_work(tmp_path, id, tiles=("r1c1-r0.jpg", "r1c2-r0.jpg"), kind=None, ca
 
 
 def fields_of(page, form_id="approve-form"):
-    from test_pages_book_edit import form_values
+    from web_helpers import form_values
 
     return form_values(page, form_id)
 

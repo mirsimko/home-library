@@ -2,11 +2,10 @@
 from contextlib import closing
 
 from store_helpers import SECOND_ID, typed_book
-from test_pages_book_edit import form_values
 from test_pages_review import stock
 from web_helpers import anonymous as anonymous
 from web_helpers import client as client
-from web_helpers import tags
+from web_helpers import form_values, tags
 
 from home_library import store
 
