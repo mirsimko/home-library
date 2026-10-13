@@ -2,9 +2,12 @@
 import hashlib
 import os
 import secrets
+import subprocess
 import tempfile
+from contextlib import closing
 from pathlib import Path
 
+from home_library import store
 from home_library.workspace import refuse_inside_checkout
 
 
@@ -32,3 +35,19 @@ def rotate_token(root=None):
         if temporary is not None:
             temporary.unlink(missing_ok=True)
     return token
+
+
+def backup(root, destination, *, run=subprocess.run):
+    """Take a catalog snapshot and mirror photo evidence, refusing destructive overlaps."""
+    root = data_root(root)
+    destination = refuse_inside_checkout(destination)
+    targets = [destination, *(refuse_inside_checkout(destination / name)
+                             for name in ("catalog.db", "captures", "work"))]
+    if any(target.is_relative_to(root) or root.is_relative_to(target) for target in targets):
+        raise ValueError("backup destination must not overlap the data root")
+    destination.mkdir(parents=True, exist_ok=True)
+    with closing(store.open(root)) as db:
+        store.backup_database(db, destination / "catalog.db")
+    for name in ("captures", "work"):
+        run(["rsync", "-a", "--delete", f"{root}/{name}/", f"{destination}/{name}/"],
+            check=True, stdout=subprocess.DEVNULL, stderr=subprocess.PIPE)

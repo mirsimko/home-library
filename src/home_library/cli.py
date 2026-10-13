@@ -114,8 +114,8 @@ def _stage(args):
 
 def main(argv=None, *, run=subprocess.run, fetch=None, run_yaz=run_yaz_client):
     args = _parser().parse_args(argv)
-    if args.command in ("catalog", "token"):
-        return catalog_cli.execute(args)
+    if args.command in ("catalog", "token", "backup"):
+        return catalog_cli.execute(args, run=run)
     if args.command in ("run", "cover"):
         return _run(args, run=run, fetch=fetch, run_yaz=run_yaz)
     if args.command == "gather":

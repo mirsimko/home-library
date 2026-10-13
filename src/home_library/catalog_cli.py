@@ -2,6 +2,8 @@
 import argparse
 import csv
 import json
+import sqlite3
+import subprocess
 import sys
 from contextlib import closing
 from pathlib import Path
@@ -13,6 +15,9 @@ def add_commands(parser, commands):
     """Add catalog commands without changing the photo pipeline's arguments."""
     parser.add_argument("--data-root", type=Path, help="private data directory (default: $HL_DATA or ~/home-library)")
     data_root(commands.add_parser("token", help="Rotate and print the agent token."))
+    backup = commands.add_parser("backup", help="Snapshot the catalog and mirror private photos and work.")
+    backup.add_argument("destination", type=Path)
+    data_root(backup)
     catalog = commands.add_parser("catalog", help="Read and change the catalog.")
     data_root(catalog)
     actions = catalog.add_subparsers(dest="catalog_command", required=True)
@@ -115,15 +120,17 @@ def _catalog(db, args):
         _print(store.add_location(db, args.name, args.kind))
 
 
-def execute(args, **kwargs):
+def execute(args, *, run=subprocess.run, **kwargs):
     """Report store errors on one line so shell and agent callers can handle them."""
     try:
         if args.command == "token":
             print(maintenance.rotate_token(args.data_root))
+        elif args.command == "backup":
+            maintenance.backup(args.data_root, args.destination, run=run)
         else:
             with closing(store.open(args.data_root)) as db:
                 _catalog(db, args)
         return 0
-    except (ValueError, store.NotFound, OSError) as error:
+    except (ValueError, store.NotFound, OSError, sqlite3.Error, subprocess.SubprocessError) as error:
         print(" ".join(str(error).splitlines()), file=sys.stderr)
         return 1
