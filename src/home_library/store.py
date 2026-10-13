@@ -174,6 +174,14 @@ def add_capture(db, id, kind, location_id, default_state, uploaded_by, original_
         if group_id is not None:
             _uuid(group_id, "group id")
         _get(db, "locations", location_id)
+        if not isinstance(sha256, str) or len(sha256) != 64 or any(c not in "0123456789abcdef" for c in sha256):
+            raise Invalid("sha256 must be 64 lowercase hexadecimal characters")
+        if type(bytes) is not int or bytes < 0:
+            raise Invalid("bytes must be a non-negative integer")
+        _choice(media_type, ("image/jpeg", "image/png", "image/webp"), "media type")
+        uploaded_by = _name(uploaded_by, "uploaded by")
+        if not isinstance(original_name, str):
+            raise Invalid("original_name must be text")
         db.execute("""INSERT INTO captures
                       (id, kind, location_id, default_state, uploaded_by, original_name, media_type,
                        sha256, bytes, group_id, created_at) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)""",
@@ -321,6 +329,7 @@ def _book_fields(db, fields):
         if not isinstance(result[key], str):
             raise Invalid(f"{key} must be text")
     result["title"] = _name(result["title"], "book title")
+    result["tags"] = ", ".join(tag.strip() for tag in result["tags"].split(",") if tag.strip())
     if not result["sort_key"]:
         result["sort_key"] = result["title"]
     _choice(result["state"], STATES, "state")
@@ -479,6 +488,14 @@ def move_books(db, ids, location_id=None, state=None, *, by, now=None):
 
 def search_books(db, query="", state=None, location_id=None, tag=None, limit=50, offset=0):
     """Find copies by catalog text, using LIKE for titles shorter than a trigram."""
+    if not isinstance(query, str):
+        raise Invalid("query must be text")
+    if state is not None:
+        _choice(state, STATES, "state")
+    if tag is not None and not isinstance(tag, str):
+        raise Invalid("tag must be text")
+    if type(limit) is not int or limit < 0 or type(offset) is not int or offset < 0:
+        raise Invalid("limit and offset must be non-negative integers")
     clauses = []
     parameters = []
     if query:
