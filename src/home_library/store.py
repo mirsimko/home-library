@@ -291,3 +291,69 @@ def observations(db, status="open", capture_id=None):
         observation["capture"] = _get(db, "captures", observation["capture_id"])
         result.append(observation)
     return result
+
+
+TEXT_FIELDS = ("title", "sort_key", "author", "illustrator", "publisher", "year", "language", "isbn",
+               "series", "tags", "source", "source_id", "notes")
+BOOK_FIELDS = (*TEXT_FIELDS, "age_from", "age_to", "state", "location_id", "cover_capture_id", "needs_review")
+
+
+def _fields(fields):
+    if not isinstance(fields, dict):
+        raise Invalid("book fields must be an object")
+    for field in fields:
+        if field not in BOOK_FIELDS:
+            raise Invalid(f"{field} is not an editable book field")
+
+
+def _book_fields(db, fields):
+    _fields(fields)
+    result = dict.fromkeys(TEXT_FIELDS, "")
+    result.update(age_from=None, age_to=None, state="Active", cover_capture_id=None, needs_review=False)
+    result.update(fields)
+    for key in TEXT_FIELDS:
+        if not isinstance(result[key], str):
+            raise Invalid(f"{key} must be text")
+    result["title"] = _name(result["title"], "book title")
+    if not result["sort_key"]:
+        result["sort_key"] = result["title"]
+    _choice(result["state"], STATES, "state")
+    if result.get("location_id") is None:
+        raise Invalid("a book must have a location_id")
+    _get(db, "locations", result["location_id"])
+    if result["cover_capture_id"] is not None:
+        _uuid(result["cover_capture_id"], "cover capture id")
+        _get(db, "captures", result["cover_capture_id"])
+    for field in ("age_from", "age_to"):
+        value = result[field]
+        if value == "" or value is None:
+            result[field] = None
+        elif isinstance(value, str) and value.isdecimal():
+            result[field] = int(value)
+        elif type(value) is not int:
+            raise Invalid(f"{field} must be an integer or empty")
+    if type(result["needs_review"]) is not bool:
+        raise Invalid("needs_review must be true or false")
+    return result
+
+
+def _insert_book(db, fields, by, stamp):
+    values = _book_fields(db, fields)
+    values.update(created_by=_name(by, "created by"), reviewed_by=by, created_at=stamp, updated_at=stamp)
+    columns = ", ".join(values)
+    placeholders = ", ".join("?" for _ in values)
+    id = db.execute(f"INSERT INTO books ({columns}) VALUES ({placeholders})", tuple(values.values())).lastrowid
+    return book(db, id)
+
+
+def add_book(db, fields, by, *, now=None):
+    """Add a physical copy entered by a person, with its location and initial version."""
+    with _write(db):
+        return _insert_book(db, fields, by, _stamp(now))
+
+
+def book(db, id):
+    """Return a copy's catalog fields and editing version as plain data."""
+    result = _get(db, "books", id)
+    result["needs_review"] = bool(result["needs_review"])
+    return result
