@@ -27,23 +27,24 @@ def open(data_root=None):
     try:
         db.execute("PRAGMA foreign_keys = ON")
         db.execute("PRAGMA journal_mode = WAL")
-        migrations = sorted(files("home_library.migrations").iterdir(), key=lambda path: path.name)
-        for migration in migrations:
-            if not migration.name.endswith(".sql"):
-                continue
-            version = int(migration.name.split("_", 1)[0])
+        migrations = sorted((int(path.name.split("_", 1)[0]), path) for path in files("home_library.migrations").iterdir()
+                            if path.name.endswith(".sql"))
+        # Take the write lock only when a migration is pending, so every ordinary open leaves other writers alone.
+        if migrations and db.execute("PRAGMA user_version").fetchone()[0] < migrations[-1][0]:
             db.execute("BEGIN IMMEDIATE")
-            if version > db.execute("PRAGMA user_version").fetchone()[0]:
-                # executescript commits an existing transaction; execute complete statements instead.
-                statement = ""
-                for character in migration.read_text(encoding="utf-8"):
-                    statement += character
-                    if character == ";" and sqlite3.complete_statement(statement):
+            current = db.execute("PRAGMA user_version").fetchone()[0]  # another process may have migrated meanwhile
+            for version, migration in migrations:
+                if version > current:
+                    # executescript commits an existing transaction; execute complete statements instead.
+                    statement = ""
+                    for character in migration.read_text(encoding="utf-8"):
+                        statement += character
+                        if character == ";" and sqlite3.complete_statement(statement):
+                            db.execute(statement)
+                            statement = ""
+                    if statement.strip():
                         db.execute(statement)
-                        statement = ""
-                if statement.strip():
-                    db.execute(statement)
-                db.execute(f"PRAGMA user_version = {version}")
+                    db.execute(f"PRAGMA user_version = {version}")
             db.commit()
     except BaseException:
         db.close()

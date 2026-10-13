@@ -28,7 +28,7 @@ Because a capture's file is named by its id, the pipeline's work directory is `w
 
 ## Store (`home_library.store`)
 
-`store.open(data_root)` opens or creates `catalog.db`, applies the numbered migrations in `home_library/migrations/NNNN_*.sql` that have not run yet (tracked in `PRAGMA user_version`), and returns a connection with foreign keys on and WAL mode. Times are ISO 8601 UTC strings.
+`store.open(data_root)` opens or creates `catalog.db`, applies the numbered migrations in `home_library/migrations/NNNN_*.sql` that have not run yet (tracked in `PRAGMA user_version`), and returns a connection with foreign keys on and WAL mode. It reads `user_version` first and takes the write lock (`BEGIN IMMEDIATE`) only when a migration is pending, checking the version again inside the transaction, so opening an up-to-date store never waits for another writer. Times are ISO 8601 UTC strings.
 
 ### Tables
 
