@@ -11,6 +11,7 @@ import time
 from contextlib import closing, contextmanager
 
 from home_library import maintenance, store
+from home_library.workspace import refuse_inside_checkout
 
 LOG = logging.getLogger(__name__)
 EXTENSIONS = {"image/jpeg": "jpg", "image/png": "png", "image/webp": "webp"}
@@ -26,6 +27,8 @@ def _job(db, root, job, popen, heartbeat_interval, timeout, killpg, stop):
     with tempfile.TemporaryFile() as errors:
         try:
             target = root / "work" / capture["id"] / "records.json"
+            refuse_inside_checkout(photo)
+            refuse_inside_checkout(target)
             # A child must produce evidence this time, even when a previous attempt left records behind.
             target.unlink(missing_ok=True)
             child = popen(command, start_new_session=True, stdin=subprocess.DEVNULL,
