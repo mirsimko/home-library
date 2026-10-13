@@ -31,3 +31,15 @@ def test_queue_and_single_observation_reads_include_only_their_public_data(db):
     assert [j["status"] for j in store.jobs(db)] == ["done", "queued"]
     assert store.health(db) == {"ok": True, "worker_seen": NOW, "queued": 1, "failed": 0}
     assert "title" not in str(store.health(db))
+
+
+def test_json_exports_include_distinct_evidence_and_cover_capture_ids(db):
+    first = finish(db, [record("Paper Moon"), record("Paper Moon")], kind="cover")
+    second = finish(db, [record("", read_status="barcode")], SECOND_ID, kind="barcode")
+    book = store.approve(db, [o["id"] for o in first + second], {}, "parent")
+    manual = store.add_book(db, {"title": "Glass Cloud", "location_id": 1}, "parent")
+    exported = store.export_books(db)
+    assert [row["title"] for row in exported] == [manual["title"], book["title"]]
+    assert [row["capture_ids"] for row in exported] == [[], [CAPTURE_ID, SECOND_ID]]
+    assert [{key: value for key, value in row.items() if key != "capture_ids"}
+            for row in exported] == store.export_rows(db)
