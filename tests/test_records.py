@@ -389,3 +389,12 @@ def test_the_first_read_author_is_kept_unless_a_catalogue_record_is_matched():
                             (picks_of("match", "nkcr:1"), "Nová, Marta")):
         (record,) = build_records(merged, candidates, picks)
         assert record["author"] == expected
+
+
+def test_an_unreadable_cover_keeps_an_author_that_was_legible():
+    merged = merged_of([], unreadable=[reading("a-sol", 1, "", author="Ada Reed", readable="no")])
+
+    (record,) = build_records(merged)
+
+    assert record["read_status"] == "unreadable" and record["title"] == ""
+    assert record["author"] == "Ada Reed"
