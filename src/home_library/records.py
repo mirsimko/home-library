@@ -207,5 +207,8 @@ def build_barcode_record(photo: str, isbn: str | None, lookup: dict | None = Non
             _fill_catalogue(record, matched)
         else:
             record["notes"] = "No catalogue match for the decoded ISBN."
+        failed = _lookup_note({"language": lookup["language"]}, lookup)
+        if failed:
+            record["notes"] = " ".join(filter(None, (record["notes"], failed)))
         record["isbn"] = isbn
     return record
