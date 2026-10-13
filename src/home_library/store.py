@@ -2,6 +2,7 @@
 import json
 import os
 import sqlite3
+import tempfile
 from contextlib import contextmanager
 from datetime import datetime, timedelta, timezone
 from importlib.resources import files
@@ -553,3 +554,16 @@ def export_rows(db):
                         needs_review=bool(row["needs_review"]), notes=row["notes"])
         result.append(exported)
     return result
+
+
+def backup_database(db, destination):
+    """Vacuum committed rows into a temporary snapshot before replacing an older backup."""
+    destination = refuse_inside_checkout(destination)
+    destination.parent.mkdir(parents=True, exist_ok=True)
+    with tempfile.NamedTemporaryFile(dir=destination.parent, prefix=".catalog-", delete=False) as handle:
+        temporary = Path(handle.name)
+    try:
+        db.execute("VACUUM INTO ?", (str(temporary),))
+        temporary.replace(destination)
+    finally:
+        temporary.unlink(missing_ok=True)
