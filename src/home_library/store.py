@@ -1,17 +1,23 @@
 """The private catalog and job queue, shared by every app writer."""
 import json
+import os
 import sqlite3
 from contextlib import contextmanager
 from datetime import datetime, timedelta, timezone
 from importlib.resources import files
+from pathlib import Path
 from uuid import UUID, uuid4
 
 from home_library.workspace import refuse_inside_checkout
 
 
-def open(data_root):
+def open(data_root=None):
     """Open a private WAL database and apply each packaged migration once."""
+    if data_root is None:
+        data_root = os.environ.get("HL_DATA") or Path.home() / "home-library"
     root = refuse_inside_checkout(data_root)
+    for child in ("captures", "work", "catalog.db", "catalog.db-wal", "catalog.db-shm"):
+        refuse_inside_checkout(root / child)
     root.mkdir(parents=True, exist_ok=True)
     for directory in ("captures", "work"):
         (root / directory).mkdir(exist_ok=True)
