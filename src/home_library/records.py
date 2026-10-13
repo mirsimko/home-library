@@ -5,6 +5,7 @@ import csv
 import json
 import re
 
+from home_library.lookup.isbn import normalize_isbn
 from home_library.merge import match_key
 from home_library.workspace import refuse_inside_checkout
 
@@ -192,9 +193,19 @@ def write_records(photo_dir, records: list) -> None:
             writer.writerow([_cell(record[column]) for column in COLUMNS])
 
 
-def build_barcode_record(photo: str, isbn: str | None, *, location: str = "") -> dict:
-    """Keep an unreadable barcode visible so a person can enter its number."""
+def build_barcode_record(photo: str, isbn: str | None, lookup: dict | None = None, *, location: str = "") -> dict:
+    """Keep the decoded ISBN as evidence and fill catalogue fields only from the first equal ISBN."""
     record = _empty()
     record.update(photo=photo, location=location, read_status="no_barcode",
                   notes="No ISBN barcode could be decoded; type the number in.")
+    if isbn:
+        lookup = lookup or {"candidates": [], "queries": [], "language": "unknown"}
+        matched = next((c for c in lookup["candidates"] if normalize_isbn(c["isbn"]) == isbn), None)
+        record.update(read_status="barcode", language=lookup["language"], candidate_count=len(lookup["candidates"]),
+                      pick_verdict="match" if matched else "none", notes="")
+        if matched:
+            _fill_catalogue(record, matched)
+        else:
+            record["notes"] = "No catalogue match for the decoded ISBN."
+        record["isbn"] = isbn
     return record

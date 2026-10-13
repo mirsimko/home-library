@@ -211,7 +211,13 @@ def barcode_photo(photo, work_root=DEFAULT_WORK_ROOT, *, location="", fetch=None
     """Decode a barcode photo and write one review row, including when no ISBN is found."""
     directory = photo_dir_of(work_root, photo)
     decoded = _store(directory / "barcode.json", decode_photo(photo))
-    record = build_barcode_record(decoded["file"], decoded["isbn"], location=location)
+    found = None
+    if decoded["isbn"]:
+        found = find_candidates("", "ja", isbn=decoded["isbn"], fetch=fetch or Fetcher(), run_yaz=run_yaz,
+                                cache_dir=directory / "lookup" / "cache")
+        found["language"] = "ja"
+        _store(directory / "lookup" / "candidates.json", {"file": decoded["file"], "books": [{"item": 0, **found}]})
+    record = build_barcode_record(decoded["file"], decoded["isbn"], found, location=location)
     write_records(directory, [record])
-    return {"photo": decoded["file"], "directory": str(directory), "accepted": 0, "review": 0,
-            "unreadable": 1, "warnings": 0, "seconds": {}}
+    return {"photo": decoded["file"], "directory": str(directory), "accepted": 0, "review": int(bool(decoded["isbn"])),
+            "unreadable": int(not decoded["isbn"]), "warnings": 0, "seconds": {}}
