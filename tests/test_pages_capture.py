@@ -29,6 +29,9 @@ def test_capture_page_has_setup_modes_and_both_photo_inputs(client, tmp_path):
     assert {"shelf", "book"} <= buttons
     assert '<script src="/static/capture.js"' in page
     assert 'id="photos"' in page
+    hint = page[page.index('id="camera-hint"'):]
+    assert page.index('class="shoot"') < page.index('id="camera-hint"') < page.index('id="book-step"')
+    assert "may not be saved to the phone's gallery" in hint and "received" in hint.split("</p>")[0]
 
 
 def test_capture_page_without_a_location_asks_for_one_first(client):

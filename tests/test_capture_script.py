@@ -126,3 +126,28 @@ def test_uploads_go_one_at_a_time_in_the_order_the_photos_were_chosen():
       out({ order, states: [a.state, b.state], width: a.receipt.image.width });""")
     assert result["order"] == ["start a", "queued both", "end a", "start b", "end b"]
     assert result["states"] == ["uploaded", "uploaded"] and result["width"] == 4000
+
+
+@node
+def test_a_photo_not_yet_received_warns_before_the_page_is_left():
+    states = run_node("""
+      const states = ["waiting", "sending", "backoff", "failed", "rejected", "uploaded"];
+      out(states.map((state) => hl.isUnreceived({ state })));""")
+    assert states == [True, True, True, True, False, False]
+    assert "beforeunload" in SCRIPT.read_text() and "isUnreceived" in SCRIPT.read_text()
+
+
+@node
+def test_a_received_photo_lets_go_of_its_preview_and_its_file():
+    result = run_node("""
+      const revoked = [];
+      const item = { state: "uploaded", thumbnail: "blob:invented", file: { name: "x.jpg" } };
+      const waiting = { state: "backoff", thumbnail: "blob:other", file: { name: "y.jpg" } };
+      hl.releasePreview(item, (url) => revoked.push(url));
+      hl.releasePreview(waiting, (url) => revoked.push(url));
+      hl.releasePreview(item, (url) => revoked.push(url));
+      out({ revoked, item, waiting });""")
+    assert result["revoked"] == ["blob:invented"]
+    assert result["item"] == {"state": "uploaded", "thumbnail": None, "file": None}
+    assert result["waiting"]["thumbnail"] == "blob:other" and result["waiting"]["file"] == {"name": "y.jpg"}
+    assert "revokeObjectURL" in SCRIPT.read_text()
