@@ -357,3 +357,23 @@ def book(db, id):
     result = _get(db, "books", id)
     result["needs_review"] = bool(result["needs_review"])
     return result
+
+
+def _update_book(db, original, changes, by, stamp):
+    _fields(changes)
+    fields = {key: original[key] for key in BOOK_FIELDS}
+    fields.update(changes)
+    values = _book_fields(db, fields)
+    values.update(version=original["version"] + 1, reviewed_by=_name(by, "reviewed by"), updated_at=stamp)
+    assignments = ", ".join(f"{key} = ?" for key in values)
+    db.execute(f"UPDATE books SET {assignments} WHERE id = ?", (*values.values(), original["id"]))
+    return book(db, original["id"])
+
+
+def update_book(db, id, version, changes, by, *, now=None):
+    """Apply a partial edit only to the version the person actually saw."""
+    with _write(db):
+        original = book(db, id)
+        if original["version"] != version:
+            raise Conflict("this book has changed; read its current version before editing")
+        return _update_book(db, original, changes, by, _stamp(now))
