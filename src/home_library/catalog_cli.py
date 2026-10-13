@@ -1,11 +1,12 @@
 """Catalog commands for agents and people, using the same store as the app."""
 import argparse
+import csv
 import json
 import sys
 from contextlib import closing
 from pathlib import Path
 
-from home_library import store
+from home_library import records, store
 
 
 def add_commands(parser, commands):
@@ -32,6 +33,10 @@ def add_commands(parser, commands):
     add = actions.add_parser("add-location", help="Add a shelf or box.")
     add.add_argument("name")
     add.add_argument("--kind", required=True)
+    export = actions.add_parser("export", help="Print the complete catalog as CSV or JSON.")
+    format = export.add_mutually_exclusive_group(required=True)
+    format.add_argument("--csv", action="store_true")
+    format.add_argument("--json", action="store_true")
     for sub in actions.choices.values():
         data_root(sub)
 
@@ -57,8 +62,26 @@ def _print(value):
 def _catalog(db, args):
     action = args.catalog_command
     if action == "books":
-        for row in store.search_books(db, args.q, state=args.state, location_id=_location(db, args.location)):
-            _print(row)
+        location_id = _location(db, args.location)
+        offset = 0
+        while True:
+            rows = store.search_books(db, args.q, state=args.state, location_id=location_id, offset=offset)
+            for row in rows:
+                _print(row)
+            if len(rows) < 50:
+                break
+            offset += len(rows)
+    elif action == "export":
+        rows = store.export_rows(db)
+        if args.json:
+            _print(rows)
+        else:
+            sys.stdout.write("\ufeff")
+            writer = csv.writer(sys.stdout)
+            columns = records.COLUMNS[:19]
+            writer.writerow(columns)
+            for row in rows:
+                writer.writerow([records.csv_cell(row[key] if row[key] is not None else "") for key in columns])
     elif action == "show":
         _print(store.book(db, args.id))
     elif action == "edit":
