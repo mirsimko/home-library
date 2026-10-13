@@ -78,3 +78,14 @@ def test_candidate_evidence_is_available_only_for_the_latest_completed_attempt(d
     assert store.candidate_observation(db, new["id"]) == new
     with pytest.raises(store.NotFound):
         store.candidate_observation(db, 999)
+
+
+def test_locations_with_counts_include_empty_locations_and_every_state(db):
+    from store_helpers import typed_book
+
+    typed_book(db)
+    typed_book(db, title="Glass Cloud", state="Stored")
+    store.add_location(db, "Box 3", "box", now=NOW)
+    counted = store.locations_with_counts(db)
+    assert [(row["name"], row["books"]) for row in counted] == [("Box 3", 0), ("Shelf A", 2)]
+    assert {"id", "name", "kind", "created_at"} <= set(counted[0])
