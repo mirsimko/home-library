@@ -113,3 +113,45 @@ def test_a_capture_requires_an_existing_location(db):
     with pytest.raises(store.NotFound):
         capture(db, location_id=999)
     assert db.execute("SELECT count(*) FROM jobs").fetchone()[0] == 0
+
+
+def test_claims_are_oldest_first_and_carry_capture_and_location(db):
+    later = capture(db, now="2026-01-02T03:04:06Z")
+    earlier = capture(db, SECOND_ID)
+    statements = []
+    db.set_trace_callback(statements.append)
+    job = store.claim_job(db, NOW)
+    db.set_trace_callback(None)
+    assert "BEGIN IMMEDIATE" in statements
+    assert job["id"] == earlier["job"]["id"]
+    assert job["capture"] == earlier["capture"]
+    assert job["location"] == "Shelf A"
+    assert (job["status"], job["attempts"], job["heartbeat_at"], job["started_at"]) == ("running", 1, NOW, NOW)
+    assert job["owner"]
+    second = store.claim_job(db, NOW)
+    assert second["id"] == later["job"]["id"]
+    assert second["owner"] != job["owner"]
+    assert store.claim_job(db, NOW) is None
+
+
+def test_stale_jobs_are_reclaimed_only_after_twenty_minutes(db):
+    capture(db)
+    first = store.claim_job(db, NOW)
+    assert store.claim_job(db, "2026-01-02T03:24:05Z") is None
+    second = store.claim_job(db, "2026-01-02T03:24:06Z")
+    assert second["id"] == first["id"]
+    assert second["attempts"] == 2
+    assert second["owner"] != first["owner"]
+    assert not store.heartbeat(db, first["id"], first["owner"], "2026-01-02T03:30:00Z")
+    assert store.heartbeat(db, second["id"], second["owner"], "2026-01-02T03:30:00Z")
+    assert store.claim_job(db, "2026-01-02T03:49:59Z") is None
+    third = store.claim_job(db, "2026-01-02T03:50:01Z")
+    assert third["attempts"] == 3
+    capture(db, SECOND_ID)
+    next_job = store.claim_job(db, "2026-01-02T04:11:00Z")
+    assert next_job["capture_id"] == SECOND_ID
+    failed = capture(db)["job"]
+    assert failed["status"] == "failed"
+    assert failed["error"] == "the worker stopped responding 3 times"
+    assert failed["finished_at"] == "2026-01-02T04:11:00Z"
+    assert not store.heartbeat(db, failed["id"], third["owner"], "2026-01-02T04:12:00Z")
