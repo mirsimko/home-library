@@ -1,0 +1,57 @@
+<div id="status-panel" hx-get="/status/panel" hx-trigger="every 15s [!document.querySelector('#status-panel button:focus')]" hx-swap="outerHTML">
+  <section aria-label="Queue" class="card">
+    <h2 style="margin-top:0">Queue</h2>
+    <p>
+      <span class="badge" data-queued="{{ counts.queued }}">{{ counts.queued }} waiting</span>
+      <span class="badge" data-running="{{ counts.running }}">{{ counts.running }} being read</span>
+      <span class="badge" data-done="{{ counts.done }}">{{ counts.done }} done</span>
+      <span class="badge{% if counts.failed %} bad{% endif %}" data-failed="{{ counts.failed }}">{{ counts.failed }} failed</span>
+    </p>
+    <p class="muted small">
+      {% if worker_seen %}Worker last seen {{ worker_seen }}, when it last reported on a photo.{% else %}The worker has not been seen yet.{% endif %}
+    </p>
+  </section>
+
+  {% if failed %}
+  <h2>Failed</h2>
+  <div class="table-wrap">
+    <table>
+      <thead><tr><th>Job</th><th>Error</th><th></th></tr></thead>
+      <tbody>
+        {% for job in failed %}
+        <tr id="job-{{ job.id }}">
+          <td>#{{ job.id }}<br><span class="muted small">{{ job.attempts }} tries</span></td>
+          <td class="title small"><code style="white-space: pre-wrap; font-family: var(--mono)">{{ job.error }}</code></td>
+          <td><button type="button" hx-post="/status/jobs/{{ job.id }}/retry" hx-target="#job-{{ job.id }}" hx-swap="outerHTML">Retry</button></td>
+        </tr>
+        {% endfor %}
+      </tbody>
+    </table>
+  </div>
+  {% endif %}
+
+  <h2>Recent photos</h2>
+  {% if recent %}
+  <div class="table-wrap">
+    <table>
+      <thead><tr><th>Photo</th><th>Where</th><th>Size received</th><th>Reading</th></tr></thead>
+      <tbody>
+        {% for photo in recent %}
+        <tr>
+          <td>{{ photo.kind }}<br><span class="muted small">{{ photo.when }}</span></td>
+          <td>{{ photo.location }}</td>
+          <td>
+            {% if photo.size %}{{ photo.size[0] }} × {{ photo.size[1] }}{% if photo.small %} <span class="badge warn">smaller than 3000 px</span>{% endif %}
+            {% else %}<span class="badge bad">file missing</span>{% endif %}
+          </td>
+          <td>{{ photo.job }}{% if photo.open %}, <a href="/review">{{ photo.open }} to review</a>{% endif %}</td>
+        </tr>
+        {% endfor %}
+      </tbody>
+    </table>
+  </div>
+  <p class="muted small">A camera original has a long side over 3000 px. A smaller photo was shrunk on the way: check the camera settings.</p>
+  {% else %}
+  <p class="muted">No photos yet.</p>
+  {% endif %}
+</div>
