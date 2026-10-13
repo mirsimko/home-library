@@ -372,3 +372,51 @@ def test_worker_refuses_symlinked_work_in_a_checkout_before_removing_old_evidenc
     db = store.open(root)
     assert capture(db)["job"]["status"] == "queued" and store.observations(db) == []
     db.close()
+
+
+def run_with_flaky_heartbeat(tmp_path, failures):
+    """Run one job whose heartbeat raises `failures` times in a row (None: always) before working again."""
+    import sqlite3
+    import time
+    from concurrent.futures import ThreadPoolExecutor
+
+    root = tmp_path / "private"
+    queued(root)
+    child, real, calls = HangingChild(), store.heartbeat, []
+
+    def flaky(db, job_id, owner, now=None):
+        calls.append(job_id)
+        if failures is None or len(calls) <= failures:
+            raise sqlite3.OperationalError("database is locked")
+        return real(db, job_id, owner, now)
+
+    store.heartbeat = flaky
+    try:
+        with ThreadPoolExecutor(max_workers=1) as pool:
+            result = pool.submit(worker.run, root, once=True, popen=child, heartbeat_interval=0.01,
+                                 killpg=child.killpg, timeout=5)
+            assert child.started.wait(2)
+            deadline = time.monotonic() + 2
+            while len(calls) < (failures or 3) + 2 and not child.exited.is_set() and time.monotonic() < deadline:
+                time.sleep(0.005)
+            child.exited.set()
+            assert result.result(timeout=3) == 0
+    finally:
+        store.heartbeat = real
+    return root, child
+
+
+def test_a_heartbeat_that_fails_now_and_then_does_not_kill_the_child(tmp_path):
+    root, child = run_with_flaky_heartbeat(tmp_path, 2)
+    assert child.kills == []
+    db = store.open(root)
+    assert capture(db)["job"]["status"] == "done"
+    db.close()
+
+
+def test_three_failed_heartbeats_in_a_row_count_as_a_lost_lease(tmp_path):
+    root, child = run_with_flaky_heartbeat(tmp_path, None)
+    assert len(child.kills) == 1
+    db = store.open(root)
+    assert capture(db)["job"]["status"] == "running" and store.observations(db) == []
+    db.close()
