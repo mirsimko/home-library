@@ -590,9 +590,12 @@ def jobs(db):
 
 def health(db):
     """Summarise worker activity without exposing any catalogue text."""
-    row = db.execute("""SELECT max(heartbeat_at), coalesce(sum(status = 'queued'), 0),
-                        coalesce(sum(status = 'failed'), 0) FROM jobs""").fetchone()
-    return {"ok": True, "worker_seen": row[0], "queued": row[1], "failed": row[2]}
+    queue = jobs(db)
+    seen = [job["heartbeat_at"] for job in queue if job["heartbeat_at"] is not None]
+    latest = max(seen, key=lambda value: datetime.fromisoformat(value.replace("Z", "+00:00"))) if seen else None
+    return {"ok": True, "worker_seen": latest, "queued": sum(job["status"] == "queued" for job in queue),
+            "failed": sum(job["status"] == "failed" for job in queue)}
+
 
 
 def observation(db, id):
