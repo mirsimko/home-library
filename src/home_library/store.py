@@ -184,7 +184,7 @@ def validate_capture(db, id, kind, location_id, default_state, uploaded_by, orig
     if type(bytes) is not int or bytes < 0:
         raise Invalid("bytes must be a non-negative integer")
     _choice(media_type, ("image/jpeg", "image/png", "image/webp"), "media type")
-    uploaded_by = _name(uploaded_by, "uploaded by")
+    _name(uploaded_by, "uploaded by")
     if not isinstance(original_name, str):
         raise Invalid("original_name must be text")
 
@@ -198,6 +198,7 @@ def add_capture(db, id, kind, location_id, default_state, uploaded_by, original_
                                     original_name, media_type, sha256, bytes, group_id)
         if existing is not None:
             return existing
+        uploaded_by = _name(uploaded_by, "uploaded by")
         db.execute("""INSERT INTO captures
                       (id, kind, location_id, default_state, uploaded_by, original_name, media_type,
                        sha256, bytes, group_id, created_at) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)""",
