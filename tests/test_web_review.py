@@ -31,3 +31,23 @@ def test_review_can_approve_attach_and_dismiss_observations(client, tmp_path):
     assert client.post("/api/observations/approve", json={"observation_ids": [rows[0]["id"]], "fields": {}}).status_code == 400
     assert client.post("/api/observations/dismiss", json={"observation_ids": [999]}).status_code == 404
     assert client.post("/api/observations/attach", json={"observation_ids": []}).status_code == 400
+
+
+def test_candidates_match_record_item_order_even_when_titles_repeat(client, tmp_path):
+    import json
+
+    with closing(store.open(tmp_path)) as db:
+        rows = finish(db, [record("Paper Moon"), record("Paper Moon"), record("", read_status="unreadable")])
+    directory = tmp_path / "work" / CAPTURE_ID / "lookup"
+    directory.mkdir(parents=True)
+    candidates = directory / "candidates.json"
+    candidates.write_text(json.dumps({"books": [
+        {"item": 1, "title": "Paper Moon", "candidates": [{"id": "test:second"}]},
+        {"item": 0, "title": "Paper Moon", "candidates": [{"id": "test:first"}]},
+    ]}))
+    assert client.get(f"/api/observations/{rows[0]['id']}/candidates").json() == [{"id": "test:first"}]
+    assert client.get(f"/api/observations/{rows[1]['id']}/candidates").json() == [{"id": "test:second"}]
+    assert client.get(f"/api/observations/{rows[2]['id']}/candidates").json() == []
+    assert client.get("/api/observations/999/candidates").status_code == 404
+    candidates.unlink()
+    assert client.get(f"/api/observations/{rows[0]['id']}/candidates").json() == []
