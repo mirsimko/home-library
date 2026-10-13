@@ -6,12 +6,13 @@ import sys
 from contextlib import closing
 from pathlib import Path
 
-from home_library import records, store
+from home_library import maintenance, records, store
 
 
 def add_commands(parser, commands):
     """Add catalog commands without changing the photo pipeline's arguments."""
     parser.add_argument("--data-root", type=Path, help="private data directory (default: $HL_DATA or ~/home-library)")
+    data_root(commands.add_parser("token", help="Rotate and print the agent token."))
     catalog = commands.add_parser("catalog", help="Read and change the catalog.")
     data_root(catalog)
     actions = catalog.add_subparsers(dest="catalog_command", required=True)
@@ -117,8 +118,11 @@ def _catalog(db, args):
 def execute(args, **kwargs):
     """Report store errors on one line so shell and agent callers can handle them."""
     try:
-        with closing(store.open(args.data_root)) as db:
-            _catalog(db, args)
+        if args.command == "token":
+            print(maintenance.rotate_token(args.data_root))
+        else:
+            with closing(store.open(args.data_root)) as db:
+                _catalog(db, args)
         return 0
     except (ValueError, store.NotFound, OSError) as error:
         print(" ".join(str(error).splitlines()), file=sys.stderr)
