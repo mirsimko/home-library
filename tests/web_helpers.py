@@ -22,3 +22,10 @@ def photo(format="JPEG", size=(4080, 3072), orientation=None):
         exif[274] = orientation
     Image.new("RGB", size, "white").save(output, format, exif=exif)
     return output.getvalue()
+
+
+@pytest.fixture
+def anonymous(tmp_path):
+    """A client that no access rule lets in."""
+    with TestClient(create_app(tmp_path, [])) as client:
+        yield client
