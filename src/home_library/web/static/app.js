@@ -12,3 +12,24 @@ document.addEventListener("htmx:beforeSwap", function (event) {
     event.detail.isError = false;
   }
 });
+
+// The selection bar on the books page: count the ticked books and enable "Apply" only when there are some.
+function updateSelection() {
+  const form = document.getElementById("bulk");
+  if (!form) return;
+  const boxes = Array.from(form.querySelectorAll('input[name="book_ids"]'));
+  const picked = boxes.filter((box) => box.checked);
+  form.querySelector("[data-selected-count]").textContent = picked.length + " selected";
+  form.querySelector("[data-apply]").disabled = picked.length === 0;
+  const all = form.querySelector("[data-select-all]");
+  all.checked = boxes.length > 0 && picked.length === boxes.length;
+  for (const box of boxes) box.closest("tr").classList.toggle("pick", box.checked);
+}
+
+document.addEventListener("change", function (event) {
+  if (event.target.matches("[data-select-all]")) {
+    for (const box of document.querySelectorAll('#bulk input[name="book_ids"]')) box.checked = event.target.checked;
+  }
+  if (event.target.matches("#bulk input")) updateSelection();
+});
+document.addEventListener("htmx:afterSettle", updateSelection);
