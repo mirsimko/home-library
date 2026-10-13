@@ -469,3 +469,31 @@ def move_books(db, ids, location_id=None, state=None, *, by, now=None):
         originals = [book(db, id) for id in _ids(ids)]
         stamp = _stamp(now)
         return [_update_book(db, original, changes, by, stamp) for original in originals]
+
+
+def search_books(db, query="", state=None, location_id=None, tag=None, limit=50, offset=0):
+    """Find copies by catalog text, using LIKE for titles shorter than a trigram."""
+    clauses = []
+    parameters = []
+    if query:
+        if len(query) >= 3:
+            clauses.append("id IN (SELECT rowid FROM books_fts WHERE books_fts MATCH ?)")
+            parameters.append('"' + query.replace('"', '""') + '"')
+        else:
+            clauses.append("(" + " OR ".join(f"{key} LIKE ? ESCAPE '\\'" for key in
+                                             ("title", "sort_key", "author", "series", "isbn")) + ")")
+            pattern = "%" + query.replace("\\", "\\\\").replace("%", "\\%").replace("_", "\\_") + "%"
+            parameters.extend([pattern] * 5)
+    if state is not None:
+        clauses.append("state = ?")
+        parameters.append(state)
+    if location_id is not None:
+        clauses.append("location_id = ?")
+        parameters.append(location_id)
+    if tag is not None:
+        clauses.append("instr(',' || replace(tags, ', ', ',') || ',', ',' || ? || ',') > 0")
+        parameters.append(tag)
+    where = " WHERE " + " AND ".join(clauses) if clauses else ""
+    rows = db.execute(f"SELECT * FROM books{where} ORDER BY sort_key, title, id LIMIT ? OFFSET ?",
+                      (*parameters, limit, offset))
+    return [{**dict(row), "needs_review": bool(row["needs_review"])} for row in rows]
