@@ -17,7 +17,7 @@ EXTENSIONS = {"image/jpeg": "jpg", "image/png": "png", "image/webp": "webp"}
 COMMANDS = {"shelf": "run", "cover": "cover", "barcode": "barcode"}
 
 
-def _job(db, root, job, popen, heartbeat_interval, killpg):
+def _job(db, root, job, popen, heartbeat_interval, timeout, killpg):
     capture = job["capture"]
     photo = root / "captures" / f"{capture['id']}.{EXTENSIONS[capture['media_type']]}"
     command = [sys.executable, "-m", "home_library.cli", "--work-root", str(root / "work"),
@@ -34,13 +34,22 @@ def _job(db, root, job, popen, heartbeat_interval, killpg):
             lease = threading.Thread(target=_heartbeat,
                                      args=(root, job, child, done, lost, heartbeat_interval, killpg))
             lease.start()
+            timed_out = False
             try:
-                code = child.wait()
+                try:
+                    code = child.wait(timeout=timeout)
+                except subprocess.TimeoutExpired:
+                    timed_out = True
+                    _kill(child, killpg)
+                    code = child.wait()
             finally:
                 done.set()
                 lease.join()
             if lost.is_set():
                 LOG.warning("job %s no longer owned", job["id"])
+                return
+            if timed_out:
+                _fail(db, job, errors, "child timeout")
                 return
             if code:
                 _fail(db, job, errors, f"child exited with status {code}")
@@ -85,14 +94,14 @@ def _fail(db, job, errors, reason):
         LOG.warning("job %s no longer owned", job["id"])
 
 
-def run(root=None, *, once=False, popen=subprocess.Popen, heartbeat_interval=30, killpg=os.killpg):
+def run(root=None, *, once=False, popen=subprocess.Popen, heartbeat_interval=30, timeout=1200, killpg=os.killpg):
     """Handle at most one job with once, or keep draining the queue in order."""
     root = maintenance.data_root(root)
     with closing(store.open(root)) as db:
         while True:
             job = store.claim_job(db)
             if job is not None:
-                _job(db, root, job, popen, heartbeat_interval, killpg)
+                _job(db, root, job, popen, heartbeat_interval, timeout, killpg)
             if once:
                 return 0
             if job is None:
