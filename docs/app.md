@@ -1,0 +1,169 @@
+# Capture and review app: contract
+
+This is the contract of the app built on top of the shelf-photo pipeline: the catalog store, the job queue and worker, cover and barcode photos, the HTTP API, the pages, and how it runs. Why it is shaped this way is in the [implementation plan](plans/home-library-app-plan-20261013.html) (decisions D1 to D10) and the [framework research](research/app-framework.md). The pipeline's own contract is [pipeline.md](pipeline.md); the app depends only on the `hl` command line and the files it writes.
+
+Status: being built on branch `app/phase-1`, 2026-10-13. Not yet tried on the real devices (plan, phase 0).
+
+## Rules that hold everywhere
+
+- Everything in [pipeline.md](pipeline.md), "Rules that hold everywhere", holds here too. In particular: **no private data in this repository**, and tests use generated images and invented titles.
+- **Three kinds of thing** (plan D4). A *capture* is one uploaded photo. An *observation* is one row of a capture's `records.json`: evidence, never a book. A *book* is one physical copy, and exists only once a person (or an agent through the API) approves it, with a state and a location.
+- **Every write goes through `home_library.store`.** The HTTP API, the pages, the worker and `hl catalog` all call the same functions, so the same checks hold for all of them (plan D10). Nothing else writes `catalog.db`.
+- **Nothing is lost silently.** A failed job, an unreadable barcode and an observation nobody has looked at stay visible in the app until a person deals with them.
+- **No titles and no photo content in logs.** Logs name captures by id only.
+
+## Data root
+
+One directory holds everything private. It is `$HL_DATA`, or `~/home-library/` by default, and it must not lie inside a git checkout (`workspace.refuse_inside_checkout`).
+
+```text
+<data-root>/
+  catalog.db              SQLite, WAL mode; the catalog and the job queue
+  captures/<id>.jpg       uploaded photos, named by capture id; .png and .webp are kept as uploaded
+  work/<id>/              the pipeline's work directory of each capture (pipeline.md, "Work directory")
+  agent-token             sha256 of the bearer token agents use (see Access); absent means no agent access
+```
+
+Because a capture's file is named by its id, the pipeline's work directory is `work/<id>/` and two uploads can never share one, whatever their original file names (plan D5).
+
+## Store (`home_library.store`)
+
+`store.open(data_root)` opens or creates `catalog.db`, applies the numbered migrations in `home_library/migrations/NNNN_*.sql` that have not run yet (tracked in `PRAGMA user_version`), and returns a connection with foreign keys on and WAL mode. Times are ISO 8601 UTC strings.
+
+### Tables
+
+| Table | Columns |
+|---|---|
+| `locations` | `id` integer key; `name` unique, not empty, trimmed; `kind` `shelf` or `box`; `created_at` |
+| `captures` | `id` text key, a lowercase canonical UUID from the client; `kind` `shelf`, `cover` or `barcode`; `location_id`; `default_state`; `group_id` text or null, a UUID pairing a cover with its barcode; `uploaded_by`; `original_name`; `media_type`; `sha256`; `bytes`; `created_at` |
+| `jobs` | `id` integer key; `capture_id` unique; `status` `queued`, `running`, `done` or `failed`; `attempts`; `owner` text or null; `heartbeat_at`; `started_at`; `finished_at`; `error` text |
+| `observations` | `id` integer key; `capture_id`; `attempt`; `row` (index in `records.json`); `read_status`; `title`; `other_reading`; `record` (the whole row as JSON); `status` `open`, `used`, `dismissed` or `superseded`; `book_id` or null; `created_at`; unique (`capture_id`, `attempt`, `row`) |
+| `books` | `id` integer key; the fields of spec 2.1: `title`, `sort_key`, `author`, `illustrator`, `publisher`, `year`, `language`, `isbn`, `series`, `age_from`, `age_to` (integers or null), `tags` (comma-separated), `state`, `location_id` (not null), `cover_capture_id`, `source`, `source_id`, `needs_review`, `notes`; then `version`, `created_by`, `reviewed_by`, `created_at`, `updated_at` |
+| `books_fts` | FTS5, tokenizer `trigram`, over `title`, `sort_key`, `author`, `series`, `isbn`, kept in step with `books` by triggers |
+
+States are `Active`, `Stored`, `Retired` and `Gone` (a book that left the house keeps its record; plan question 6). A book's `title` must not be empty and its `location_id` must name a location.
+
+### Functions
+
+Every function takes the connection first. A rule that is broken raises `store.Invalid` (a `ValueError`) with a message a person can act on; a stale `version` raises `store.Conflict`; a missing row raises `store.NotFound`.
+
+- **Locations:** `add_location(name, kind)`, `rename_location(id, name)`, `locations()`.
+- **Captures:** `add_capture(id, kind, location_id, default_state, uploaded_by, original_name, media_type, sha256, bytes, group_id=None)` inserts the capture and its `queued` job in one transaction and returns the receipt `{"capture": ..., "job": ..., "created": True}`. The same id again with the same sha256 returns the stored receipt with `created` false and adds nothing; with another sha256 it raises `Conflict`. Another capture with the same sha256 is allowed: the receipt then lists it under `"duplicate_of"` so the page can warn.
+- **Jobs:**
+  - `claim_job(now)` takes, in one `BEGIN IMMEDIATE` transaction, the oldest job that is `queued`, or `running` with a heartbeat older than 20 minutes (its worker died). It sets `running`, adds one to `attempts`, sets a fresh random `owner` and the heartbeat, and returns the job with its capture and location name. A stale job that has already had 3 attempts is set `failed` instead, with the error "the worker stopped responding 3 times". Returns None when there is nothing to do.
+  - `heartbeat(job_id, owner, now)` refreshes the heartbeat only while `owner` still holds the job; returns whether it did.
+  - `finish_job(job_id, owner, records, now)` imports the rows of `records.json` as `open` observations of this attempt, marks the capture's earlier `open` observations `superseded`, and sets the job `done`, all in one transaction. If `owner` no longer holds the job it changes nothing and raises `Conflict`: a late write from a superseded attempt is refused. Observations that are `used` or `dismissed`, and every book, are never touched.
+  - `fail_job(job_id, owner, error, now)` puts the job back to `queued` while it has had fewer than 3 attempts, else sets it `failed`; the error is kept either way. Same owner rule.
+  - `retry_job(job_id)` sets a `failed` or `done` job back to `queued` with `attempts` 0.
+- **Observations:** `observations(status="open", capture_id=None)`; `dismiss(observation_ids, by)`.
+- **Books:**
+  - `approve(observation_ids, fields, by)` creates one book from one or more open observations (for example a cover and its barcode, or a shelf row and a cover), marks them `used` with the new `book_id`, and returns the book. Missing fields are taken from the observations' records: the catalogue fields from the first one that has them, the title from the first non-empty one; `location_id` and `state` from the capture. A cover capture among them becomes `cover_capture_id`. The new book has `needs_review` false and `reviewed_by` set.
+  - `attach(observation_ids, book_id, by)` marks open observations `used` by an existing book, and sets its cover if it has none and one of them is a cover.
+  - `add_book(fields, by)` adds a book typed in by hand.
+  - `update_book(id, version, changes, by)` applies a partial change if `version` is current, then adds one to it. A field that is not a book field is refused.
+  - `move_books(ids, location_id=None, state=None, by)` changes location or state of several books in one transaction.
+  - `book(id)`; `search_books(query="", state=None, location_id=None, tag=None, limit=50, offset=0)`. A query of three or more characters uses `books_fts`; a shorter one, which is common for Japanese titles, uses a `LIKE` match on the same columns. Results sort by `sort_key`, then `title`.
+- **Export:** `export_rows()` gives every book as a flat dict with the location's name, in the column order of spec 2.1.
+
+## Worker (`home_library.worker`, `hl worker`)
+
+One process that drains the job queue, one job at a time (the home uplink carries one photo at a time; pipeline.md, "What runs at once").
+
+- It claims a job, then runs the pipeline for the capture as a child process in its own process group, with the data root's `work/` as work root:
+  - `shelf`: `hl --work-root <work> run <captures>/<id>.jpg --location <name>`
+  - `cover`: `hl --work-root <work> cover <captures>/<id>.jpg --location <name>`
+  - `barcode`: `hl --work-root <work> barcode <captures>/<id>.jpg --location <name>`
+- While the child runs, a thread calls `heartbeat` every 30 seconds. After 20 minutes the whole process group is killed and the job fails with a timeout. If `heartbeat` reports the job lost, the child is killed and nothing is imported.
+- When the child exits 0, the worker reads `work/<id>/records.json` and calls `finish_job`. A non-zero exit, a missing or unreadable `records.json`, or a timeout calls `fail_job` with the last 2000 characters of the child's standard error.
+- With nothing to do it waits 5 seconds and looks again. It stops cleanly on SIGTERM or SIGINT: a running child is killed and its job is left `running`, to be taken over once its heartbeat is stale.
+- `hl worker --once` handles at most one job and exits; tests and a harness use it.
+- The worker runs the child through an injectable runner, so tests use a fake `hl` the way `tests/test_reader.py` fakes `codex`.
+
+## Cover and barcode photos (`hl cover`, `hl barcode`)
+
+Both write the same `records.json` and `records.csv` as `hl run`, in the photo's work directory, so the worker treats every kind alike.
+
+### `hl cover <photo> --location <name>`
+
+- Stage 1 for a cover cuts no tiles: it writes the photo, EXIF orientation applied and scaled so that its longer side is at most 2000 pixels, as the single image `tiles/cover-r0.jpg`, and a `tiles.json` with `"kind": "cover"` and that one entry. A photo already that small is not enlarged.
+- The two blind reads, the merge, the look-up, the pick and the records then run as for a shelf photo, with these differences:
+  - The read prompt is `prompts/cover_read.txt`: one book, seen from the front. The answer has the same shape and the same nine fields as a shelf read, plus an optional tenth field, `author`, for the author's name as printed. The parser keeps `author` when it is given and sets it to the empty string otherwise, for every read.
+  - The look-up passes an item's `author` to `find_candidates`, so the title-and-author step runs.
+  - The record's `author` column is the catalogue's when a candidate was matched, and otherwise the author as read.
+- Rerunning is safe in the same way as for `hl run`.
+
+### `hl barcode <photo> --location <name>`
+
+- Decodes the photo with `zxing-cpp` (EXIF orientation applied first). Of the codes it finds, the first EAN-13 that is a valid ISBN-13 is used: prefix 978 or 979 and a correct check digit. An ISBN-10 printed as text is not looked for; that would be OCR.
+- The language comes from the registration group: `978-4` Japanese, `978-80` Czech, `978-0`, `978-1` and `979-8` English. For any other group every language's sources are tried, Japanese, then Czech, then English, until one returns a record.
+- Only the ISBN step of the look-up runs. A candidate whose ISBN equals the decoded one is the match, the first in source order; no model is asked.
+- It writes one record. `read_status` is `barcode`, `isbn` is the decoded ISBN, `title` is empty (nothing was read), and the catalogue fields come from the match. Without a match the record says so in `notes`. When no ISBN could be decoded the record's `read_status` is `no_barcode`, and `notes` says to type the number in.
+- `barcode.json` in the work directory keeps what was decoded: every code found, its format and text, and which one was used.
+
+## Access
+
+The app listens on `127.0.0.1` only. Tailscale Serve puts it on the tailnet with HTTPS and adds the header `Tailscale-User-Login` to each request (plan D9).
+
+- A browser request is let in when its `Tailscale-User-Login` is one of the logins in `$HL_USERS` (comma-separated). That login is the person's name in the catalog (`uploaded_by`, `created_by`, `reviewed_by`).
+- An agent sends `Authorization: Bearer <token>`. The token is let in when its sha256 equals the one in `<data-root>/agent-token`; its name in the catalog is `agent`. `hl token` makes a new token, prints it once and stores its hash, which also revokes the old one.
+- Everything else gets 401, except `GET /health`.
+- `$HL_DEV_USER` lets every request in as that login, for local development. `hl serve` refuses it unless it listens on `127.0.0.1`.
+- **Cross-site requests.** A browser request with a method other than GET or HEAD must carry an `Origin` header whose host is the request's own `Host`, or `Sec-Fetch-Site: same-origin`. Otherwise it gets 403. Bearer-token requests are exempt.
+- Photos and tiles are served only to requests that are let in.
+
+## HTTP API
+
+JSON in and out. Errors are `{"error": "<message>"}` with 400 (`Invalid`), 404, 409 (`Conflict`) or 413/415 for uploads.
+
+| Method and path | Does |
+|---|---|
+| `POST /api/captures` | Multipart: `file`, `id`, `kind`, `location_id`, `state` (default `Active`), optional `group_id`. Returns 201 with the receipt, or 200 with the stored receipt for a repeated id. JPEG, PNG and WebP only, found from the file's content, not its name or declared type (415 otherwise); at most 40 MB (413). The file is written to a temporary file, flushed to disk and moved into place before the capture is recorded. |
+| `GET /api/captures` | Recent captures with their job status and how many open observations each has. `?ids=a,b` limits it to those captures. |
+| `GET /api/captures/{id}/photo` | The photo. |
+| `GET /api/captures/{id}/tiles/{file}` | One tile image of the capture's work directory; `file` must be a tile name the manifest lists. |
+| `GET /api/jobs` | The queue, with the worker's last heartbeat. `POST /api/jobs/{id}/retry`. |
+| `GET /api/observations` | `?status=open` by default; `?capture_id=`. Each with its record and its capture. |
+| `POST /api/observations/approve` | `{"observation_ids": [...], "fields": {...}}`, returns the new book. |
+| `POST /api/observations/attach` | `{"observation_ids": [...], "book_id": n}`. |
+| `POST /api/observations/dismiss` | `{"observation_ids": [...]}`. |
+| `GET /api/observations/{id}/candidates` | The catalogue candidates the pipeline fetched for this observation's item, from `lookup/candidates.json`. |
+| `GET /api/books` | `?q=&state=&location_id=&tag=&limit=&offset=`. |
+| `POST /api/books` | Add a book by hand. |
+| `GET /api/books/{id}`, `PATCH /api/books/{id}` | Read; change with `{"version": n, "changes": {...}}`. |
+| `POST /api/books/move` | `{"book_ids": [...], "location_id": n, "state": "Stored"}`, either may be left out. |
+| `GET /api/locations`, `POST /api/locations`, `PATCH /api/locations/{id}` | List, add, rename. |
+| `GET /export.csv`, `GET /export.json` | Every book. CSV in UTF-8 with a byte-order mark and the formula escaping of `records.py`. JSON with each book's capture ids. |
+| `GET /health` | `{"ok": true, "worker_seen": "<last heartbeat or null>", "queued": n, "failed": n}`. No titles. |
+
+## Pages
+
+Server-rendered with Jinja2; HTMX (vendored under `static/`, no CDN) for partial updates; a little plain JavaScript on the capture page. Every page works on a phone, and the review pages are made for a keyboard.
+
+- **Capture** (`/capture`, the phones). Location and default state are chosen once and remembered in the browser. A mode switch: *shelf*, or *one book* (a cover photo, then optionally a barcode photo, sharing a `group_id`). Two ways in: the camera (`<input type=file accept="image/*" capture="environment">`) and the gallery (`multiple`). Each chosen photo gets its id at once, shows as a thumbnail, and uploads with a progress bar and up to 5 retries with backoff while the page is open. Its status reads *on this phone*, *received*, *reading*, *needs attention* or *ready for review*, polled from `GET /api/captures?ids=`.
+- **Review** (`/review`, the iPad and laptop). The inbox lists open observations grouped by capture, and by `group_id` for one-book captures. The detail of an observation shows the tile named in its `where` (or the cover), the full photo a tap away, both readings, the reason it needs review, the catalogue candidates with "use this record", and the editable book fields filled from the record. Actions: approve as a new book, attach to an existing book (with a search), dismiss, add a book by hand. Keys: `j` and `k` move, `Enter` approves and goes to the next, `e` edits, `x` dismisses.
+- **Books** (`/books`). Search and filters; select several to move or change state. A book's page edits it, with the version check: a conflicting edit shows both versions.
+- **Locations** (`/locations`). List, add and rename, with how many books each holds.
+- **Status** (`/status`). The queue, the worker's heartbeat, failed jobs with their error and a retry button.
+- **Install.** `manifest.webmanifest` (name, icons, `display: standalone`, start URL `/capture`) and a service worker that only exists so the phones can install the app; it caches nothing.
+
+## Commands
+
+| Command | Does |
+|---|---|
+| `hl serve [--port 8765]` | The web app on `127.0.0.1`. |
+| `hl worker [--once]` | The worker. |
+| `hl cover`, `hl barcode` | The pipeline for one cover or barcode photo. |
+| `hl catalog books [--q] [--state] [--location]` | List books as JSON lines. |
+| `hl catalog show <id>` | One book as JSON. |
+| `hl catalog edit <id> --version n field=value ...` | Change a book. |
+| `hl catalog move <id>... [--location NAME] [--state S]` | Move or change state. |
+| `hl catalog locations`, `hl catalog add-location NAME --kind box` | Locations. |
+| `hl catalog export --csv|--json` | Every book to standard output. |
+| `hl token` | A new agent token (see Access). |
+| `hl backup <dest>` | A consistent copy of the data root: `catalog.db` through `VACUUM INTO`, then `captures/` and `work/` copied with `rsync -a`. |
+
+All of them take `--data-root`, defaulting to `$HL_DATA` or `~/home-library/`.
+
+## Running it
+
+See [operations.md](operations.md): systemd user services for `hl serve` and `hl worker` in WSL on battlebox, Tailscale Serve, starting WSL at boot, the nightly backup to Battlebook, and restoring it.
