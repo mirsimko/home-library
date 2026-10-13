@@ -280,11 +280,11 @@ def release_job(db, job_id, owner):
 
 
 def retry_job(db, job_id):
-    """Restart a completed or failed job with a fresh retry allowance."""
+    """Restart a failed job with a fresh retry allowance; finished work is not redone."""
     with _write(db):
         job = _get(db, "jobs", job_id)
-        if job["status"] not in ("done", "failed"):
-            raise Invalid("only a done or failed job can be retried")
+        if job["status"] != "failed":
+            raise Conflict("only a failed job can be retried")
         db.execute("""UPDATE jobs SET status = 'queued', attempts = 0, owner = NULL,
                       heartbeat_at = NULL, started_at = NULL, finished_at = NULL, error = NULL WHERE id = ?""",
                    (job_id,))

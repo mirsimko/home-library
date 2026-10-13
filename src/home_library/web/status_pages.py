@@ -74,6 +74,6 @@ def panel(request: Request):
 def retry(request: Request, id: int):
     try:
         job = call(request, store.retry_job, id)
-    except store.Invalid as error:
-        return render(request, "status_retried.html", status=400, job={"id": id}, error=str(error))
+    except store.Conflict as error:
+        return render(request, "status_retried.html", status=409, job={"id": id}, error=str(error))
     return render(request, "status_retried.html", job=job, error=None)
