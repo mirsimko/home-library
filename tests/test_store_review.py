@@ -141,3 +141,12 @@ def test_superseded_observations_cannot_be_approved_or_attached(db):
             action()
     assert store.book(db, original["id"]) == original
     assert len(store.observations(db)) == 1
+
+
+def test_approving_a_barcode_alone_takes_the_catalogue_title_and_leaves_pipeline_notes_out(db):
+    (barcode,) = finish(db, [record("", read_status="barcode", catalogue_title="The Invented Lighthouse",
+                                   isbn="9780000000002", source="test", source_id="7",
+                                   notes="No catalogue age note.")], kind="barcode")
+    book = store.approve(db, [barcode["id"]], {}, "reviewer", now=NOW)
+    assert book["title"] == "The Invented Lighthouse" and book["isbn"] == "9780000000002"
+    assert book["notes"] == ""
