@@ -110,7 +110,8 @@ def prefill(suggested):
 
 def fill_from(candidate):
     """What "Use this record" puts into the form: the candidate's non-empty catalogue fields."""
-    fill = {"title": candidate.get("title"), "author": ", ".join(candidate.get("authors") or []),
+    fill = {"title": candidate.get("title"), "author": "; ".join(candidate.get("authors") or []),
+            "sort_key": candidate.get("title_reading"),
             "publisher": candidate.get("publisher"), "year": candidate.get("year"), "isbn": candidate.get("isbn"),
             "series": candidate.get("series"), "language": candidate.get("language"),
             "source": candidate.get("source"), "source_id": candidate.get("source_id")}
