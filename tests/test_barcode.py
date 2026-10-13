@@ -222,3 +222,20 @@ def test_an_unknown_group_tries_japanese_czech_then_english_until_records_are_re
     assert record["language"] == (stop_at or "unknown")
     assert record["catalogue_title"] == ("Amber Balloon" if stop_at else "")
     assert record["isbn"] == "9782000000006" and record["title"] == ""
+
+
+def test_catalogue_failures_remain_visible_in_the_barcode_row(tmp_path):
+    from home_library.lookup.errors import Unavailable
+    from home_library.pipeline import barcode_photo
+
+    photo = tmp_path / "barcode.png"
+    ean13("9780000000002").save(photo)
+
+    def fetch(url):
+        raise Unavailable("invented offline catalogue")
+
+    barcode_photo(photo, tmp_path / "work", fetch=fetch)
+    (record,) = json.loads((tmp_path / "work/barcode/records.json").read_text())
+    assert "No catalogue match" in record["notes"]
+    assert "openlibrary unavailable" in record["notes"] and "loc unavailable" in record["notes"]
+    assert record["isbn"] == "9780000000002" and record["read_status"] == "barcode"
