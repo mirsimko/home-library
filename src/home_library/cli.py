@@ -38,6 +38,10 @@ def _parser():
                          help="backend of the second, checking read (default: %(default)s)")
         run.add_argument("--force", action="store_true", help="start from nothing even if reads are stored")
 
+    barcode = command("barcode", "Decode an ISBN barcode and write one review record.")
+    barcode.add_argument("photo", type=Path)
+    barcode.add_argument("--location", default="")
+
     command("tiles", "Cut a photo into tiles.").add_argument("photo", type=Path)
     read = command("read", "Run one read of a photo's tiles.")
     read.add_argument("photo", type=Path)
@@ -63,8 +67,9 @@ def _report(result):
         return
     seconds = ", ".join(f"{read_id} {value:.0f} s" for read_id, value in result["seconds"].items())
     lost = f", {result['warnings']} lost by a read (see the last rows)" if result["warnings"] else ""
+    timing = f" ({seconds})" if seconds else ""
     print(f"{result['photo']}: {result['accepted']} accepted, {result['review']} to review, "
-          f"{result['unreadable']} unreadable{lost} ({seconds}) -> {result['directory']}/records.csv", flush=True)
+          f"{result['unreadable']} unreadable{lost}{timing} -> {result['directory']}/records.csv", flush=True)
 
 
 def _run(args, *, run, fetch, run_yaz):
@@ -115,6 +120,10 @@ def main(argv=None, *, run=subprocess.run, fetch=None, run_yaz=run_yaz_client):
         print()
         return 0
     try:
+        if args.command == "barcode":
+            _report(pipeline.barcode_photo(args.photo, args.work_root, location=args.location,
+                                           fetch=fetch, run_yaz=run_yaz))
+            return 0
         return _stage(args)
     except Exception as failure:
         print(f"{args.photo}: {type(failure).__name__}: {failure}", file=sys.stderr)
