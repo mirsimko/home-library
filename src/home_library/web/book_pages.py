@@ -68,8 +68,10 @@ def move_books(request: Request, form=Depends(form_data)):
     try:
         if not all(id.isdecimal() for id in form.getlist("book_ids")):
             raise store.Invalid("book ids must be numbers")
+        if location and not location.isdecimal():
+            raise store.Invalid("choose a location from the list")
         moved = call(request, store.move_books, [int(id) for id in form.getlist("book_ids")],
-                     int(location) if location.isdecimal() else None, state or None, by=request.state.user)
+                     int(location) if location else None, state or None, by=request.state.user)
     except store.Invalid as problem:
         return results(request, values, status=400, error=str(problem))
     except store.NotFound as problem:
