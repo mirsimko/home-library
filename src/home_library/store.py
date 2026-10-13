@@ -377,3 +377,56 @@ def update_book(db, id, version, changes, by, *, now=None):
         if original["version"] != version:
             raise Conflict("this book has changed; read its current version before editing")
         return _update_book(db, original, changes, by, _stamp(now))
+
+
+def _ids(ids):
+    if not isinstance(ids, (list, tuple)) or not ids or any(type(id) is not int or id < 1 for id in ids):
+        raise Invalid("choose at least one row by its integer id")
+    return list(dict.fromkeys(ids))
+
+
+def _open_observations(db, ids):
+    result = []
+    for id in _ids(ids):
+        observation = _get(db, "observations", id)
+        if observation["status"] != "open":
+            raise Invalid(f"observation {id} is not open")
+        observation["record"] = json.loads(observation["record"])
+        observation["capture"] = _get(db, "captures", observation["capture_id"])
+        result.append(observation)
+    return result
+
+
+def _cover(observations):
+    return next((o["capture_id"] for o in observations if o["capture"]["kind"] == "cover"), None)
+
+
+def _use(db, observations, book_id):
+    for observation in observations:
+        db.execute("UPDATE observations SET status = 'used', book_id = ? WHERE id = ?",
+                   (book_id, observation["id"]))
+
+
+def approve(db, observation_ids, fields, by, *, now=None):
+    """Create one reviewed physical copy from evidence chosen by a person."""
+    with _write(db):
+        _fields(fields)
+        evidence = _open_observations(db, observation_ids)
+        records = [observation["record"] for observation in evidence]
+        inherited = {}
+        for key in (*TEXT_FIELDS, "age_from", "age_to"):
+            inherited[key] = next((row[key] for row in records if row.get(key) not in (None, "")), "")
+        inherited["title"] = next((row["title"] for row in records
+                                   if isinstance(row.get("title"), str) and row["title"].strip()), "")
+        catalogue = next((row for row in records if row.get("source") or row.get("catalogue_title")), None)
+        if catalogue is not None:
+            for key in ("sort_key", "author", "publisher", "year", "isbn", "series", "source", "source_id",
+                        "age_from", "age_to"):
+                inherited[key] = catalogue.get(key, "")
+        inherited.update(location_id=evidence[0]["capture"]["location_id"],
+                         state=evidence[0]["capture"]["default_state"], cover_capture_id=_cover(evidence))
+        inherited.update(fields)
+        inherited["needs_review"] = False
+        result = _insert_book(db, inherited, by, _stamp(now))
+        _use(db, evidence, result["id"])
+        return result
