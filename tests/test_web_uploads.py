@@ -1,8 +1,10 @@
 """Generated phone uploads retain their content and safe stored names."""
 import hashlib
+from io import BytesIO
 
 import pytest
 from fastapi.testclient import TestClient
+from PIL import Image
 from store_helpers import CAPTURE_ID, SECOND_ID
 from web_helpers import client as client
 from web_helpers import photo
@@ -34,6 +36,19 @@ def test_uploads_are_sniffed_and_keep_the_full_photo_and_orientation(client, tmp
     stored = tmp_path / "captures" / f"{CAPTURE_ID}.{extension}"
     assert stored.read_bytes() == content
     assert not list((tmp_path / "captures" / ".incoming").glob("*.tmp"))
+
+
+def test_an_mpo_photo_from_an_android_camera_is_kept_as_a_jpeg(client, tmp_path):
+    output = BytesIO()
+    first, second = Image.new("RGB", (4080, 3072), "white"), Image.new("RGB", (400, 300), "gray")
+    first.save(output, "MPO", save_all=True, append_images=[second])
+    content = output.getvalue()
+    with Image.open(BytesIO(content)) as check:
+        assert check.format == "MPO"
+    response = upload(client, content)
+    assert response.status_code == 201
+    assert response.json()["capture"]["media_type"] == "image/jpeg"
+    assert (tmp_path / "captures" / f"{CAPTURE_ID}.jpg").read_bytes() == content
 
 
 @pytest.mark.parametrize("content", [b"not an image", photo("GIF", size=(20, 10)), photo("PNG", size=(20, 10))[:30]])
