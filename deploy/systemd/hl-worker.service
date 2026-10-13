@@ -1,0 +1,19 @@
+# The worker: reads uploaded photos with the pipeline, one at a time (docs/app.md, "Worker").
+[Unit]
+Description=Home library photo worker
+After=network-online.target
+
+[Service]
+EnvironmentFile=%h/.config/home-library/env
+# codex, pi and uv live here; a user service does not get the login shell's PATH.
+Environment=PATH=%h/.local/bin:/usr/local/bin:/usr/bin:/bin
+WorkingDirectory=%h/dev/home-library
+ExecStart=%h/.local/bin/uv run --frozen hl worker
+# A running read is killed on stop; its job is taken over once its heartbeat is stale.
+KillMode=control-group
+TimeoutStopSec=30
+Restart=on-failure
+RestartSec=30
+
+[Install]
+WantedBy=default.target
