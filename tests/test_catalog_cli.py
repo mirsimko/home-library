@@ -92,3 +92,39 @@ def test_bad_edits_leave_books_unchanged(tmp_path, capsys, tail, message):
     db = store.open(root)
     assert store.book(db, 1) == original
     db.close()
+
+
+def test_exports_include_every_book_and_escape_spreadsheet_formulas(tmp_path, capsys):
+    import csv
+    import io
+
+    from store_helpers import EXPORT_COLUMNS
+
+    root = tmp_path / "private"
+    db = store.open(root)
+    typed_book(db, title="=The Copper Comet", author="+Ada Birch", notes="@winter", age_from=4)
+    typed_book(db, title="月の帆", language="ja")
+    expected = store.export_rows(db)
+    db.close()
+    assert main(["catalog", "export", "--json", "--data-root", str(root)]) == 0
+    assert json.loads(capsys.readouterr().out) == expected
+    assert main(["catalog", "export", "--csv", "--data-root", str(root)]) == 0
+    output = capsys.readouterr().out
+    assert output.encode("utf-8").startswith(b"\xef\xbb\xbf")
+    rows = list(csv.DictReader(io.StringIO(output.removeprefix("\ufeff"))))
+    assert list(rows[0]) == EXPORT_COLUMNS
+    assert (rows[0]["title"], rows[0]["author"], rows[0]["notes"], rows[0]["age_from"], rows[0]["age_to"]) == (
+        "'=The Copper Comet", "'+Ada Birch", "'@winter", "4", "")
+    assert rows[1]["title"] == "月の帆"
+
+
+def test_books_lists_all_pages_and_empty_exports_keep_the_header(tmp_path, capsys):
+    root = tmp_path / "private"
+    db = store.open(root)
+    for index in range(53):
+        typed_book(db, title=f"Comet {index:02}")
+    db.close()
+    assert main(["catalog", "books", "--data-root", str(root)]) == 0
+    assert len(capsys.readouterr().out.splitlines()) == 53
+    assert main(["catalog", "export", "--csv", "--data-root", str(tmp_path / "empty")]) == 0
+    assert capsys.readouterr().out.startswith("\ufefftitle,sort_key,author,")
