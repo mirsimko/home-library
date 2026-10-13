@@ -4,6 +4,7 @@ from contextlib import closing
 from fastapi import APIRouter, Request
 
 from home_library import store
+from home_library.web.api import call
 from home_library.web.install import router as install
 from home_library.web.render import render
 
@@ -16,3 +17,9 @@ def home(request: Request):
     with closing(store.open(request.app.state.data_root)) as db:
         open_count = len(store.observations(db))
     return render(request, "home.html", active="home", open_count=open_count)
+
+
+@router.get("/capture")
+def capture(request: Request):
+    return render(request, "capture.html", active="capture", locations=call(request, store.locations),
+                  states=store.STATES)
