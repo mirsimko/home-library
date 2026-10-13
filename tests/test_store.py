@@ -341,3 +341,54 @@ def test_editing_a_missing_book_or_moving_to_a_missing_location_is_refused(db):
     with pytest.raises(store.NotFound):
         store.update_book(db, original["id"], 1, {"location_id": 999}, "editor", now=NOW)
     assert store.book(db, original["id"]) == original
+
+
+def test_approval_combines_read_title_catalogue_fields_and_cover(db):
+    (cover,) = finish(db, [record("Měsíční člun", author="read author")], kind="cover", default_state="Stored")
+    (barcode,) = finish(db, [record("", read_status="barcode", catalogue_title="Different catalogue title",
+                                   sort_key="Mesicni clun", author="Lenka Testová", publisher="Test Press",
+                                   year="2020", isbn="9780000000002", series="Invented voyages", source="test",
+                                   source_id="42", age_from="3", age_to="")], SECOND_ID, kind="barcode")
+    original_records = [cover["record"], barcode["record"]]
+    book = store.approve(db, [cover["id"], barcode["id"]], {}, "reviewer", now=NOW)
+    assert book["title"] == "Měsíční člun"
+    assert book["sort_key"] == "Mesicni clun" and book["author"] == "Lenka Testová"
+    assert (book["publisher"], book["year"], book["isbn"], book["series"]) == (
+        "Test Press", "2020", "9780000000002", "Invented voyages")
+    assert (book["source"], book["source_id"], book["age_from"], book["age_to"]) == ("test", "42", 3, None)
+    assert book["language"] == "cs" and book["location_id"] == 1 and book["state"] == "Stored"
+    assert book["cover_capture_id"] == CAPTURE_ID
+    assert book["needs_review"] is False and book["reviewed_by"] == "reviewer"
+    assert book["created_by"] == "reviewer" and book["created_at"] == book["updated_at"] == NOW
+    assert store.observations(db) == []
+    used = store.observations(db, "used")
+    assert [r["record"] for r in used] == original_records
+    assert [r["book_id"] for r in used] == [book["id"], book["id"]]
+
+
+def test_approval_uses_given_fields_and_the_first_nonempty_read_title(db):
+    rows = finish(db, [record("", read_status="unreadable"), record()])
+    box = store.add_location(db, "Box B", "box", now=NOW)
+    added = store.approve(db, [r["id"] for r in rows], {"title": "Hvězdná bárka", "author": "Typed Author",
+                         "location_id": box["id"], "state": "Gone", "needs_review": True}, "reviewer", now=NOW)
+    assert (added["title"], added["author"], added["location_id"], added["state"], added["needs_review"]) == (
+        "Hvězdná bárka", "Typed Author", box["id"], "Gone", False)
+    store.retry_job(db, capture(db)["job"]["id"])
+    rows = finish(db, [record("", read_status="unreadable"), record("The Glass Canoe")])
+    assert store.approve(db, [r["id"] for r in rows], {}, "reviewer", now=NOW)["title"] == "The Glass Canoe"
+
+
+def test_approval_requires_nonempty_open_observations_and_is_atomic(db):
+    rows = finish(db, [record(), record("The Glass Canoe")])
+    for ids, fields, error in [([], {}, store.Invalid), ([rows[0]["id"], 999], {}, store.NotFound),
+                               ([rows[0]["id"]], {"unknown": 1}, store.Invalid),
+                               ([rows[0]["id"]], {"title": " "}, store.Invalid)]:
+        with pytest.raises(error):
+            store.approve(db, ids, fields, "reviewer", now=NOW)
+        assert store.observations(db) == rows
+        assert db.execute("SELECT count(*) FROM books").fetchone()[0] == 0
+    store.approve(db, [rows[0]["id"]], {}, "reviewer", now=NOW)
+    with pytest.raises(store.Invalid, match="open"):
+        store.approve(db, [rows[1]["id"], rows[0]["id"]], {}, "reviewer", now=NOW)
+    assert [r["id"] for r in store.observations(db)] == [rows[1]["id"]]
+    assert db.execute("SELECT count(*) FROM books").fetchone()[0] == 1
