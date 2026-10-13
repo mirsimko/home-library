@@ -430,3 +430,27 @@ def approve(db, observation_ids, fields, by, *, now=None):
         result = _insert_book(db, inherited, by, _stamp(now))
         _use(db, evidence, result["id"])
         return result
+
+
+def attach(db, observation_ids, book_id, by, *, now=None):
+    """Use evidence for an existing copy, filling its cover only when it has none."""
+    with _write(db):
+        _name(by, "reviewed by")
+        evidence = _open_observations(db, observation_ids)
+        result = book(db, book_id)
+        cover = _cover(evidence)
+        if result["cover_capture_id"] is None and cover is not None:
+            result = _update_book(db, result, {"cover_capture_id": cover}, by, _stamp(now))
+        _use(db, evidence, book_id)
+        return result
+
+
+def dismiss(db, observation_ids, by):
+    """Keep unwanted open evidence visible as dismissed without making a book."""
+    with _write(db):
+        _name(by, "dismissed by")
+        evidence = _open_observations(db, observation_ids)
+        for observation in evidence:
+            db.execute("UPDATE observations SET status = 'dismissed' WHERE id = ?", (observation["id"],))
+            observation["status"] = "dismissed"
+        return evidence
