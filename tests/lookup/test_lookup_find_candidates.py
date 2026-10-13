@@ -388,3 +388,29 @@ def test_a_language_that_is_not_ja_cs_or_en_still_gets_no_source_after_cleaning(
 
 def test_a_missing_language_gets_no_source_and_does_not_raise():
     assert find_candidates("Zelený drak", None, fetch=no_http, run_yaz=no_yaz) == {"queries": [], "candidates": []}
+
+
+@pytest.mark.parametrize("language", ["ja", "cs", "en"])
+def test_an_isbn_without_a_title_never_runs_a_title_search(language):
+    asked = []
+
+    def fetch(url):
+        asked.append(url)
+        host = urlparse(url).hostname
+        if host == "ndlsearch.ndl.go.jp":
+            return b'<rss><channel/></rss>'
+        if host == "api.openbd.jp":
+            return b'[null]'
+        if host == "openlibrary.org":
+            return b'{}'
+        return b'<searchRetrieveResponse xmlns="http://www.loc.gov/zing/srw/"/>'
+
+    def yaz(commands):
+        asked.append(commands)
+        return 'Number of hits: 0\n'
+
+    found = find_candidates("", language, author="Ada Reed", isbn="9780000000002", fetch=fetch, run_yaz=yaz)
+
+    assert asked and found["candidates"] == []
+    assert all(query["step"] == "isbn" for query in found["queries"])
+    assert len(asked) == (1 if language == "cs" else 2)
