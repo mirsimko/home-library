@@ -99,3 +99,12 @@ def test_books_pages_need_access(anonymous):
     assert anonymous.get("/books").status_code == 401
     assert anonymous.get("/books/results").status_code == 401
     assert anonymous.post("/books/move", data={"book_ids": ["1"], "state": "Stored"}).status_code == 401
+
+
+def test_after_a_move_the_search_that_was_showing_is_shown_again(client, tmp_path):
+    stock(tmp_path)
+    page = client.get("/books/results", params={"tag": "night"}, headers=HX).text
+    assert 'name="filter_tag" value="night"' in page
+    moved = client.post("/books/move", data={"book_ids": ["1"], "location_id": "2", "state": "", "filter_tag": "night"}, headers=HX)
+    assert "Paper Moon" in moved.text and "月とうさぎ" in moved.text and "Měsíční člun" not in moved.text
+    assert "to Box 3" in moved.text
