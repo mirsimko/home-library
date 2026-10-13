@@ -110,7 +110,7 @@ The app listens on `127.0.0.1` by default. Another bind address requires an expl
 - A browser request is let in when its `Tailscale-User-Login` is one of the logins in `$HL_USERS` (comma-separated). That login is the person's name in the catalog (`uploaded_by`, `created_by`, `reviewed_by`).
 - An agent sends `Authorization: Bearer <token>`. The token is let in when its sha256 equals the one in `<data-root>/agent-token`; its name in the catalog is `agent`. `hl token` makes a new token, prints it once and stores its hash, which also revokes the old one.
 - Everything else gets 401, except `GET /health`.
-- `$HL_DEV_USER` lets every request in as that login, for local development. `hl serve` refuses it unless it listens on `127.0.0.1`.
+- `$HL_DEV_USER` lets every request in as that login, for local development. `hl serve` refuses it unless it listens on `127.0.0.1`, and refuses to start at all when `HL_USERS` is set as well, because the development identity would let every request in whatever its login.
 - **Cross-site requests.** A browser request with a method other than GET or HEAD must carry an `Origin` header whose host is the request's own `Host`, or `Sec-Fetch-Site: same-origin`. Otherwise it gets 403. Bearer-token requests are exempt.
 - Photos and tiles are served only to requests that are let in. The authenticated name is available to handlers as `request.state.user`.
 

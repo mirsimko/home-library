@@ -15,6 +15,8 @@ def serve(args, parser):
     dev_user = os.environ.get("HL_DEV_USER") or None
     if dev_user and host != "127.0.0.1":
         parser.error("HL_DEV_USER requires --host 127.0.0.1")
+    if dev_user and os.environ.get("HL_USERS", "").strip():
+        parser.error("set HL_DEV_USER or HL_USERS, not both: a development identity would let every request in")
     if not host or not 1 <= args.port <= 65535:
         parser.error("choose a host and a port between 1 and 65535")
     root = args.data_root if args.data_root is not None else os.environ.get("HL_DATA") or Path.home() / "home-library"
