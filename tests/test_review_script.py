@@ -58,6 +58,26 @@ def test_keys_act_only_when_the_person_is_not_typing():
 
 
 @node
+def test_keys_are_ignored_while_an_input_method_is_composing_text():
+    actions = run_node("""
+      const typing = { typing: true, textarea: false, onControl: false };
+      const idle = { typing: false, textarea: false, onControl: false };
+      const press = (key, context, extra) => hl.keyAction(Object.assign({ key, isComposing: true }, extra || {}), context);
+      out({
+        // Esc cancels a Japanese conversion and Enter commits it: neither may leave the field or approve the book.
+        typing: ["Escape", "Enter", "j", "x"].map((key) => press(key, typing)),
+        idle: ["Escape", "Enter", "j", "x"].map((key) => press(key, idle)),
+        ctrlEnter: press("Enter", typing, { ctrlKey: true }),
+        // Some browsers end composition before the final keydown and report the key as 229.
+        legacy: hl.keyAction({ key: "Enter", keyCode: 229 }, typing),
+        afterwards: [hl.keyAction({ key: "Escape", isComposing: false }, typing), hl.keyAction({ key: "j" }, idle)],
+      });""")
+    assert actions["typing"] == [None] * 4 and actions["idle"] == [None] * 4
+    assert actions["ctrlEnter"] is None and actions["legacy"] is None
+    assert actions["afterwards"] == ["blur", "next"]
+
+
+@node
 def test_row_focus_moves_one_step_and_stops_at_the_ends():
     moves = run_node("out([hl.moveFocus(-1, 5, 'next'), hl.moveFocus(0, 5, 'next'), hl.moveFocus(4, 5, 'next'), hl.moveFocus(0, 5, 'prev'), hl.moveFocus(3, 5, 'prev'), hl.moveFocus(-1, 5, 'prev'), hl.moveFocus(-1, 0, 'next')]);")
     assert moves == [0, 1, 4, 0, 2, 4, -1]
