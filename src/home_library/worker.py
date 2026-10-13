@@ -8,7 +8,7 @@ import sys
 import tempfile
 import threading
 import time
-from contextlib import closing
+from contextlib import closing, contextmanager
 
 from home_library import maintenance, store
 
@@ -109,12 +109,27 @@ def _fail(db, job, errors, reason):
         LOG.warning("job %s no longer owned", job["id"])
 
 
+@contextmanager
+def _signals(stop):
+    if threading.current_thread() is not threading.main_thread():
+        yield
+        return
+    previous = {sig: signal.getsignal(sig) for sig in (signal.SIGTERM, signal.SIGINT)}
+    try:
+        for sig in previous:
+            signal.signal(sig, lambda number, frame: stop.set())
+        yield
+    finally:
+        for sig, handler in previous.items():
+            signal.signal(sig, handler)
+
+
 def run(root=None, *, once=False, popen=subprocess.Popen, heartbeat_interval=30, timeout=1200,
         idle_wait=5, killpg=os.killpg, stop=None):
     """Handle at most one job with once, or keep draining the queue in order."""
     root = maintenance.data_root(root)
     stop = stop if stop is not None else threading.Event()
-    with closing(store.open(root)) as db:
+    with _signals(stop), closing(store.open(root)) as db:
         while not stop.is_set():
             job = store.claim_job(db)
             if job is not None:
