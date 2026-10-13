@@ -48,3 +48,12 @@ def test_json_exports_include_distinct_evidence_and_cover_capture_ids(db):
 def test_web_upload_preflight_preserves_uploader_normalisation(db):
     receipt = capture(db, uploaded_by=" parent ")
     assert receipt["capture"]["uploaded_by"] == "parent"
+
+
+def test_health_chooses_the_latest_heartbeat_at_full_saved_precision(db):
+    capture(db)
+    first = store.claim_job(db, "2026-01-02T03:04:05Z")
+    capture(db, SECOND_ID)
+    second = store.claim_job(db, "2026-01-02T03:04:05.000001Z")
+    assert first["id"] != second["id"]
+    assert store.health(db)["worker_seen"] == "2026-01-02T03:04:05.000001Z"
