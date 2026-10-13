@@ -1,9 +1,9 @@
 """The private catalog and job queue, shared by every app writer."""
 import sqlite3
 from contextlib import contextmanager
-from datetime import datetime, timezone
+from datetime import datetime, timedelta, timezone
 from importlib.resources import files
-from uuid import UUID
+from uuid import UUID, uuid4
 
 from home_library.workspace import refuse_inside_checkout
 
@@ -174,3 +174,41 @@ def add_capture(db, id, kind, location_id, default_state, uploaded_by, original_
                     sha256, bytes, group_id, _stamp(now)))
         db.execute("INSERT INTO jobs (capture_id, status) VALUES (?, 'queued')", (id,))
         return _receipt(db, id, True)
+
+
+def _claimed(db, id):
+    job = _get(db, "jobs", id)
+    job["capture"] = _get(db, "captures", job["capture_id"])
+    job["location"] = _get(db, "locations", job["capture"]["location_id"])["name"]
+    return job
+
+
+def claim_job(db, now=None):
+    """Lease the oldest eligible job, retiring workers that stopped three times."""
+    stamp = _stamp(now)
+    cutoff = (datetime.fromisoformat(stamp.replace("Z", "+00:00")) - timedelta(minutes=20)).isoformat()
+    with _write(db):
+        while True:
+            row = db.execute("""SELECT jobs.* FROM jobs JOIN captures ON captures.id = jobs.capture_id
+                                WHERE jobs.status = 'queued' OR
+                                    (jobs.status = 'running' AND julianday(heartbeat_at) < julianday(?))
+                                ORDER BY julianday(captures.created_at), jobs.id LIMIT 1""", (cutoff,)).fetchone()
+            if row is None:
+                return None
+            if row["attempts"] >= 3:
+                db.execute("""UPDATE jobs SET status = 'failed', owner = NULL, finished_at = ?,
+                              error = 'the worker stopped responding 3 times' WHERE id = ?""", (stamp, row["id"]))
+                continue
+            db.execute("""UPDATE jobs SET status = 'running', attempts = attempts + 1, owner = ?,
+                          heartbeat_at = ?, started_at = ?, finished_at = NULL WHERE id = ?""",
+                       (str(uuid4()), stamp, stamp, row["id"]))
+            return _claimed(db, row["id"])
+
+
+def heartbeat(db, job_id, owner, now=None):
+    """Refresh a lease only while the caller is still its running owner."""
+    with _write(db):
+        changed = db.execute("""UPDATE jobs SET heartbeat_at = ?
+                                WHERE id = ? AND status = 'running' AND owner = ?""",
+                             (_stamp(now), job_id, owner)).rowcount
+        return changed == 1
