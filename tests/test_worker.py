@@ -292,3 +292,43 @@ def test_timeout_stops_a_real_fake_hl_and_its_descendant(tmp_path):
             if child.poll() is None:
                 os.killpg(child.pid, signal.SIGKILL)
             child.wait()
+
+
+def test_stopping_kills_the_child_and_leaves_its_job_running_for_takeover(tmp_path):
+    import signal
+    import threading
+    from concurrent.futures import ThreadPoolExecutor
+
+    root = tmp_path / "private"
+    queued(root)
+    child, stop = HangingChild(), threading.Event()
+    with ThreadPoolExecutor(max_workers=1) as pool:
+        result = pool.submit(worker.run, root, popen=child, stop=stop, killpg=child.killpg, heartbeat_interval=0.01)
+        try:
+            assert child.started.wait(2)
+            stop.set()
+            assert result.result(timeout=3) == 0
+        finally:
+            child.exited.set()
+    assert child.kills == [(child.pid, signal.SIGKILL)]
+    db = store.open(root)
+    job = capture(db)["job"]
+    assert job["status"] == "running" and job["owner"] and job["attempts"] == 1
+    assert job["error"] is None and store.observations(db) == []
+    db.close()
+
+
+@pytest.mark.parametrize("interval", [5, 0.01])
+def test_idle_wait_is_injectable_and_can_be_interrupted(tmp_path, interval):
+    import threading
+
+    class StopAfterWait(threading.Event):
+        def wait(self, timeout=None):
+            self.waits.append(timeout)
+            self.set()
+            return True
+
+    stop, child = StopAfterWait(), Child()
+    stop.waits = []
+    assert worker.run(tmp_path / "private", stop=stop, idle_wait=interval, popen=child) == 0
+    assert stop.waits == [interval] and child.calls == []
