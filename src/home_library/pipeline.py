@@ -6,13 +6,14 @@ import subprocess
 from concurrent.futures import ThreadPoolExecutor
 from pathlib import Path
 
+from home_library.barcode import decode_photo
 from home_library.lookup import find_candidates
 from home_library.lookup.http import Fetcher
 from home_library.lookup.nkcr import run_yaz_client
 from home_library.merge import merge_reads
 from home_library.pick import run_pick, stored_picks
 from home_library.reader import run_read
-from home_library.records import build_records, write_records
+from home_library.records import build_barcode_record, build_records, write_records
 from home_library.tiles import cut_cover, cut_tiles
 from home_library.workspace import DEFAULT_WORK_ROOT, refuse_inside_checkout
 from home_library.workspace import photo_dir as photo_dir_of
@@ -204,3 +205,13 @@ def run_photos(photos, work_root=DEFAULT_WORK_ROOT, *, readers=READERS, location
                 continue
             background.submit(finish, index, photo, photo_dir)
     return results
+
+
+def barcode_photo(photo, work_root=DEFAULT_WORK_ROOT, *, location="", fetch=None, run_yaz=run_yaz_client):
+    """Decode a barcode photo and write one review row, including when no ISBN is found."""
+    directory = photo_dir_of(work_root, photo)
+    decoded = _store(directory / "barcode.json", decode_photo(photo))
+    record = build_barcode_record(decoded["file"], decoded["isbn"], location=location)
+    write_records(directory, [record])
+    return {"photo": decoded["file"], "directory": str(directory), "accepted": 0, "review": 0,
+            "unreadable": 1, "warnings": 0, "seconds": {}}

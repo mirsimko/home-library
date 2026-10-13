@@ -190,3 +190,11 @@ def write_records(photo_dir, records: list) -> None:
         writer.writerow(COLUMNS)
         for record in records:
             writer.writerow([_cell(record[column]) for column in COLUMNS])
+
+
+def build_barcode_record(photo: str, isbn: str | None, *, location: str = "") -> dict:
+    """Keep an unreadable barcode visible so a person can enter its number."""
+    record = _empty()
+    record.update(photo=photo, location=location, read_status="no_barcode",
+                  notes="No ISBN barcode could be decoded; type the number in.")
+    return record
