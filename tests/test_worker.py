@@ -72,3 +72,78 @@ def test_once_with_no_job_exits_successfully_without_a_child(tmp_path):
     child = Child()
     assert worker.run(tmp_path / "private", once=True, popen=child) == 0
     assert child.calls == []
+
+
+@pytest.mark.parametrize("problem, message", [
+    ("exit", "exit"), ("missing", "records.json"), ("garbage", "records.json"),
+    ("encoding", "records.json"), ("directory", "records.json"), ("shape", "records"),
+])
+def test_failed_children_keep_diagnostics_and_import_nothing(tmp_path, caplog, problem, message):
+    root = tmp_path / "private"
+    queued(root)
+    stderr = "discarded prefix" + "ž" * 2100
+    child = Child(returncode=7 if problem == "exit" else 0, stderr=stderr)
+
+    def broken(command, **kwargs):
+        result = child(command, **kwargs)
+        target = root / "work" / CAPTURE_ID / "records.json"
+        if problem == "missing":
+            target.unlink()
+        elif problem == "garbage":
+            target.write_text('{"broken":')
+        elif problem == "encoding":
+            target.write_bytes(b"\xff")
+        elif problem == "directory":
+            target.unlink()
+            target.mkdir()
+        elif problem == "shape":
+            target.write_text('[{"title": 3}]')
+        return result
+
+    assert worker.run(root, once=True, popen=broken) == 0
+    db = store.open(root)
+    job = capture(db)["job"]
+    assert job["status"] == "queued" and job["attempts"] == 1
+    assert message in job["error"] and job["error"].endswith("ž" * 2000)
+    assert "discarded prefix" not in job["error"]
+    assert store.observations(db) == []
+    db.close()
+    assert "The Copper Comet" not in caplog.text and "ž" not in caplog.text
+
+
+def test_a_late_finish_is_logged_by_job_id_and_does_not_crash(tmp_path, caplog):
+    from datetime import datetime, timedelta, timezone
+
+    root = tmp_path / "private"
+    queued(root)
+    child = Child()
+
+    def takeover(command, **kwargs):
+        result = child(command, **kwargs)
+        db = store.open(root)
+        stolen = store.claim_job(db, datetime.now(timezone.utc) + timedelta(minutes=21))
+        assert stolen["attempts"] == 2
+        db.close()
+        return result
+
+    assert worker.run(root, once=True, popen=takeover) == 0
+    assert "job 1" in caplog.text and "The Copper Comet" not in caplog.text
+    db = store.open(root)
+    assert capture(db)["job"]["status"] == "running" and store.observations(db) == []
+    db.close()
+
+
+def test_a_child_that_writes_nothing_cannot_import_an_old_records_file(tmp_path):
+    root = tmp_path / "private"
+    queued(root)
+    target = root / "work" / CAPTURE_ID / "records.json"
+    target.parent.mkdir()
+    target.write_text(json.dumps([record("The Old Lantern")]))
+
+    def empty(command, **kwargs):
+        return Child()
+
+    assert worker.run(root, once=True, popen=empty) == 0
+    db = store.open(root)
+    assert store.observations(db) == [] and capture(db)["job"]["status"] == "queued"
+    db.close()
