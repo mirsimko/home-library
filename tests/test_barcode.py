@@ -180,7 +180,7 @@ def test_the_registration_group_selects_only_its_language_sources(tmp_path, isbn
 
     def yaz(commands):
         asked.append("nkcr")
-        return 'Number of hits: 0\n'
+        return 'Search was a success.\nNumber of hits: 0\n'
 
     barcode_photo(photo, tmp_path / "work", fetch=fetch, run_yaz=yaz)
     (record,) = json.loads((tmp_path / "work/barcode/records.json").read_text())
@@ -211,7 +211,7 @@ def test_an_unknown_group_tries_japanese_czech_then_english_until_records_are_re
 
     def yaz(commands):
         asked.append("nkcr")
-        return 'Number of hits: 1\n001 invented\n020    $a 9782000000006\n245    $a Amber Balloon\n' if stop_at == "cs" else 'Number of hits: 0\n'
+        return 'Search was a success.\nNumber of hits: 1\nRecord type: USmarc\n001 invented\n020    $a 9782000000006\n245    $a Amber Balloon\n' if stop_at == "cs" else 'Search was a success.\nNumber of hits: 0\n'
 
     barcode_photo(photo, tmp_path / "work", fetch=fetch, run_yaz=yaz)
     (record,) = json.loads((tmp_path / "work/barcode/records.json").read_text())

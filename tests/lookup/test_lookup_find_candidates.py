@@ -407,7 +407,7 @@ def test_an_isbn_without_a_title_never_runs_a_title_search(language):
 
     def yaz(commands):
         asked.append(commands)
-        return 'Number of hits: 0\n'
+        return 'Search was a success.\nNumber of hits: 0\n'
 
     found = find_candidates("", language, author="Ada Reed", isbn="9780000000002", fetch=fetch, run_yaz=yaz)
 

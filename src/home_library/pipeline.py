@@ -6,7 +6,7 @@ import subprocess
 from concurrent.futures import ThreadPoolExecutor
 from pathlib import Path
 
-from home_library.barcode import decode_photo
+from home_library.barcode import decode_photo, lookup_isbn
 from home_library.lookup import find_candidates
 from home_library.lookup.http import Fetcher
 from home_library.lookup.nkcr import run_yaz_client
@@ -213,9 +213,8 @@ def barcode_photo(photo, work_root=DEFAULT_WORK_ROOT, *, location="", fetch=None
     decoded = _store(directory / "barcode.json", decode_photo(photo))
     found = None
     if decoded["isbn"]:
-        found = find_candidates("", "ja", isbn=decoded["isbn"], fetch=fetch or Fetcher(), run_yaz=run_yaz,
-                                cache_dir=directory / "lookup" / "cache")
-        found["language"] = "ja"
+        found = lookup_isbn(decoded["isbn"], fetch=fetch or Fetcher(), run_yaz=run_yaz,
+                            cache_dir=directory / "lookup" / "cache")
         _store(directory / "lookup" / "candidates.json", {"file": decoded["file"], "books": [{"item": 0, **found}]})
     record = build_barcode_record(decoded["file"], decoded["isbn"], found, location=location)
     write_records(directory, [record])
