@@ -106,3 +106,59 @@ def test_the_upload_limit_allows_exactly_forty_megabytes(client, tmp_path):
     assert response.status_code == 201
     assert response.json()["capture"]["bytes"] == 40_000_000
     assert (tmp_path / "captures" / f"{CAPTURE_ID}.jpg").stat().st_size == 40_000_000
+
+
+def test_a_symlink_cannot_redirect_capture_publication_outside_captures(client, tmp_path):
+    outside = tmp_path / "keep.txt"
+    outside.write_bytes(b"keep these bytes")
+    (tmp_path / "captures" / f"{CAPTURE_ID}.jpg").symlink_to(outside)
+    response = upload(client, photo(size=(20, 10)))
+    assert response.status_code == 400
+    assert outside.read_bytes() == b"keep these bytes"
+    assert not list((tmp_path / "captures" / ".incoming").glob("*.tmp"))
+
+
+def test_photo_bytes_are_fsynced_and_published_before_the_store_records_them(client, tmp_path, monkeypatch):
+    import os
+    from contextlib import closing
+
+    from home_library import store
+
+    content = photo(size=(20, 10))
+    events = []
+    fsync, replace = os.fsync, os.replace
+
+    def flushed(fd):
+        events.append("fsync")
+        fsync(fd)
+
+    def published(source, destination):
+        events.append("replace")
+        assert source.parent == tmp_path / "captures" / ".incoming"
+        assert source.read_bytes() == content
+        with closing(store.open(tmp_path)) as db:
+            with pytest.raises(store.NotFound):
+                store.capture(db, CAPTURE_ID)
+        replace(source, destination)
+
+    monkeypatch.setattr(os, "fsync", flushed)
+    monkeypatch.setattr(os, "replace", published)
+    assert upload(client, content).status_code == 201
+    assert events == ["fsync", "replace"]
+
+
+def test_simultaneous_retries_publish_one_file_and_one_job(client, tmp_path):
+    from concurrent.futures import ThreadPoolExecutor
+
+    client.post("/api/locations", json={"name": "Shelf A", "kind": "shelf"})
+    content = photo(size=(20, 10))
+
+    def send():
+        return client.post("/api/captures", data={"id": CAPTURE_ID, "kind": "shelf", "location_id": "1"},
+                           files={"file": ("invented.jpg", content, "image/jpeg")})
+
+    with ThreadPoolExecutor(max_workers=2) as pool:
+        responses = list(pool.map(lambda _: send(), range(2)))
+    assert sorted(response.status_code for response in responses) == [200, 201]
+    assert len(client.get("/api/jobs").json()) == 1
+    assert (tmp_path / "captures" / f"{CAPTURE_ID}.jpg").read_bytes() == content
