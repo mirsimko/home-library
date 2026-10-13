@@ -166,29 +166,40 @@ def _receipt(db, id, created):
     return receipt
 
 
+def validate_capture(db, id, kind, location_id, default_state, uploaded_by, original_name, media_type,
+                     sha256, bytes, group_id=None):
+    """Check upload metadata before publishing its file, without changing the store."""
+    _uuid(id, "capture id")
+    existing = db.execute("SELECT sha256 FROM captures WHERE id = ?", (id,)).fetchone()
+    if existing:
+        if existing[0] != sha256:
+            raise Conflict("this capture id already has a different photo hash")
+        return _receipt(db, id, False)
+    _choice(kind, ("shelf", "cover", "barcode"), "capture kind")
+    _choice(default_state, STATES, "state")
+    if group_id is not None:
+        _uuid(group_id, "group id")
+    _get(db, "locations", location_id)
+    if not isinstance(sha256, str) or len(sha256) != 64 or any(c not in "0123456789abcdef" for c in sha256):
+        raise Invalid("sha256 must be 64 lowercase hexadecimal characters")
+    if type(bytes) is not int or bytes < 0:
+        raise Invalid("bytes must be a non-negative integer")
+    _choice(media_type, ("image/jpeg", "image/png", "image/webp"), "media type")
+    _name(uploaded_by, "uploaded by")
+    if not isinstance(original_name, str):
+        raise Invalid("original_name must be text")
+
+
 def add_capture(db, id, kind, location_id, default_state, uploaded_by, original_name, media_type, sha256,
                 bytes, group_id=None, *, now=None):
     """Record an uploaded photo and its job atomically; repeated uploads keep their receipt."""
     _uuid(id, "capture id")
     with _write(db):
-        existing = db.execute("SELECT sha256 FROM captures WHERE id = ?", (id,)).fetchone()
-        if existing:
-            if existing[0] != sha256:
-                raise Conflict("this capture id already has a different photo hash")
-            return _receipt(db, id, False)
-        _choice(kind, ("shelf", "cover", "barcode"), "capture kind")
-        _choice(default_state, STATES, "state")
-        if group_id is not None:
-            _uuid(group_id, "group id")
-        _get(db, "locations", location_id)
-        if not isinstance(sha256, str) or len(sha256) != 64 or any(c not in "0123456789abcdef" for c in sha256):
-            raise Invalid("sha256 must be 64 lowercase hexadecimal characters")
-        if type(bytes) is not int or bytes < 0:
-            raise Invalid("bytes must be a non-negative integer")
-        _choice(media_type, ("image/jpeg", "image/png", "image/webp"), "media type")
+        existing = validate_capture(db, id, kind, location_id, default_state, uploaded_by,
+                                    original_name, media_type, sha256, bytes, group_id)
+        if existing is not None:
+            return existing
         uploaded_by = _name(uploaded_by, "uploaded by")
-        if not isinstance(original_name, str):
-            raise Invalid("original_name must be text")
         db.execute("""INSERT INTO captures
                       (id, kind, location_id, default_state, uploaded_by, original_name, media_type,
                        sha256, bytes, group_id, created_at) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)""",
@@ -299,7 +310,6 @@ def finish_job(db, job_id, owner, records, now=None):
         db.execute("UPDATE jobs SET status = 'done', owner = NULL, finished_at = ?, error = NULL WHERE id = ?",
                    (stamp, job_id))
         return _get(db, "jobs", job_id)
-
 
 def observations(db, status="open", capture_id=None):
     """List evidence with its original record and capture for review."""
@@ -538,8 +548,15 @@ def search_books(db, query="", state=None, location_id=None, tag=None, limit=50,
 
 def export_rows(db):
     """Export catalog fields in spec 2.1 order, with portable relative cover paths."""
+    return _export_rows(db, False)
+
+
+def _export_rows(db, include_captures):
+    """Read catalogue fields and evidence together so each export has one SQLite snapshot."""
     result = []
-    for row in db.execute("""SELECT books.*, locations.name AS location, captures.media_type AS cover_media
+    for row in db.execute("""SELECT books.*, locations.name AS location, captures.media_type AS cover_media,
+                             (SELECT group_concat(DISTINCT capture_id) FROM observations
+                              WHERE book_id = books.id) AS evidence_ids
                              FROM books JOIN locations ON locations.id = books.location_id
                              LEFT JOIN captures ON captures.id = books.cover_capture_id
                              ORDER BY sort_key, title, books.id"""):
@@ -552,6 +569,11 @@ def export_rows(db):
             cover = f"captures/{row['cover_capture_id']}.{extension}"
         exported.update(cover_photo=cover, source=row["source"], source_id=row["source_id"],
                         needs_review=bool(row["needs_review"]), notes=row["notes"])
+        if include_captures:
+            ids = set(row["evidence_ids"].split(",")) if row["evidence_ids"] else set()
+            if row["cover_capture_id"] is not None:
+                ids.add(row["cover_capture_id"])
+            exported["capture_ids"] = sorted(ids)
         result.append(exported)
     return result
 
@@ -567,3 +589,59 @@ def backup_database(db, destination):
         temporary.replace(destination)
     finally:
         temporary.unlink(missing_ok=True)
+def capture(db, id):
+    """Read a stored receipt with the number of observations still open."""
+    result = _receipt(db, id, False)
+    result["open_observations"] = db.execute(
+        "SELECT count(*) FROM observations WHERE capture_id = ? AND status = 'open'", (id,)).fetchone()[0]
+    return result
+
+
+def captures(db, ids=None):
+    """List recent receipts, optionally restricted to client capture ids."""
+    if ids is not None:
+        for id in ids:
+            _uuid(id, "capture id")
+    rows = list(db.execute("SELECT id, created_at FROM captures"))
+    rows.sort(key=lambda row: (datetime.fromisoformat(row["created_at"].replace("Z", "+00:00")), row["id"]),
+              reverse=True)
+    return [capture(db, row["id"]) for row in rows if ids is None or row["id"] in ids]
+
+
+def jobs(db):
+    """List jobs in queue order with their saved heartbeats."""
+    return [dict(row) for row in db.execute("SELECT * FROM jobs ORDER BY id")]
+
+
+def health(db):
+    """Summarise worker activity without exposing any catalogue text."""
+    queue = jobs(db)
+    seen = [job["heartbeat_at"] for job in queue if job["heartbeat_at"] is not None]
+    latest = max(seen, key=lambda value: datetime.fromisoformat(value.replace("Z", "+00:00"))) if seen else None
+    return {"ok": True, "worker_seen": latest, "queued": sum(job["status"] == "queued" for job in queue),
+            "failed": sum(job["status"] == "failed" for job in queue)}
+
+
+def observation(db, id):
+    """Read one observation, including its original record and capture."""
+    result = _get(db, "observations", id)
+    result["record"] = json.loads(result["record"])
+    result["capture"] = _get(db, "captures", result["capture_id"])
+    return result
+
+
+def export_books(db):
+    """Add all evidence and cover capture ids to the portable catalogue export."""
+    return _export_rows(db, True)
+
+
+def candidate_observation(db, id):
+    """Return evidence only while its completed attempt owns the current candidate output."""
+    result = observation(db, id)
+    job = db.execute("""SELECT status, finished_at,
+                        (SELECT max(attempt) FROM observations WHERE capture_id = ?) AS imported_attempt
+                        FROM jobs WHERE capture_id = ?""", (result["capture_id"], result["capture_id"])).fetchone()
+    if (job["status"] != "done" or result["attempt"] != job["imported_attempt"]
+            or result["created_at"] != job["finished_at"]):
+        return None
+    return result

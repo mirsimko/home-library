@@ -4,6 +4,7 @@ from __future__ import annotations
 import csv
 import json
 import re
+from io import StringIO
 
 from home_library.lookup.isbn import normalize_isbn
 from home_library.merge import match_key
@@ -214,3 +215,13 @@ def build_barcode_record(photo: str, isbn: str | None, lookup: dict | None = Non
             record["notes"] = " ".join(filter(None, (record["notes"], failed)))
         record["isbn"] = isbn
     return record
+
+
+def csv_text(records, columns):
+    """Render spreadsheet-safe CSV with a UTF-8 byte-order mark and blank null cells."""
+    output = StringIO(newline="")
+    writer = csv.writer(output)
+    writer.writerow(columns)
+    for record in records:
+        writer.writerow([csv_cell(record[column] if record[column] is not None else "") for column in columns])
+    return "\ufeff" + output.getvalue()
