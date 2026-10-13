@@ -138,6 +138,20 @@ def test_the_form_is_filled_from_the_record_the_capture_and_a_paired_barcode(cli
     assert not [item for item in tags(client.get(f"/review/{shelf[0]['id']}").text, "input") if item.get("name") == "also"]
 
 
+def test_the_form_starts_the_same_whichever_photo_of_the_book_is_opened_and_follows_the_store_rule(client, tmp_path):
+    _, cover, barcode = stock(tmp_path)
+    from_cover = fields_of(client.get(f"/review/{cover[0]['id']}").text)
+    from_barcode = fields_of(client.get(f"/review/{barcode[0]['id']}").text)
+    from_cover.pop("also"), from_barcode.pop("also")
+    assert from_cover == from_barcode
+    assert from_cover["language"] == "en"  # the cover was photographed first; the barcode row's "cs" does not win
+    with closing(store.open(tmp_path)) as db:
+        expected = store.default_fields(db, [cover[0]["id"], barcode[0]["id"]])
+    for key in ("title", "sort_key", "author", "isbn", "language", "state", "source", "source_id", "notes"):
+        assert from_cover[key] == expected[key], key
+    assert from_cover["location_id"] == str(expected["location_id"])
+
+
 def test_detail_knows_the_next_and_previous_open_observation(client, tmp_path):
     shelf, cover, barcode = stock(tmp_path)
     order = [cover[0]["id"], barcode[0]["id"], shelf[0]["id"], shelf[1]["id"]]
