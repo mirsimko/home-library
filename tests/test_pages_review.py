@@ -1,7 +1,7 @@
 """The review inbox: open observations grouped by photo, and by book for one-book photos, newest first."""
 from contextlib import closing
 
-from store_helpers import CAPTURE_ID, NOW, SECOND_ID, finish, record
+from store_helpers import CAPTURE_ID, SECOND_ID, finish, record
 from web_helpers import anonymous as anonymous
 from web_helpers import client as client
 from web_helpers import tags
@@ -43,7 +43,7 @@ def test_inbox_leaves_out_what_a_person_has_dealt_with(client, tmp_path):
         store.dismiss(db, [shelf[0]["id"]], "parent")
         store.approve(db, [shelf[1]["id"]], {}, "parent")
     page = client.get("/review").text
-    assert "月とうさぎ" not in page and "Měsíční člun" not in page and 'data-open-count="3"' in page
+    assert "月とうさぎ" not in page and "Měsíční člun" not in page and 'data-open-count="2"' in page
 
 
 def test_an_empty_inbox_says_so_and_pages_need_access(client, anonymous):

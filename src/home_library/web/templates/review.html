@@ -1,0 +1,28 @@
+{% extends "base.html" %}
+{% block title %}Review · Home library{% endblock %}
+{% block body_class %}review wide{% endblock %}
+{% block main %}
+<h1>Review <span class="badge" data-open-count="{{ open_count }}">{{ open_count }} open</span></h1>
+{% if groups %}
+<div class="groups" data-rows>
+  {% for group in groups %}
+  <section class="group">
+    <header><strong>{{ group.label }}</strong><span>{{ group.location }}</span><span>{{ group.when }}</span><span>{{ group.by }}</span></header>
+    <ul class="rows">
+      {% for row in group.rows %}
+      <li>
+        <a href="/review/{{ row.id }}" data-row>
+          <span class="row-no">{{ row.number }}</span>
+          <span class="title"><span{{ lang(row.language) }}>{{ row.title }}</span>{% if row.note %} <span class="muted small">{{ row.note }}</span>{% endif %}{% if row.isbn and row.isbn != row.title %} <span class="muted small">{{ row.isbn }}</span>{% endif %}</span>
+          <span class="badge{% if row.status in ('unreadable', 'unparsed', 'incomplete', 'no_barcode') %} warn{% endif %}">{{ row.status }}</span>
+        </a>
+      </li>
+      {% endfor %}
+    </ul>
+  </section>
+  {% endfor %}
+</div>
+{% else %}
+<p class="muted">Nothing is waiting for review. New photos appear here once they are read.</p>
+{% endif %}
+{% endblock %}
