@@ -582,3 +582,15 @@ def test_changing_between_shelf_and_cover_replaces_tiles_and_reads_of_the_same_p
         assert "error" not in result
         assert len(load(tmp_path / "work" / photo.stem / "tiles.json")["tiles"]) == count
         assert sorted(programs.started) == ["codex read", "pi read"]
+
+
+def test_a_cover_replaces_old_barcode_evidence_in_the_same_directory(tmp_path):
+    photo, programs = photo_and_programs(tmp_path)
+    directory = tmp_path / "work" / photo.stem
+    directory.mkdir(parents=True)
+    (directory / "barcode.json").write_text('old barcode evidence')
+    programs.sol_answer = programs.spark_answer = answer(entry(1, "The Amber Kite", "unknown"))
+
+    result = run_one(photo, tmp_path / "work", kind="cover", run=programs)
+
+    assert "error" not in result and not (directory / "barcode.json").exists()

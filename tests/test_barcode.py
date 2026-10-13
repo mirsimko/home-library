@@ -239,3 +239,26 @@ def test_catalogue_failures_remain_visible_in_the_barcode_row(tmp_path):
     assert "No catalogue match" in record["notes"]
     assert "openlibrary unavailable" in record["notes"] and "loc unavailable" in record["notes"]
     assert record["isbn"] == "9780000000002" and record["read_status"] == "barcode"
+
+
+def test_a_barcode_attempt_removes_previous_reading_results_even_when_the_new_photo_fails(tmp_path):
+    from home_library.pipeline import barcode_photo
+
+    photo = tmp_path / "barcode.png"
+    directory = tmp_path / "work" / "barcode"
+    directory.mkdir(parents=True)
+    stale = ["reads/a-sol/read.json", "merged.json", "records.json", "records.csv", "lookup/picks.json",
+             "lookup/candidates.json", "barcode.json", "tiles.json", "tiles/cover-r0.jpg"]
+    for name in stale:
+        path = directory / name
+        path.parent.mkdir(parents=True, exist_ok=True)
+        path.write_text("old result")
+    cache = directory / "lookup/cache/answer.json"
+    cache.parent.mkdir()
+    cache.write_text("[]")
+
+    with pytest.raises(FileNotFoundError):
+        barcode_photo(photo, tmp_path / "work")
+
+    assert not any((directory / name).exists() for name in stale)
+    assert cache.read_text() == "[]"
