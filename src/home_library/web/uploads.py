@@ -159,7 +159,10 @@ def publish(root, path, upload, user):
             raise store.Invalid(str(error)) from error
         if existing is not None:
             return {**existing, "image": info}
-        destination = refuse_inside_checkout(root / "captures" / f"{metadata['id']}.{extension}")
+        destination = root / "captures" / f"{metadata['id']}.{extension}"
+        refuse_inside_checkout(destination)
+        if destination.is_symlink() or not destination.resolve().is_relative_to(root / "captures"):
+            raise store.Invalid("capture files must stay inside captures")
         os.replace(path, destination)
         try:
             receipt = store.add_capture(db, **metadata)
