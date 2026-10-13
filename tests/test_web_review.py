@@ -1,7 +1,7 @@
 """Review actions turn evidence into books only through the store."""
 from contextlib import closing
 
-from store_helpers import CAPTURE_ID, SECOND_ID, finish, record
+from store_helpers import CAPTURE_ID, SECOND_ID, finish, record, requeue
 from web_helpers import client as client
 
 from home_library import store
@@ -59,7 +59,7 @@ def test_old_observations_never_get_candidates_from_a_newer_attempt(client, tmp_
     with closing(store.open(tmp_path)) as db:
         (old,) = finish(db, [record("Paper Moon")])
         store.approve(db, [old["id"]], {}, "parent")
-        store.retry_job(db, store.capture(db, CAPTURE_ID)["job"]["id"])
+        requeue(db, store.capture(db, CAPTURE_ID)["job"]["id"])
         job = store.claim_job(db)
         store.finish_job(db, job["id"], job["owner"], [record("Glass Cloud")])
         (new,) = store.observations(db)

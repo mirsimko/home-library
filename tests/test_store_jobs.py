@@ -9,6 +9,7 @@ from store_helpers import (
     capture,
     finish,
     record,
+    requeue,
     typed_book,
 )
 from store_helpers import db as db
@@ -132,7 +133,7 @@ def test_a_bad_import_leaves_the_job_and_all_observations_unchanged(db, rows):
 
 def test_reruns_keep_evidence_and_supersede_earlier_open_rows(db):
     (old,) = finish(db, [record()])
-    store.retry_job(db, capture(db)["job"]["id"])
+    requeue(db, capture(db)["job"]["id"])
     job = store.claim_job(db, NOW)
     assert job["attempts"] == 1
     store.finish_job(db, job["id"], job["owner"], [record("Hvězdná bárka")], NOW)
@@ -140,7 +141,7 @@ def test_reruns_keep_evidence_and_supersede_earlier_open_rows(db):
     assert (new["attempt"], new["row"]) == (2, 0)
     assert new["title"] == "Hvězdná bárka"
     assert store.observations(db, "superseded")[0]["id"] == old["id"]
-    store.retry_job(db, job["id"])
+    requeue(db, job["id"])
     third = store.claim_job(db, NOW)
     store.finish_job(db, third["id"], third["owner"], [], NOW)
     assert store.observations(db) == []

@@ -71,3 +71,10 @@ def migration_directory(tmp_path):
         if resource.name.endswith(".sql"):
             (directory / resource.name).write_text(resource.read_text(encoding="utf-8"))
     return directory
+
+
+def requeue(db, job_id):
+    """Put a finished job back in the queue, as a rerun of an old capture would; `retry_job` takes only failed jobs."""
+    db.execute("""UPDATE jobs SET status = 'queued', attempts = 0, owner = NULL, heartbeat_at = NULL,
+                  started_at = NULL, finished_at = NULL, error = NULL WHERE id = ?""", (job_id,))
+    db.commit()

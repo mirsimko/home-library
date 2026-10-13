@@ -8,6 +8,7 @@ from store_helpers import (
     capture,
     finish,
     record,
+    requeue,
     typed_book,
 )
 from store_helpers import db as db
@@ -45,7 +46,7 @@ def test_approval_uses_given_fields_and_the_first_nonempty_read_title(db):
                          "location_id": box["id"], "state": "Gone", "needs_review": True}, "reviewer", now=NOW)
     assert (added["title"], added["author"], added["location_id"], added["state"], added["needs_review"]) == (
         "Hvězdná bárka", "Typed Author", box["id"], "Gone", False)
-    store.retry_job(db, capture(db)["job"]["id"])
+    requeue(db, capture(db)["job"]["id"])
     rows = finish(db, [record("", read_status="unreadable"), record("The Glass Canoe")])
     assert store.approve(db, [r["id"] for r in rows], {}, "reviewer", now=NOW)["title"] == "The Glass Canoe"
 
@@ -110,7 +111,7 @@ def test_a_rerun_never_changes_used_dismissed_or_edited_books(db):
     store.dismiss(db, [rows[1]["id"]], "reviewer")
     used = store.observations(db, "used")
     dismissed = store.observations(db, "dismissed")
-    store.retry_job(db, capture(db)["job"]["id"])
+    requeue(db, capture(db)["job"]["id"])
     finish(db, [record("Machine's new guess")])
     assert store.book(db, edited["id"]) == edited
     assert store.observations(db, "used") == used
@@ -133,7 +134,7 @@ def test_observation_filters_and_selections_validate_status_and_capture_ids(db):
 def test_superseded_observations_cannot_be_approved_or_attached(db):
     (old,) = finish(db, [record()])
     original = typed_book(db)
-    store.retry_job(db, capture(db)["job"]["id"])
+    requeue(db, capture(db)["job"]["id"])
     finish(db, [record("Hvězdná bárka")])
     for action in (lambda: store.approve(db, [old["id"]], {}, "reviewer", now=NOW),
                    lambda: store.attach(db, [old["id"]], original["id"], "reviewer", now=NOW)):

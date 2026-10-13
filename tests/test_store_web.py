@@ -1,6 +1,6 @@
 """Public store reads used by the web app."""
 import pytest
-from store_helpers import CAPTURE_ID, NOW, SECOND_ID, capture, finish, record
+from store_helpers import CAPTURE_ID, NOW, SECOND_ID, capture, finish, record, requeue
 from store_helpers import db as db
 
 from home_library import store
@@ -69,7 +69,7 @@ def test_candidate_evidence_is_available_only_for_the_latest_completed_attempt(d
     (old,) = finish(db, [record("Paper Moon")])
     assert store.candidate_observation(db, old["id"]) == old
     store.approve(db, [old["id"]], {}, "parent")
-    store.retry_job(db, store.capture(db, CAPTURE_ID)["job"]["id"])
+    requeue(db, store.capture(db, CAPTURE_ID)["job"]["id"])
     assert store.candidate_observation(db, old["id"]) is None
     job = store.claim_job(db, NOW)
     store.finish_job(db, job["id"], job["owner"], [record("Glass Cloud")], NOW)
