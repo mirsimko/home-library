@@ -309,3 +309,35 @@ def test_books_require_a_location_and_a_cover_capture_when_given(db):
     with pytest.raises(store.NotFound):
         typed_book(db, cover_capture_id=CAPTURE_ID)
     assert db.execute("SELECT count(*) FROM books").fetchone()[0] == 0
+
+
+def test_edits_are_partial_versioned_and_attributed(db):
+    original = typed_book(db, notes="keep this", age_from=3)
+    changed = store.update_book(db, original["id"], 1, {"title": " Hvězdná bárka ", "state": "Gone"},
+                                "editor", now="2026-01-03T00:00:00Z")
+    assert changed["title"] == "Hvězdná bárka" and changed["state"] == "Gone"
+    assert changed["notes"] == "keep this" and changed["age_from"] == 3
+    assert changed["version"] == 2 and changed["reviewed_by"] == "editor"
+    assert changed["created_by"] == "parent" and changed["created_at"] == NOW
+    assert changed["updated_at"] == "2026-01-03T00:00:00Z"
+    with pytest.raises(store.Conflict):
+        store.update_book(db, original["id"], 1, {"notes": "stale overwrite"}, "other", now=NOW)
+    assert store.book(db, original["id"]) == changed
+
+
+@pytest.mark.parametrize("changes", [{"unknown": "x"}, {"created_by": "x"}, {"version": 9},
+                                     {"title": " "}, {"state": "lost"}, {"location_id": None}])
+def test_invalid_edits_leave_the_book_and_version_unchanged(db, changes):
+    original = typed_book(db)
+    with pytest.raises(store.Invalid):
+        store.update_book(db, original["id"], 1, changes, "editor", now=NOW)
+    assert store.book(db, original["id"]) == original
+
+
+def test_editing_a_missing_book_or_moving_to_a_missing_location_is_refused(db):
+    with pytest.raises(store.NotFound):
+        store.update_book(db, 999, 1, {"title": "Hvězdná bárka"}, "editor", now=NOW)
+    original = typed_book(db)
+    with pytest.raises(store.NotFound):
+        store.update_book(db, original["id"], 1, {"location_id": 999}, "editor", now=NOW)
+    assert store.book(db, original["id"]) == original
