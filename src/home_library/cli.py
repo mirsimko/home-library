@@ -1,10 +1,12 @@
 """The hl command (see docs/pipeline.md). Every stage can be run by itself, or all of them with `hl run`."""
 import argparse
 import json
+import subprocess
 import sys
 from pathlib import Path
 
 from home_library import pipeline
+from home_library.lookup.nkcr import run_yaz_client
 from home_library.pick import run_pick
 from home_library.reader import BACKENDS, run_read
 from home_library.workspace import DEFAULT_WORK_ROOT, photo_dir
@@ -24,12 +26,17 @@ def _parser():
         sub.add_argument("--work-root", type=Path, default=argparse.SUPPRESS, help=argparse.SUPPRESS)
         return sub
 
-    run = command("run", "Run every stage for each photo, one photo at a time.")
-    run.add_argument("photos", nargs="+", type=Path)
-    run.add_argument("--location", default="", help="the shelf or box the photo shows, for example 'Box 3'")
-    run.add_argument("--second-reader", choices=sorted(SECOND_READ_ID), default="pi",
-                     help="backend of the second, checking read (default: %(default)s)")
-    run.add_argument("--force", action="store_true", help="start from nothing even if reads are stored")
+    for name, text in (("run", "Run every stage for each photo, one photo at a time."),
+                       ("cover", "Read one front cover and write review records.")):
+        run = command(name, text)
+        if name == "run":
+            run.add_argument("photos", nargs="+", type=Path)
+        else:
+            run.add_argument("photo", type=Path)
+        run.add_argument("--location", default="", help="the shelf or box the photo shows, for example 'Box 3'")
+        run.add_argument("--second-reader", choices=sorted(SECOND_READ_ID), default="pi",
+                         help="backend of the second, checking read (default: %(default)s)")
+        run.add_argument("--force", action="store_true", help="start from nothing even if reads are stored")
 
     command("tiles", "Cut a photo into tiles.").add_argument("photo", type=Path)
     read = command("read", "Run one read of a photo's tiles.")
@@ -60,10 +67,12 @@ def _report(result):
           f"{result['unreadable']} unreadable{lost} ({seconds}) -> {result['directory']}/records.csv", flush=True)
 
 
-def _run(args):
+def _run(args, *, run, fetch, run_yaz):
     readers = (pipeline.READERS[0], (SECOND_READ_ID[args.second_reader], args.second_reader))
-    results = pipeline.run_photos(args.photos, args.work_root, readers=readers, location=args.location,
-                                  force=args.force, report=_report)
+    photos = args.photos if args.command == "run" else [args.photo]
+    results = pipeline.run_photos(photos, args.work_root, readers=readers, location=args.location,
+                                  force=args.force, report=_report, kind="cover" if args.command == "cover" else "shelf",
+                                  run=run, fetch=fetch, run_yaz=run_yaz)
     return 1 if any("error" in result for result in results) else 0
 
 
@@ -97,10 +106,10 @@ def _stage(args):
     return 0
 
 
-def main(argv=None):
+def main(argv=None, *, run=subprocess.run, fetch=None, run_yaz=run_yaz_client):
     args = _parser().parse_args(argv)
-    if args.command == "run":
-        return _run(args)
+    if args.command in ("run", "cover"):
+        return _run(args, run=run, fetch=fetch, run_yaz=run_yaz)
     if args.command == "gather":
         json.dump(pipeline.gather_read(args.work_root, args.read_id), sys.stdout, ensure_ascii=False, indent=2)
         print()
