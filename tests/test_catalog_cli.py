@@ -128,3 +128,20 @@ def test_books_lists_all_pages_and_empty_exports_keep_the_header(tmp_path, capsy
     assert len(capsys.readouterr().out.splitlines()) == 53
     assert main(["catalog", "export", "--csv", "--data-root", str(tmp_path / "empty")]) == 0
     assert capsys.readouterr().out.startswith("\ufefftitle,sort_key,author,")
+
+
+def test_csv_bytes_are_utf8_even_when_the_shell_uses_another_encoding(tmp_path):
+    import os
+    import subprocess
+    import sys
+
+    root = tmp_path / "private"
+    db = store.open(root)
+    typed_book(db, title="月の帆")
+    db.close()
+    output = subprocess.run([sys.executable, "-m", "home_library.cli", "catalog", "export", "--csv",
+                             "--data-root", str(root)], env={**os.environ, "PYTHONIOENCODING": "ascii"},
+                            capture_output=True, check=False)
+    assert output.returncode == 0, output.stderr
+    assert output.stdout.startswith(b"\xef\xbb\xbf")
+    assert "月の帆" in output.stdout.decode("utf-8-sig") and output.stderr == b""
