@@ -45,7 +45,7 @@ def _job(db, root, job, popen, heartbeat_interval, timeout, killpg, stop):
                 done.set()
                 lease.join()
             if stop.is_set():
-                LOG.info("job %s stopped for takeover", job["id"])
+                _release(db, job)
                 return
             if lost.is_set():
                 LOG.warning("job %s no longer owned", job["id"])
@@ -65,6 +65,17 @@ def _job(db, root, job, popen, heartbeat_interval, timeout, killpg, stop):
             _fail(db, job, errors, "records.json is missing, unreadable or invalid, or the child could not start")
             return
     LOG.info("job %s capture %s finished", job["id"], capture["id"])
+
+
+def _release(db, job):
+    """The worker killed the child on purpose, so the job goes back at once and the stop costs no attempt."""
+    try:
+        store.release_job(db, job["id"], job["owner"])
+        LOG.info("job %s stopped and given back", job["id"])
+    except store.Conflict:
+        LOG.warning("job %s no longer owned", job["id"])
+    except sqlite3.Error:
+        LOG.warning("job %s could not be given back; it is taken over when its lease goes stale", job["id"])
 
 
 def _wait(child, timeout, stop, lost, killpg):

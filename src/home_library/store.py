@@ -269,6 +269,15 @@ def fail_job(db, job_id, owner, error, now=None):
         return _get(db, "jobs", job_id)
 
 
+def release_job(db, job_id, owner):
+    """Give a running job back after its worker stopped on purpose, so a restart need not wait or lose an attempt."""
+    with _write(db):
+        job = _owned(db, job_id, owner)
+        db.execute("""UPDATE jobs SET status = 'queued', attempts = ?, owner = NULL, heartbeat_at = NULL,
+                      started_at = NULL WHERE id = ?""", (max(job["attempts"] - 1, 0), job_id))
+        return _get(db, "jobs", job_id)
+
+
 def retry_job(db, job_id):
     """Restart a completed or failed job with a fresh retry allowance."""
     with _write(db):

@@ -54,6 +54,7 @@ Every function takes the connection first. A rule that is broken raises `store.I
   - `heartbeat(job_id, owner, now)` refreshes the heartbeat only while `owner` still holds the job; returns whether it did.
   - `finish_job(job_id, owner, records, now)` imports the rows of `records.json` as `open` observations of this attempt, marks the capture's earlier `open` observations `superseded`, and sets the job `done`, all in one transaction. If `owner` no longer holds the job it changes nothing and raises `Conflict`: a late write from a superseded attempt is refused. Observations that are `used` or `dismissed`, and every book, are never touched.
   - `fail_job(job_id, owner, error, now)` puts the job back to `queued` while it has had fewer than 3 attempts, else sets it `failed`; the error is kept either way. Same owner rule.
+  - `release_job(job_id, owner)` puts a `running` job that `owner` holds back to `queued`, gives back its attempt (one fewer, never below 0) and clears its owner and heartbeat; any other caller raises `Conflict`. The worker calls it when it stops on SIGTERM or SIGINT.
   - `retry_job(job_id)` sets a `failed` or `done` job back to `queued` with `attempts` 0.
 - **Observations:** `observations(status="open", capture_id=None)`; `dismiss(observation_ids, by)`.
 - **Books:**
@@ -77,7 +78,7 @@ One process that drains the job queue, one job at a time (the home uplink carrie
   - `barcode`: `hl --work-root <work> barcode <captures>/<id>.jpg --location <name>`
 - While the child runs, a thread calls `heartbeat` every 30 seconds. After 20 minutes the whole process group is killed and the job fails with a timeout. If `heartbeat` reports the job lost, the child is killed and nothing is imported. An error from `heartbeat` (a busy database) is logged and tried again at the next beat; only three errors in a row count as a lost lease.
 - When the child exits 0, the worker reads `work/<id>/records.json` and calls `finish_job`. A non-zero exit, a missing or unreadable `records.json`, or a timeout calls `fail_job` with the last 2000 characters of the child's standard error.
-- With nothing to do it waits 5 seconds and looks again. It stops cleanly on SIGTERM or SIGINT: a running child is killed and its job is left `running`, to be taken over once its heartbeat is stale.
+- With nothing to do it waits 5 seconds and looks again. It stops cleanly on SIGTERM or SIGINT: a running child is killed and its job is given back with `release_job`, so a restart takes it at once and the stop costs no attempt. (A worker that is killed outright cannot do this; its job is taken over once its heartbeat is stale.)
 - `hl worker --once` handles at most one job and exits; tests and a harness use it.
 - The worker runs the child through an injectable runner, so tests use a fake `hl` the way `tests/test_reader.py` fakes `codex`.
 

@@ -240,6 +240,7 @@ def test_a_release_gives_back_one_attempt_and_never_goes_below_zero(db):
     assert second["attempts"] == 2
     assert store.release_job(db, second["id"], second["owner"])["attempts"] == 1
     db.execute("UPDATE jobs SET status = 'running', owner = 'x', attempts = 0 WHERE id = ?", (second["id"],))
+    db.commit()
     assert store.release_job(db, second["id"], "x")["attempts"] == 0
 
 
