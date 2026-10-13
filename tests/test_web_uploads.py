@@ -162,3 +162,28 @@ def test_simultaneous_retries_publish_one_file_and_one_job(client, tmp_path):
     assert sorted(response.status_code for response in responses) == [200, 201]
     assert len(client.get("/api/jobs").json()) == 1
     assert (tmp_path / "captures" / f"{CAPTURE_ID}.jpg").read_bytes() == content
+
+
+def test_failed_publication_removes_temporary_bytes_and_does_not_queue_a_capture(client, tmp_path, monkeypatch):
+    import os
+
+    def fail_replace(source, destination):
+        raise OSError("invented disk failure")
+
+    monkeypatch.setattr(os, "replace", fail_replace)
+    response = upload(client, photo(size=(20, 10)))
+    assert response.status_code == 503 and response.json() == {"error": "the photo could not be stored; retry the upload"}
+    assert client.get("/api/captures").json() == [] and client.get("/api/jobs").json() == []
+    assert not list((tmp_path / "captures" / ".incoming").glob("*.tmp"))
+
+
+@pytest.mark.parametrize("body", [
+    b"--test\r\nContent-Disposition: form-data; name=\"file\"; filename=\"incomplete.jpg\"\r\n\r\nunfinished",
+    b"--test\r\nContent-Disposition: form-data; name=\"id\"\r\n\r\none\r\n"
+    b"--test\r\nContent-Disposition: form-data; name=\"id\"\r\n\r\ntwo\r\n--test--\r\n",
+])
+def test_incomplete_and_duplicate_multipart_fields_leave_no_temporary_files(client, tmp_path, body):
+    response = client.post("/api/captures", content=body, headers={"Content-Type": "multipart/form-data; boundary=test"})
+    assert response.status_code == 400 and list(response.json()) == ["error"]
+    assert client.get("/api/captures").json() == []
+    assert not list((tmp_path / "captures" / ".incoming").glob("*.tmp"))
