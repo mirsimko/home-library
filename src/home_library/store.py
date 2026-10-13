@@ -35,11 +35,13 @@ def open(data_root=None):
             if version > db.execute("PRAGMA user_version").fetchone()[0]:
                 # executescript commits an existing transaction; execute complete statements instead.
                 statement = ""
-                for line in migration.read_text(encoding="utf-8").splitlines(keepends=True):
-                    statement += line
-                    if sqlite3.complete_statement(statement):
+                for character in migration.read_text(encoding="utf-8"):
+                    statement += character
+                    if character == ";" and sqlite3.complete_statement(statement):
                         db.execute(statement)
                         statement = ""
+                if statement.strip():
+                    db.execute(statement)
                 db.execute(f"PRAGMA user_version = {version}")
             db.commit()
     except BaseException:
