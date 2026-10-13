@@ -92,7 +92,7 @@ def export_photo(photo_dir, *, location=""):
     return records
 
 
-DERIVED = ("merged.json", "records.json", "records.csv", "lookup/candidates.json", "lookup/picks.json",
+DERIVED = ("barcode.json", "merged.json", "records.json", "records.csv", "lookup/candidates.json", "lookup/picks.json",
            "lookup/picks.raw.txt")
 
 
@@ -210,6 +210,9 @@ def run_photos(photos, work_root=DEFAULT_WORK_ROOT, *, readers=READERS, location
 def barcode_photo(photo, work_root=DEFAULT_WORK_ROOT, *, location="", fetch=None, run_yaz=run_yaz_client):
     """Decode a barcode photo and write one review row, including when no ISBN is found."""
     directory = photo_dir_of(work_root, photo)
+    _forget(directory)
+    (directory / "tiles.json").unlink(missing_ok=True)
+    shutil.rmtree(directory / "tiles", ignore_errors=True)
     decoded = _store(directory / "barcode.json", decode_photo(photo))
     found = None
     if decoded["isbn"]:
