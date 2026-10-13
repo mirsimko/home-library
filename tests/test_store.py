@@ -578,3 +578,32 @@ def test_open_refuses_private_targets_symlinked_into_a_checkout(tmp_path, child)
         store.open(root)
     assert not (root / "catalog.db-wal").exists()
     assert list(target.iterdir()) == [] if target.is_dir() else target.read_bytes() == b""
+
+
+@pytest.mark.parametrize("changes", [
+    {"sha256": "not a hash"}, {"sha256": None}, {"bytes": -1}, {"bytes": "120"},
+    {"media_type": "application/pdf"}, {"uploaded_by": " "}, {"original_name": None},
+])
+def test_bad_capture_metadata_is_invalid_and_never_queues_work(db, changes):
+    with pytest.raises(store.Invalid):
+        capture(db, **changes)
+    assert db.execute("SELECT count(*) FROM captures").fetchone()[0] == 0
+    assert db.execute("SELECT count(*) FROM jobs").fetchone()[0] == 0
+
+
+@pytest.mark.parametrize("parameters", [{"query": 3}, {"state": "lost"}, {"limit": -1}, {"offset": -1},
+                                       {"limit": "all"}, {"tag": []}])
+def test_search_rejects_invalid_filters_and_pagination(db, parameters):
+    with pytest.raises(store.Invalid):
+        store.search_books(db, **parameters)
+
+
+def test_search_treats_user_text_as_literal_and_tags_as_trimmed_tokens(db):
+    percent = typed_book(db, title="The 100% Canoe", tags=" moon,   paper boats , ")
+    underscore = typed_book(db, title='The _ "Canoe"')
+    assert percent["tags"] == "moon, paper boats"
+    assert store.search_books(db, "%") == [percent]
+    assert store.search_books(db, "_") == [underscore]
+    assert store.search_books(db, '"Canoe"') == [underscore]
+    assert store.search_books(db, 'Canoe" OR "missing') == []
+    assert store.search_books(db, tag="paper boats") == [percent]
