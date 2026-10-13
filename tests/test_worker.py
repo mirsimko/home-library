@@ -147,3 +147,88 @@ def test_a_child_that_writes_nothing_cannot_import_an_old_records_file(tmp_path)
     db = store.open(root)
     assert store.observations(db) == [] and capture(db)["job"]["status"] == "queued"
     db.close()
+
+
+class HangingChild(Child):
+    """An injectable process that waits until released or its process group is killed."""
+
+    def __init__(self):
+        import threading
+
+        super().__init__()
+        self.started = threading.Event()
+        self.exited = threading.Event()
+        self.pid = 45678
+        self.kills = []
+
+    def __call__(self, command, **kwargs):
+        super().__call__(command, **kwargs)
+        self.started.set()
+        return self
+
+    def wait(self, timeout=None):
+        import subprocess
+
+        if not self.exited.wait(timeout):
+            raise subprocess.TimeoutExpired("fake hl", timeout)
+        return self.returncode
+
+    def killpg(self, pid, signal):
+        self.kills.append((pid, signal))
+        self.returncode = -signal
+        self.exited.set()
+
+
+def test_heartbeats_refresh_while_the_child_runs(tmp_path):
+    import time
+    from concurrent.futures import ThreadPoolExecutor
+
+    root = tmp_path / "private"
+    queued(root)
+    child = HangingChild()
+    with ThreadPoolExecutor(max_workers=1) as pool:
+        result = pool.submit(worker.run, root, once=True, popen=child, heartbeat_interval=0.01,
+                             killpg=child.killpg)
+        try:
+            assert child.started.wait(2)
+            db = store.open(root)
+            deadline = time.monotonic() + 2
+            while time.monotonic() < deadline:
+                job = capture(db)["job"]
+                if job["heartbeat_at"] > job["started_at"]:
+                    break
+                time.sleep(0.005)
+            else:
+                pytest.fail("the child's lease was never refreshed")
+            assert job["status"] == "running" and store.observations(db) == []
+            db.close()
+        finally:
+            child.exited.set()
+        assert result.result(timeout=3) == 0
+    assert child.kills == []
+
+
+def test_lost_heartbeat_kills_the_group_and_imports_nothing(tmp_path):
+    import signal
+    from concurrent.futures import ThreadPoolExecutor
+    from datetime import datetime, timedelta, timezone
+
+    root = tmp_path / "private"
+    queued(root)
+    child = HangingChild()
+    with ThreadPoolExecutor(max_workers=1) as pool:
+        result = pool.submit(worker.run, root, once=True, popen=child, heartbeat_interval=0.01,
+                             killpg=child.killpg)
+        try:
+            assert child.started.wait(2)
+            db = store.open(root)
+            current = store.claim_job(db, datetime.now(timezone.utc) + timedelta(minutes=21))
+            assert current["attempts"] == 2
+            assert child.exited.wait(2)
+            assert result.result(timeout=3) == 0
+            assert capture(db)["job"]["owner"] == current["owner"]
+            assert store.observations(db) == []
+            db.close()
+        finally:
+            child.exited.set()
+    assert child.kills == [(child.pid, signal.SIGKILL)]
