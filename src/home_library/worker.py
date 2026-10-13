@@ -61,6 +61,9 @@ def _job(db, root, job, popen, heartbeat_interval, timeout, killpg, stop):
         except store.Conflict:
             LOG.warning("job %s no longer owned", job["id"])
             return
+        except sqlite3.Error:
+            LOG.warning("job %s could not be recorded; its lease runs out and another attempt takes over", job["id"])
+            return
         except (OSError, ValueError):
             _fail(db, job, errors, "records.json is missing, unreadable or invalid, or the child could not start")
             return
@@ -140,6 +143,8 @@ def _fail(db, job, errors, reason):
         LOG.warning("job %s failed", job["id"])
     except store.Conflict:
         LOG.warning("job %s no longer owned", job["id"])
+    except sqlite3.Error:
+        LOG.warning("job %s failure could not be recorded; its lease runs out and another attempt takes over", job["id"])
 
 
 @contextmanager
@@ -164,9 +169,18 @@ def run(root=None, *, once=False, popen=subprocess.Popen, heartbeat_interval=30,
     stop = stop if stop is not None else threading.Event()
     with _signals(stop), closing(store.open(root)) as db:
         while not stop.is_set():
-            job = store.claim_job(db)
-            if job is not None:
-                _job(db, root, job, popen, heartbeat_interval, timeout, killpg, stop)
+            job = None
+            try:
+                job = store.claim_job(db)
+                if job is not None:
+                    _job(db, root, job, popen, heartbeat_interval, timeout, killpg, stop)
+            except sqlite3.Error:
+                # A busy or briefly unavailable database must not end the service; look again after the wait.
+                LOG.warning("database error%s", f" in job {job['id']}" if job else " while claiming a job")
+                if once:
+                    return 0
+                stop.wait(idle_wait)
+                continue
             if once:
                 return 0
             if job is None:
