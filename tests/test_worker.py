@@ -56,7 +56,7 @@ def test_once_runs_one_capture_in_a_separate_group_and_imports_records(tmp_path,
         assert worker.run(root, once=True, popen=child) == 0
     (args, kwargs), = child.calls
     assert args == [sys.executable, "-m", "home_library.cli", "--work-root", str(root / "work"), command,
-                    str(root / "captures" / f"{CAPTURE_ID}.{extension}"), "--location", "Shelf A"]
+                    str(root / "captures" / f"{CAPTURE_ID}.{extension}"), "--location=Shelf A"]
     assert kwargs["start_new_session"] is True
     db = store.open(root)
     assert capture(db)["job"]["status"] == "done"
@@ -476,3 +476,18 @@ def test_a_database_error_when_finishing_or_failing_is_logged_by_job_id_and_does
     db = store.open(root)
     assert capture(db)["job"]["status"] == "running"  # the lease runs out and another attempt takes over
     db.close()
+
+
+def test_a_location_that_starts_with_a_dash_cannot_be_read_as_an_option(tmp_path):
+    from home_library import cli
+
+    root = tmp_path / "private"
+    queued(root)
+    db = store.open(root)
+    store.rename_location(db, 1, "-x")
+    db.close()
+    child = Child()
+    assert worker.run(root, once=True, popen=child) == 0
+    (args, _), = child.calls
+    assert args[-1] == "--location=-x"
+    assert cli._parser().parse_args(args[3:]).location == "-x"  # the real command line parser agrees
