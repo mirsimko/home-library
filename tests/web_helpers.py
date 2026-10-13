@@ -29,3 +29,18 @@ def anonymous(tmp_path):
     """A client that no access rule lets in."""
     with TestClient(create_app(tmp_path, [])) as client:
         yield client
+
+
+def tags(page, name):
+    """The attributes of every <name> element of a page, as dicts, for asserting on markup."""
+    from html.parser import HTMLParser
+
+    found = []
+
+    class Collect(HTMLParser):
+        def handle_starttag(self, tag, attrs):
+            if tag == name:
+                found.append({key: value for key, value in attrs})
+
+    Collect().feed(page)
+    return found
