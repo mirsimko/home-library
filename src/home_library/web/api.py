@@ -127,7 +127,8 @@ def dismiss(request: Request, body: dict):
 
 @router.get("/api/observations/{id}/candidates")
 def candidates(request: Request, id: int):
-    return observation_candidates(request.app.state.data_root, call(request, store.observation, id))
+    observation = call(request, store.candidate_observation, id)
+    return observation_candidates(request.app.state.data_root, observation) if observation is not None else []
 
 
 @router.get("/api/jobs")

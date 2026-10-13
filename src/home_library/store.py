@@ -621,3 +621,15 @@ def observation(db, id):
 def export_books(db):
     """Add all evidence and cover capture ids to the portable catalogue export."""
     return _export_rows(db, True)
+
+
+def candidate_observation(db, id):
+    """Return evidence only while its completed attempt owns the current candidate output."""
+    result = observation(db, id)
+    job = db.execute("""SELECT status, finished_at,
+                        (SELECT max(attempt) FROM observations WHERE capture_id = ?) AS imported_attempt
+                        FROM jobs WHERE capture_id = ?""", (result["capture_id"], result["capture_id"])).fetchone()
+    if (job["status"] != "done" or result["attempt"] != job["imported_attempt"]
+            or result["created_at"] != job["finished_at"]):
+        return None
+    return result
