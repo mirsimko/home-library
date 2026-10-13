@@ -21,8 +21,9 @@ _READ_ID = re.compile(r"[A-Za-z0-9][A-Za-z0-9._-]*")
 BACKENDS = {"codex-exec": "gpt-6.1-sol", "pi": "opencode-go/muse-spark-1.3-contributor"}
 
 
-def _template():
-    return resources.files("home_library").joinpath("prompts", "shelf_read.txt").read_text(encoding="utf-8")
+def _template(kind):
+    name = "cover_read.txt" if kind == "cover" else "shelf_read.txt"
+    return resources.files("home_library").joinpath("prompts", name).read_text(encoding="utf-8")
 
 
 def render_prompt(manifest):
@@ -37,7 +38,7 @@ def render_prompt(manifest):
         "FILES": " ".join(tile["file"] for tile in manifest["tiles"]),
         "PHOTO": manifest["photo"],
     }
-    prompt = _template()
+    prompt = _template(manifest.get("kind"))
     for name, value in values.items():
         prompt = prompt.replace(f"<<{name}>>", value)
     return prompt

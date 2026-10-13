@@ -514,3 +514,83 @@ def test_tiles_cut_differently_from_the_same_photo_remove_the_reads_made_from_th
     monkeypatch.setattr(pipeline, "cut_tiles", lambda photo, out: cut_tiles(photo, out, quality=40))
     pipeline.tile_photo(photo, directory)
     assert not (directory / "reads").exists() and not (directory / "records.csv").exists()
+
+
+def test_a_merged_author_reaches_the_title_and_author_search(tmp_path):
+    from urllib.parse import parse_qs, urlparse
+
+    store_read(tmp_path, "a-sol", [{**entry(1, "あおい風船", "ja"), "author": "山田 花子"}])
+    store_read(tmp_path, "b-spark", [{**entry(1, "あおい風船", "ja"), "author": "別の名前"}])
+    merged = pipeline.merge_photo(tmp_path, ["a-sol", "b-spark"])
+    asked = []
+
+    def fetch(url):
+        asked.append(parse_qs(urlparse(url).query))
+        return b'<rss><channel><item xmlns:dc="http://purl.org/dc/elements/1.1/"><dc:title>Blue Balloon</dc:title></item></channel></rss>'
+
+    found = pipeline.lookup_photo(tmp_path, fetch=fetch)
+
+    assert [r["author"] for r in merged["items"][0]["readings"]] == ["山田 花子", "別の名前"]
+    assert asked[0]["creator"] == ["山田 花子"]
+    assert found["books"][0]["queries"][0]["step"] == "title+author"
+
+
+def test_cover_runs_share_the_pipeline_and_reuse_reads_of_the_same_cover(tmp_path):
+    photo, programs = photo_and_programs(tmp_path)
+    programs.sol_answer = programs.spark_answer = answer({**entry(1, "The Amber Kite", "en"), "author": "Ada Reed"})
+    asked = []
+
+    def fetch(url):
+        asked.append(url)
+        return b'<searchRetrieveResponse xmlns="http://www.loc.gov/zing/srw/"/>' if "loc.gov" in url else b'{"docs": []}'
+
+    def cover():
+        return run_one(photo, tmp_path / "work", kind="cover", run=programs, fetch=fetch, location="Box 2")
+
+    summary = cover()
+    directory = tmp_path / "work" / photo.stem
+    assert "error" not in summary
+    assert load(directory / "tiles.json")["kind"] == "cover"
+    assert sorted(programs.started) == ["codex read", "pi read"]
+    (record,) = load(directory / "records.json")
+    assert (record["title"], record["author"], record["location"], record["read_status"]) == (
+        "The Amber Kite", "Ada Reed", "Box 2", "agreed")
+    assert "cover-r0.jpg" in (directory / "reads/a-sol/prompt.txt").read_text()
+    assert rows_of(directory)[0]["author"] == "Ada Reed"
+
+    programs.started.clear()
+    asked.clear()
+    assert "error" not in cover()
+    assert programs.started == asked == []
+    (directory / "tiles/cover-r0.jpg").unlink()
+    assert "error" not in cover()
+    assert (directory / "tiles/cover-r0.jpg").exists() and programs.started == []
+
+    Image.new("RGB", (640, 480), "grey").save(photo)
+    programs.spark_answer = ""  # failure must leave no records of the previous photo
+    assert "error" in cover()
+    assert sorted(programs.started) == ["codex read", "pi read"]
+    assert not (directory / "records.json").exists() and not (directory / "merged.json").exists()
+
+
+def test_changing_between_shelf_and_cover_replaces_tiles_and_reads_of_the_same_photo(tmp_path):
+    photo, programs = photo_and_programs(tmp_path)
+    programs.sol_answer = programs.spark_answer = answer(entry(1, "The Amber Kite", "unknown"))
+    for kind, count in (("shelf", 2), ("cover", 1), ("shelf", 2)):
+        programs.started.clear()
+        result = run_one(photo, tmp_path / "work", kind=kind, run=programs)
+        assert "error" not in result
+        assert len(load(tmp_path / "work" / photo.stem / "tiles.json")["tiles"]) == count
+        assert sorted(programs.started) == ["codex read", "pi read"]
+
+
+def test_a_cover_replaces_old_barcode_evidence_in_the_same_directory(tmp_path):
+    photo, programs = photo_and_programs(tmp_path)
+    directory = tmp_path / "work" / photo.stem
+    directory.mkdir(parents=True)
+    (directory / "barcode.json").write_text('old barcode evidence')
+    programs.sol_answer = programs.spark_answer = answer(entry(1, "The Amber Kite", "unknown"))
+
+    result = run_one(photo, tmp_path / "work", kind="cover", run=programs)
+
+    assert "error" not in result and not (directory / "barcode.json").exists()

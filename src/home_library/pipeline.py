@@ -6,14 +6,15 @@ import subprocess
 from concurrent.futures import ThreadPoolExecutor
 from pathlib import Path
 
+from home_library.barcode import decode_photo, lookup_isbn
 from home_library.lookup import find_candidates
 from home_library.lookup.http import Fetcher
 from home_library.lookup.nkcr import run_yaz_client
 from home_library.merge import merge_reads
 from home_library.pick import run_pick, stored_picks
 from home_library.reader import run_read
-from home_library.records import build_records, write_records
-from home_library.tiles import cut_tiles
+from home_library.records import build_barcode_record, build_records, write_records
+from home_library.tiles import cut_cover, cut_tiles
 from home_library.workspace import DEFAULT_WORK_ROOT, refuse_inside_checkout
 from home_library.workspace import photo_dir as photo_dir_of
 
@@ -65,7 +66,8 @@ def lookup_photo(photo_dir, *, fetch=None, run_yaz=run_yaz_client):
     books, down = [], set()  # a source that could not be reached is not asked again for this photo
     for index, item in enumerate(merged["items"]):
         if item["reason"] in LOOKED_UP:
-            found = find_candidates(item["title"], item["language"], fetch=fetch, run_yaz=run_yaz,
+            found = find_candidates(item["title"], item["language"],
+                                    author=item["readings"][0].get("author", ""), fetch=fetch, run_yaz=run_yaz,
                                     cache_dir=photo_dir / "lookup" / "cache", skip=down)
             down.update(query["source"] for query in found["queries"]
                         if query["status"] in ("unavailable", "rate_limited"))
@@ -90,15 +92,15 @@ def export_photo(photo_dir, *, location=""):
     return records
 
 
-DERIVED = ("merged.json", "records.json", "records.csv", "lookup/candidates.json", "lookup/picks.json",
+DERIVED = ("barcode.json", "merged.json", "records.json", "records.csv", "lookup/candidates.json", "lookup/picks.json",
            "lookup/picks.raw.txt")
 
 
-def _manifest_of(photo, photo_dir):
+def _manifest_of(photo, photo_dir, kind):
     """The stored tile manifest if it is of this very photo file, else None."""
     manifest = _load_or_none(photo_dir / "tiles.json")
     same = manifest is not None and manifest.get("sha256") == hashlib.sha256(Path(photo).read_bytes()).hexdigest()
-    return manifest if same else None
+    return manifest if same and manifest.get("kind", "shelf") == kind else None
 
 
 def _forget(photo_dir):
@@ -118,7 +120,7 @@ def tile_photo(photo, photo_dir):
     return manifest
 
 
-def read_photo(photo, work_root=DEFAULT_WORK_ROOT, *, readers=READERS, force=False, run=subprocess.run):
+def read_photo(photo, work_root=DEFAULT_WORK_ROOT, *, readers=READERS, force=False, run=subprocess.run, kind="shelf"):
     """Stages 1 to 4 for one photo: tiles, the reads (at the same time) and the merge. Returns its directory.
 
     A read that is already stored is not repeated, so a run that failed half way can simply be started again.
@@ -126,13 +128,14 @@ def read_photo(photo, work_root=DEFAULT_WORK_ROOT, *, readers=READERS, force=Fal
     Force also forgets what the catalogues answered.
     """
     photo_dir = photo_dir_of(work_root, photo)
-    manifest = None if force else _manifest_of(photo, photo_dir)
+    manifest = None if force else _manifest_of(photo, photo_dir, kind)
     if manifest is None:
         _forget(photo_dir)
     if force:  # the catalogues' answers are kept for a changed photo: they belong to a title, not to a photo
         shutil.rmtree(photo_dir / "lookup" / "cache", ignore_errors=True)
     if manifest is None or not all((photo_dir / "tiles" / tile["file"]).is_file() for tile in manifest["tiles"]):
-        cut_tiles(photo, photo_dir)
+        cutter = cut_cover if kind == "cover" else cut_tiles
+        cutter(photo, photo_dir)
     tiles = _tiles_hash(photo_dir)
     missing = [reader for reader in readers  # not stored, cut short, or made from other tiles
                if (_load_or_none(photo_dir / "reads" / reader[0] / "read.json") or {}).get("tiles_sha256") != tiles]
@@ -170,7 +173,7 @@ def _failure(photo, failure):
 
 
 def run_photos(photos, work_root=DEFAULT_WORK_ROOT, *, readers=READERS, location="", force=False,
-               run=subprocess.run, fetch=None, run_yaz=run_yaz_client, report=lambda result: None):
+               run=subprocess.run, fetch=None, run_yaz=run_yaz_client, report=lambda result: None, kind="shelf"):
     """Every stage for several photos. Returns one summary per photo, or its error.
 
     Photos are read one after another, because the uplink carries one photo's images at a time. The look-ups
@@ -195,10 +198,28 @@ def run_photos(photos, work_root=DEFAULT_WORK_ROOT, *, readers=READERS, location
                 if Path(photo).stem in seen:  # it would share, and overwrite, the other photo's work directory
                     raise ValueError("another photo in this run has the same file name; rename one of them")
                 seen.add(Path(photo).stem)
-                photo_dir = read_photo(photo, work_root, readers=readers, force=force, run=run)
+                photo_dir = read_photo(photo, work_root, readers=readers, force=force, run=run, kind=kind)
             except Exception as failure:
                 results[index] = _failure(photo, failure)
                 report(results[index])
                 continue
             background.submit(finish, index, photo, photo_dir)
     return results
+
+
+def barcode_photo(photo, work_root=DEFAULT_WORK_ROOT, *, location="", fetch=None, run_yaz=run_yaz_client):
+    """Decode a barcode photo and write one review row, including when no ISBN is found."""
+    directory = photo_dir_of(work_root, photo)
+    _forget(directory)
+    (directory / "tiles.json").unlink(missing_ok=True)
+    shutil.rmtree(directory / "tiles", ignore_errors=True)
+    decoded = _store(directory / "barcode.json", decode_photo(photo))
+    found = None
+    if decoded["isbn"]:
+        found = lookup_isbn(decoded["isbn"], fetch=fetch or Fetcher(), run_yaz=run_yaz,
+                            cache_dir=directory / "lookup" / "cache")
+        _store(directory / "lookup" / "candidates.json", {"file": decoded["file"], "books": [{"item": 0, "title": "", **found}]})
+    record = build_barcode_record(decoded["file"], decoded["isbn"], found, location=location)
+    write_records(directory, [record])
+    return {"photo": decoded["file"], "directory": str(directory), "accepted": 0, "review": int(bool(decoded["isbn"])),
+            "unreadable": int(not decoded["isbn"]), "warnings": 0, "seconds": {}}
