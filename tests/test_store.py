@@ -155,3 +155,36 @@ def test_stale_jobs_are_reclaimed_only_after_twenty_minutes(db):
     assert failed["error"] == "the worker stopped responding 3 times"
     assert failed["finished_at"] == "2026-01-02T04:11:00Z"
     assert not store.heartbeat(db, failed["id"], third["owner"], "2026-01-02T04:12:00Z")
+
+
+def test_failure_requeues_twice_then_stays_visible_until_retry(db):
+    receipt = capture(db)
+    for attempt in range(1, 4):
+        job = store.claim_job(db, NOW)
+        assert job["attempts"] == attempt
+        failed = store.fail_job(db, job["id"], job["owner"], "invented failure", NOW)
+        assert failed["status"] == ("queued" if attempt < 3 else "failed")
+        assert failed["error"] == "invented failure"
+        assert not store.heartbeat(db, job["id"], job["owner"], NOW)
+    assert store.claim_job(db, NOW) is None
+    retried = store.retry_job(db, receipt["job"]["id"])
+    assert retried["status"] == "queued" and retried["attempts"] == 0
+    assert retried["owner"] is None and retried["finished_at"] is None
+    assert store.claim_job(db, NOW)["attempts"] == 1
+
+
+def test_a_superseded_worker_cannot_fail_or_retry_a_running_job(db):
+    capture(db)
+    old = store.claim_job(db, NOW)
+    current = store.claim_job(db, "2026-01-02T03:25:00Z")
+    before = capture(db)["job"]
+    with pytest.raises(store.Conflict):
+        store.fail_job(db, old["id"], old["owner"], "late failure", NOW)
+    assert capture(db)["job"] == before
+    with pytest.raises(store.Invalid):
+        store.retry_job(db, current["id"])
+    assert capture(db)["job"] == before
+    with pytest.raises(store.NotFound):
+        store.fail_job(db, 999, "absent", "failure", NOW)
+    with pytest.raises(store.NotFound):
+        store.retry_job(db, 999)
