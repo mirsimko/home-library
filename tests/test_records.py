@@ -378,3 +378,14 @@ def test_only_a_number_of_years_counts_as_an_age():
         candidates = candidates_of(cand("nkcr:cnb001", "Zelený drak", age_note=note))
         (record,) = build_records(merged_of([agreed()]), candidates, picks_of("match", "nkcr:cnb001"))
         assert (record["age_from"], record["age_to"]) == expected, note
+
+
+def test_the_first_read_author_is_kept_unless_a_catalogue_record_is_matched():
+    merged = merged_of([item("agreed", "Zelený drak", [reading("a-sol", 1, "Zelený drak", author="Marta Nová"),
+                                                     reading("b-spark", 1, "Zelený drak", author="Jiná Marta")])])
+    candidates = candidates_of(cand("nkcr:1", "Zelený drak", authors=["Nová, Marta"]))
+
+    for picks, expected in ((None, "Marta Nová"), (picks_of("none"), "Marta Nová"),
+                            (picks_of("match", "nkcr:1"), "Nová, Marta")):
+        (record,) = build_records(merged, candidates, picks)
+        assert record["author"] == expected

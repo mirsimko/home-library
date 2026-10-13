@@ -514,3 +514,22 @@ def test_tiles_cut_differently_from_the_same_photo_remove_the_reads_made_from_th
     monkeypatch.setattr(pipeline, "cut_tiles", lambda photo, out: cut_tiles(photo, out, quality=40))
     pipeline.tile_photo(photo, directory)
     assert not (directory / "reads").exists() and not (directory / "records.csv").exists()
+
+
+def test_a_merged_author_reaches_the_title_and_author_search(tmp_path):
+    from urllib.parse import parse_qs, urlparse
+
+    store_read(tmp_path, "a-sol", [{**entry(1, "あおい風船", "ja"), "author": "山田 花子"}])
+    store_read(tmp_path, "b-spark", [{**entry(1, "あおい風船", "ja"), "author": "別の名前"}])
+    merged = pipeline.merge_photo(tmp_path, ["a-sol", "b-spark"])
+    asked = []
+
+    def fetch(url):
+        asked.append(parse_qs(urlparse(url).query))
+        return b'<rss><channel><item xmlns:dc="http://purl.org/dc/elements/1.1/"><dc:title>Blue Balloon</dc:title></item></channel></rss>'
+
+    found = pipeline.lookup_photo(tmp_path, fetch=fetch)
+
+    assert [r["author"] for r in merged["items"][0]["readings"]] == ["山田 花子", "別の名前"]
+    assert asked[0]["creator"] == ["山田 花子"]
+    assert found["books"][0]["queries"][0]["step"] == "title+author"
