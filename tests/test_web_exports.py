@@ -31,7 +31,7 @@ def test_exports_keep_capture_provenance_and_escape_csv_formula_prefixes(client,
     assert reader.fieldnames == list(expected[0])
     assert csv_rows[0]["title"] == "'=ぐぽ" and csv_rows[0]["notes"] == "'+Invented note"
     assert [row["notes"] for row in csv_rows[1:]] == ["'-note", "'@note", "'\tnote", "'\rnote"]
-    assert csv_rows[0]["age_from"] == "" and csv_rows[0]["needs_review"] == "False"
+    assert csv_rows[0]["age_from"] == "" and csv_rows[0]["needs_review"] == "false"
     assert csv_rows[0]["cover_photo"] == f"captures/{CAPTURE_ID}.jpg"
 
 

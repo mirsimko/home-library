@@ -398,3 +398,10 @@ def test_an_unreadable_cover_keeps_an_author_that_was_legible():
 
     assert record["read_status"] == "unreadable" and record["title"] == ""
     assert record["author"] == "Ada Reed"
+
+
+def test_csv_booleans_are_lowercase_whichever_way_they_are_written():
+    from home_library.records import csv_cell
+
+    assert [csv_cell(True), csv_cell(False)] == ["true", "false"]
+    assert csv_cell(0) == "0" and csv_cell("False") == "False"
