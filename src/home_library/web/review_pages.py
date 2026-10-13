@@ -127,7 +127,7 @@ def neighbours(order, id):
             f"/review/{order[index + 1]}" if index + 1 < len(order) else None)
 
 
-def detail(request, id, status=200, **extra):
+def detail(request, id, status=200, without=(), **extra):
     """Render one observation with everything a person needs to decide, or why it has no actions."""
     root = request.app.state.data_root
     observation = call(request, store.observation, id)
@@ -145,16 +145,21 @@ def detail(request, id, status=200, **extra):
     return render(request, "review_detail.html", status=status, active="review", observation=observation,
                   record=observation["record"], capture=capture, location=names.get(capture["location_id"], ""),
                   evidence=evidence(root, observation), book=book,
-                  siblings=[{**row_view(o), "photo": f"/api/captures/{o['capture_id']}/photo"} for o in siblings],
+                  siblings=[{**row_view(o), "photo": f"/api/captures/{o['capture_id']}/photo", "included": o["id"] not in without}
+                            for o in siblings],
                   candidates=[{**c, "fill": fill_from(c)} for c in candidates],
-                  values=prefill(call(request, store.default_fields, [id, *(o['id'] for o in siblings)])), locations=call(request, store.locations),
+                  values=prefill(call(request, store.default_fields, [id, *(o['id'] for o in siblings if o['id'] not in without)])), locations=call(request, store.locations),
                   states=store.STATES, previous=previous, following=following,
                   position=order.index(id) + 1 if id in order else None, total=len(order), **extra)
 
 
 @router.get("/review/{id}")
-def review_detail(request: Request, id: int, done: str = "", book: int | None = None):
-    return detail(request, id, notice=landing_notice(request, done, book))
+def review_detail(request: Request, id: int, done: str = "", book: int | None = None, without: str = ""):
+    """`without` lists, comma-separated, the paired photos the person unticked: the form leaves them out."""
+    ids = [part for part in without.split(",") if part.strip()]
+    if not all(part.strip().isdecimal() for part in ids):
+        raise store.Invalid("without must list observation ids")
+    return detail(request, id, without={int(part) for part in ids}, notice=landing_notice(request, done, book))
 
 
 # ---- the actions ---------------------------------------------------------------------------------------

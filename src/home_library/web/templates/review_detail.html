@@ -104,7 +104,9 @@
         </div>
         <datalist id="languages"><option value="ja"><option value="cs"><option value="en"><option value="zh"></datalist>
         {% for sibling in siblings %}
-        <label class="check"><input type="checkbox" name="also" value="{{ sibling.id }}" checked> Use the {{ sibling.kind }} photo for the same book</label>
+        <label class="check"><input type="checkbox" name="also" value="{{ sibling.id }}"{% if sibling.included %} checked{% endif %}
+          hx-get="/review/{{ observation.id }}" hx-trigger="change" hx-target="#review" hx-select="#review" hx-swap="outerHTML" hx-replace-url="true"
+          hx-vals='js:{without: Array.from(document.querySelectorAll("input[name=also]:not(:checked)")).map(function (box) { return box.value; }).join(",")}'> Use the {{ sibling.kind }} photo for the same book</label>
         {% endfor %}
         <div class="actions">
           <button type="submit" class="primary" id="approve">Approve as new book <kbd>Enter</kbd></button>
