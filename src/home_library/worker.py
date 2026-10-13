@@ -21,12 +21,37 @@ def _job(db, root, job, popen):
                COMMANDS[capture["kind"]], str(photo), "--location", job["location"]]
     LOG.info("job %s capture %s started", job["id"], capture["id"])
     with tempfile.TemporaryFile() as errors:
-        child = popen(command, start_new_session=True, stdin=subprocess.DEVNULL,
-                      stdout=subprocess.DEVNULL, stderr=errors)
-        child.wait()
-        rows = json.loads((root / "work" / capture["id"] / "records.json").read_text(encoding="utf-8"))
-        store.finish_job(db, job["id"], job["owner"], rows)
+        try:
+            target = root / "work" / capture["id"] / "records.json"
+            # A child must produce evidence this time, even when a previous attempt left records behind.
+            target.unlink(missing_ok=True)
+            child = popen(command, start_new_session=True, stdin=subprocess.DEVNULL,
+                          stdout=subprocess.DEVNULL, stderr=errors)
+            code = child.wait()
+            if code:
+                _fail(db, job, errors, f"child exited with status {code}")
+                return
+            rows = json.loads(target.read_text(encoding="utf-8"))
+            store.finish_job(db, job["id"], job["owner"], rows)
+        except store.Conflict:
+            LOG.warning("job %s no longer owned", job["id"])
+            return
+        except (OSError, ValueError):
+            _fail(db, job, errors, "records.json is missing, unreadable or invalid, or the child could not start")
+            return
     LOG.info("job %s capture %s finished", job["id"], capture["id"])
+
+
+def _fail(db, job, errors, reason):
+    errors.flush()
+    size = errors.seek(0, 2)
+    errors.seek(max(0, size - 8000))
+    tail = errors.read().decode("utf-8", errors="replace")[-2000:]
+    try:
+        store.fail_job(db, job["id"], job["owner"], reason + ("\n" + tail if tail else ""))
+        LOG.warning("job %s failed", job["id"])
+    except store.Conflict:
+        LOG.warning("job %s no longer owned", job["id"])
 
 
 def run(root=None, *, once=False, popen=subprocess.Popen):
