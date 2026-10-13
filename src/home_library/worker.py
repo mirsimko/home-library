@@ -89,12 +89,18 @@ def _kill(child, killpg):
 
 def _heartbeat(root, job, child, done, lost, interval, killpg):
     # SQLite connections belong to the thread that opened them.
-    with closing(store.open(root)) as db:
-        while not done.wait(interval):
-            if not store.heartbeat(db, job["id"], job["owner"]):
-                lost.set()
-                _kill(child, killpg)
-                return
+    try:
+        with closing(store.open(root)) as db:
+            while not done.wait(interval):
+                if not store.heartbeat(db, job["id"], job["owner"]):
+                    lost.set()
+                    _kill(child, killpg)
+                    return
+    except Exception:
+        # Without lease renewal, leave the job for takeover rather than trusting a late result.
+        LOG.warning("job %s heartbeat unavailable", job["id"])
+        lost.set()
+        _kill(child, killpg)
 
 
 def _fail(db, job, errors, reason):
