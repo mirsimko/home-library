@@ -43,3 +43,8 @@ def test_json_exports_include_distinct_evidence_and_cover_capture_ids(db):
     assert [row["capture_ids"] for row in exported] == [[], [CAPTURE_ID, SECOND_ID]]
     assert [{key: value for key, value in row.items() if key != "capture_ids"}
             for row in exported] == store.export_rows(db)
+
+
+def test_web_upload_preflight_preserves_uploader_normalisation(db):
+    receipt = capture(db, uploaded_by=" parent ")
+    assert receipt["capture"]["uploaded_by"] == "parent"
