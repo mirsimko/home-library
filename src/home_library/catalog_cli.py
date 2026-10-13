@@ -20,6 +20,14 @@ def add_commands(parser, commands):
     books.add_argument("--location")
     show = actions.add_parser("show", help="Print one book as JSON.")
     show.add_argument("id", type=int)
+    edit = actions.add_parser("edit", help="Change a book at the version you read.")
+    edit.add_argument("id", type=int)
+    edit.add_argument("--version", type=int, required=True)
+    edit.add_argument("changes", nargs="+")
+    move = actions.add_parser("move", help="Move selected books or change their state.")
+    move.add_argument("ids", type=int, nargs="+")
+    move.add_argument("--location")
+    move.add_argument("--state")
     actions.add_parser("locations", help="List locations as JSON lines.")
     add = actions.add_parser("add-location", help="Add a shelf or box.")
     add.add_argument("name")
@@ -53,6 +61,29 @@ def _catalog(db, args):
             _print(row)
     elif action == "show":
         _print(store.book(db, args.id))
+    elif action == "edit":
+        changes = {}
+        for pair in args.changes:
+            field, equals, value = pair.partition("=")
+            if not equals:
+                raise store.Invalid("edits must be field=value pairs")
+            if field in ("age_from", "age_to", "location_id"):
+                try:
+                    value = int(value) if value else None
+                except ValueError as error:
+                    raise store.Invalid(f"{field} must be an integer or empty") from error
+            elif field == "needs_review":
+                if value not in ("true", "false", ""):
+                    raise store.Invalid("needs_review must be true or false")
+                value = value == "true"
+            elif field == "cover_capture_id" and not value:
+                value = None
+            changes[field] = value
+        _print(store.update_book(db, args.id, args.version, changes, "agent"))
+    elif action == "move":
+        for row in store.move_books(db, args.ids, location_id=_location(db, args.location),
+                                    state=args.state, by="agent"):
+            _print(row)
     elif action == "locations":
         for row in store.locations(db):
             _print(row)
