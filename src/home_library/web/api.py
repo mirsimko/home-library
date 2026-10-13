@@ -3,9 +3,9 @@ from contextlib import closing
 
 from fastapi import APIRouter, Request
 from starlette.concurrency import run_in_threadpool
-from starlette.responses import JSONResponse
+from starlette.responses import JSONResponse, Response
 
-from home_library import store
+from home_library import records, store
 from home_library.web.files import (
     checked_file,
     observation_candidates,
@@ -135,3 +135,15 @@ def jobs(request: Request):
 @router.post("/api/jobs/{id}/retry")
 def retry_job(request: Request, id: int):
     return call(request, store.retry_job, id)
+
+
+@router.get("/export.json")
+def export_json(request: Request):
+    return JSONResponse(call(request, store.export_books), headers={"Cache-Control": "private"})
+
+
+@router.get("/export.csv")
+def export_csv(request: Request):
+    rows = call(request, store.export_rows)
+    columns = records.COLUMNS[:records.COLUMNS.index("photo")]
+    return Response(records.csv_text(rows, columns), media_type="text/csv", headers={"Cache-Control": "private"})
