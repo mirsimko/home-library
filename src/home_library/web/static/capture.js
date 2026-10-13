@@ -40,6 +40,20 @@
     return FINAL.includes(statusOf(item));
   }
 
+  // Not yet on the server, so closing the page would lose it. A refused photo is not counted: sending it again
+  // would not help.
+  function isUnreceived(item) {
+    return ["waiting", "sending", "backoff", "failed"].includes(item.state);
+  }
+
+  // Once the server has the photo, the phone's memory need not hold it: let go of the preview and the file.
+  function releasePreview(item, revoke) {
+    if (item.state !== "uploaded" || !item.thumbnail) return;
+    revoke(item.thumbnail);
+    item.thumbnail = null;
+    item.file = null;
+  }
+
   // The phase 0 capture test: the camera's original is well over 3000 px on its long side.
   function isSmall(width, height) {
     return Math.max(width, height) < SMALL_SIDE;
@@ -150,7 +164,7 @@
   }
 
   const logic = {
-    RETRY_DELAYS, statusOf, isFinal, isSmall, startFlow, assign, askBarcode, nextBook, prompt,
+    RETRY_DELAYS, statusOf, isFinal, isUnreceived, releasePreview, isSmall, startFlow, assign, askBarcode, nextBook, prompt,
     retryDelay, isRetryable, createUploader,
   };
   if (typeof module !== "undefined" && module.exports) module.exports = logic;
@@ -209,12 +223,16 @@
       li.innerHTML = '<img alt=""><div><div class="top"><span class="badge"></span><span class="small muted"></span></div>' +
         '<div class="detail"></div><div class="detail warn" hidden></div><progress max="100" hidden></progress>' +
         '<button type="button" hidden>Try again</button></div>';
-      li.querySelector("img").src = item.thumbnail;
+      if (item.thumbnail) li.querySelector("img").src = item.thumbnail;
       li.querySelector("button").addEventListener("click", () => uploader.retry(item));
       item.element = li;
       document.getElementById("photos").prepend(li);
     }
     const li = item.element;
+    if (item.state === "uploaded" && item.thumbnail) {
+      releasePreview(item, (url) => URL.revokeObjectURL(url));
+      li.querySelector("img").removeAttribute("src"); // an empty square stays; the status says what it is
+    }
     const label = statusOf(item);
     const badge = li.querySelector(".badge");
     badge.textContent = label;
@@ -326,7 +344,7 @@
       showFlow();
     });
     window.addEventListener("beforeunload", (event) => {
-      if (items.some((item) => ["waiting", "sending", "backoff"].includes(item.state))) {
+      if (items.some(isUnreceived)) {
         event.preventDefault();
         event.returnValue = "";
       }
