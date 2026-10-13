@@ -28,8 +28,6 @@ class Access:
                 actual = hashlib.sha256(token.encode()).hexdigest()
                 if hmac.compare_digest(actual, expected):
                     return "agent", True
-            # An invalid explicit credential must not fall back to a different identity.
-            return None, False
         if self.dev_user:
             return self.dev_user, False
         login = request.headers.get("tailscale-user-login")
