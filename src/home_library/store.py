@@ -1,7 +1,9 @@
 """The private catalog and job queue, shared by every app writer."""
 import sqlite3
+from contextlib import contextmanager
 from datetime import datetime, timezone
 from importlib.resources import files
+from uuid import UUID
 
 from home_library.workspace import refuse_inside_checkout
 
@@ -112,3 +114,63 @@ def rename_location(db, id, name):
 def locations(db):
     """List locations by name."""
     return [dict(row) for row in db.execute("SELECT * FROM locations ORDER BY name")]
+
+
+STATES = ("Active", "Stored", "Retired", "Gone")
+
+
+@contextmanager
+def _write(db):
+    """Reserve the writer before checking rows so concurrent callers see settled data."""
+    db.execute("BEGIN IMMEDIATE")
+    try:
+        yield
+        db.commit()
+    except BaseException:
+        db.rollback()
+        raise
+
+
+def _uuid(value, field):
+    try:
+        canonical = str(UUID(value)) if isinstance(value, str) else None
+    except ValueError:
+        canonical = None
+    if canonical is None or value != canonical:
+        raise Invalid(f"{field} must be a canonical lowercase UUID")
+    return value
+
+
+def _receipt(db, id, created):
+    capture = _get(db, "captures", id)
+    job = dict(db.execute("SELECT * FROM jobs WHERE capture_id = ?", (id,)).fetchone())
+    receipt = {"capture": capture, "job": job, "created": created}
+    duplicates = [row[0] for row in db.execute(
+        "SELECT id FROM captures WHERE sha256 = ? AND id <> ? ORDER BY created_at, id", (capture["sha256"], id))]
+    if duplicates:
+        receipt["duplicate_of"] = duplicates
+    return receipt
+
+
+def add_capture(db, id, kind, location_id, default_state, uploaded_by, original_name, media_type, sha256,
+                bytes, group_id=None, *, now=None):
+    """Record an uploaded photo and its job atomically; repeated uploads keep their receipt."""
+    _uuid(id, "capture id")
+    with _write(db):
+        existing = db.execute("SELECT sha256 FROM captures WHERE id = ?", (id,)).fetchone()
+        if existing:
+            if existing[0] != sha256:
+                raise Conflict("this capture id already has a different photo hash")
+            return _receipt(db, id, False)
+        _choice(kind, ("shelf", "cover", "barcode"), "capture kind")
+        _choice(default_state, STATES, "state")
+        if group_id is not None:
+            _uuid(group_id, "group id")
+        _get(db, "locations", location_id)
+        db.execute("""INSERT INTO captures
+                      (id, kind, location_id, default_state, uploaded_by, original_name, media_type,
+                       sha256, bytes, group_id, created_at) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)""",
+                   (id, kind, location_id, default_state, uploaded_by, original_name, media_type,
+                    sha256, bytes, group_id, _stamp(now)))
+        db.execute("INSERT INTO jobs (capture_id, status) VALUES (?, 'queued')", (id,))
+        return _receipt(db, id, True)
