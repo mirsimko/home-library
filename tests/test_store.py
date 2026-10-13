@@ -15,7 +15,7 @@ def test_open_creates_private_directories_and_migrates_once(tmp_path):
         assert db.execute("PRAGMA journal_mode").fetchone()[0] == "wal"
         assert db.execute("PRAGMA foreign_keys").fetchone()[0] == 1
         version = db.execute("PRAGMA user_version").fetchone()[0]
-        assert version == 2
+        assert version == 3
         db.execute("INSERT INTO locations (name, kind, created_at) VALUES ('Box A', 'box', '2026-01-01T00:00:00Z')")
     with store.open(root) as db:
         assert db.execute("PRAGMA user_version").fetchone()[0] == version
@@ -188,3 +188,64 @@ def test_a_superseded_worker_cannot_fail_or_retry_a_running_job(db):
         store.fail_job(db, 999, "absent", "failure", NOW)
     with pytest.raises(store.NotFound):
         store.retry_job(db, 999)
+
+
+RECORD_COLUMNS = (
+    "title sort_key author illustrator publisher year language isbn series age_from age_to tags state location "
+    "cover_photo source source_id needs_review notes photo read_status other_reading catalogue_title other_text "
+    "where read_ids pick_verdict candidate_count").split()
+
+
+def record(title="Měsíční člun", **changes):
+    row = dict.fromkeys(RECORD_COLUMNS, "")
+    row.update(title=title, sort_key=title, language="cs", read_status="agreed", needs_review=True,
+               candidate_count=0, photo="generated.jpg", where="r1c1-r0.jpg, #1", read_ids="a; b")
+    row.update(changes)
+    return row
+
+
+def finish(db, rows, id=CAPTURE_ID, **changes):
+    receipt = capture(db, id, **changes)
+    job = store.claim_job(db, NOW)
+    assert job["id"] == receipt["job"]["id"]
+    store.finish_job(db, job["id"], job["owner"], rows, NOW)
+    return store.observations(db, capture_id=id)
+
+
+def test_finishing_imports_whole_records_as_open_evidence_and_no_books(db):
+    receipt = capture(db)
+    job = store.claim_job(db, NOW)
+    rows = [record(other_reading="Měsíční loď"), record("", read_status="unreadable")]
+    done = store.finish_job(db, job["id"], job["owner"], rows, NOW)
+    assert done["status"] == "done" and done["finished_at"] == NOW
+    observations = store.observations(db)
+    assert [r["record"] for r in observations] == rows
+    assert [(r["attempt"], r["row"], r["status"]) for r in observations] == [(1, 0, "open"), (1, 1, "open")]
+    assert observations[0]["capture"] == receipt["capture"]
+    assert observations[0]["other_reading"] == "Měsíční loď"
+    assert observations[0]["created_at"] == NOW
+    assert store.observations(db, capture_id=SECOND_ID) == []
+    assert db.execute("SELECT count(*) FROM books").fetchone()[0] == 0
+    assert not store.heartbeat(db, job["id"], job["owner"], NOW)
+
+
+def test_a_late_finish_changes_nothing(db):
+    capture(db)
+    old = store.claim_job(db, NOW)
+    store.claim_job(db, "2026-01-02T03:25:00Z")
+    before = capture(db)["job"]
+    with pytest.raises(store.Conflict):
+        store.finish_job(db, old["id"], old["owner"], [record()], NOW)
+    assert capture(db)["job"] == before
+    assert store.observations(db) == []
+
+
+@pytest.mark.parametrize("rows", [{}, [None], [record(), {"title": 3}], [record(), {"title": "x", "notes": object()}]])
+def test_a_bad_import_leaves_the_job_and_all_observations_unchanged(db, rows):
+    capture(db)
+    job = store.claim_job(db, NOW)
+    before = capture(db)["job"]
+    with pytest.raises(store.Invalid):
+        store.finish_job(db, job["id"], job["owner"], rows, NOW)
+    assert store.observations(db) == []
+    assert capture(db)["job"] == before
