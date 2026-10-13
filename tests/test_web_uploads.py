@@ -47,7 +47,7 @@ def test_an_mpo_photo_from_an_android_camera_is_kept_as_a_jpeg(client, tmp_path)
         assert check.format == "MPO"
     response = upload(client, content)
     assert response.status_code == 201
-    assert response.json()["capture"]["media_type"] == "image/jpeg"
+    assert response.json()["capture"]["media_type"] == "image/jpeg" and response.json()["image"]["format"] == "JPEG"
     assert (tmp_path / "captures" / f"{CAPTURE_ID}.jpg").read_bytes() == content
 
 

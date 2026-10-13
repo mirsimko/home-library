@@ -122,7 +122,7 @@ JSON in and out. Errors are `{"error": "<message>"}` with 400 (`Invalid`), 404, 
 
 | Method and path | Does |
 |---|---|
-| `POST /api/captures` | Multipart: `file`, `id`, `kind`, `location_id`, `state` (default `Active`), optional `group_id`. Returns 201 with the receipt, or 200 with the stored receipt for a repeated id. JPEG, PNG and WebP only, found from the file's content, not its name or declared type (415 otherwise); at most 40 MB (413). The file is written to a temporary file, flushed to disk and moved into place before the capture is recorded. |
+| `POST /api/captures` | Multipart: `file`, `id`, `kind`, `location_id`, `state` (default `Active`), optional `group_id`. Returns 201 with the receipt, or 200 with the stored receipt for a repeated id. JPEG, PNG and WebP only (a JPEG that carries a second image, as Android Ultra HDR photos do, is accepted and kept as `.jpg`), found from the file's content, not its name or declared type (415 otherwise); at most 40 MB (413). The file is written to a temporary file, flushed to disk and moved into place before the capture is recorded. |
 | `GET /api/captures` | Recent captures with their job status and how many open observations each has. `?ids=a,b` limits it to those captures. |
 | `GET /api/captures/{id}` | One stored receipt with its job, open observation count and `image` metadata. |
 | `GET /api/captures/{id}/photo` | The photo. |

@@ -17,7 +17,8 @@ from home_library.workspace import refuse_inside_checkout
 
 MAX_BYTES = 40_000_000
 
-FORMATS = {"JPEG": ("jpg", "image/jpeg"), "PNG": ("png", "image/png"), "WEBP": ("webp", "image/webp")}
+# Pillow reports a JPEG that carries a second image (Android Ultra HDR) as MPO.
+FORMATS = {"JPEG": ("jpg", "image/jpeg"), "MPO": ("jpg", "image/jpeg"), "PNG": ("png", "image/png"), "WEBP": ("webp", "image/webp")}
 
 
 class MultipartPhoto:
@@ -129,7 +130,7 @@ def image_info(path):
                 raise HTTPException(415, "choose a JPEG, PNG or WebP photo")
             image.verify()
         with Image.open(path) as image:
-            return {"width": image.width, "height": image.height, "format": image.format,
+            return {"width": image.width, "height": image.height, "format": "JPEG" if image.format == "MPO" else image.format,
                     "orientation": image.getexif().get(274)}
     except (OSError, ValueError, SyntaxError, UnidentifiedImageError, Image.DecompressionBombError) as error:
         raise HTTPException(415, "choose a readable JPEG, PNG or WebP photo") from error
