@@ -1,0 +1,42 @@
+CREATE TABLE books (
+    id INTEGER PRIMARY KEY,
+    title TEXT NOT NULL CHECK (title <> '' AND title = trim(title)),
+    sort_key TEXT NOT NULL DEFAULT '',
+    author TEXT NOT NULL DEFAULT '',
+    illustrator TEXT NOT NULL DEFAULT '',
+    publisher TEXT NOT NULL DEFAULT '',
+    year TEXT NOT NULL DEFAULT '',
+    language TEXT NOT NULL DEFAULT '',
+    isbn TEXT NOT NULL DEFAULT '',
+    series TEXT NOT NULL DEFAULT '',
+    age_from INTEGER,
+    age_to INTEGER,
+    tags TEXT NOT NULL DEFAULT '',
+    state TEXT NOT NULL CHECK (state IN ('Active', 'Stored', 'Retired', 'Gone')),
+    location_id INTEGER NOT NULL REFERENCES locations(id),
+    cover_capture_id TEXT REFERENCES captures(id),
+    source TEXT NOT NULL DEFAULT '',
+    source_id TEXT NOT NULL DEFAULT '',
+    needs_review INTEGER NOT NULL DEFAULT 0 CHECK (needs_review IN (0, 1)),
+    notes TEXT NOT NULL DEFAULT '',
+    version INTEGER NOT NULL DEFAULT 1,
+    created_by TEXT NOT NULL,
+    reviewed_by TEXT,
+    created_at TEXT NOT NULL,
+    updated_at TEXT NOT NULL
+);
+CREATE TABLE observations (
+    id INTEGER PRIMARY KEY,
+    capture_id TEXT NOT NULL REFERENCES captures(id),
+    attempt INTEGER NOT NULL,
+    row INTEGER NOT NULL,
+    read_status TEXT NOT NULL,
+    title TEXT NOT NULL,
+    other_reading TEXT NOT NULL,
+    record TEXT NOT NULL,
+    status TEXT NOT NULL CHECK (status IN ('open', 'used', 'dismissed', 'superseded')),
+    book_id INTEGER REFERENCES books(id),
+    created_at TEXT NOT NULL,
+    UNIQUE (capture_id, attempt, row)
+);
+CREATE INDEX observations_capture_status ON observations(capture_id, status);

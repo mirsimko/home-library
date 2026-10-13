@@ -1,4 +1,5 @@
 """The private catalog and job queue, shared by every app writer."""
+import json
 import sqlite3
 from contextlib import contextmanager
 from datetime import datetime, timedelta, timezone
@@ -241,3 +242,46 @@ def retry_job(db, job_id):
                       heartbeat_at = NULL, started_at = NULL, finished_at = NULL, error = NULL WHERE id = ?""",
                    (job_id,))
         return _get(db, "jobs", job_id)
+
+
+def finish_job(db, job_id, owner, records, now=None):
+    """Import a running owner's evidence and mark its job done in one transaction."""
+    with _write(db):
+        job = _owned(db, job_id, owner)
+        if not isinstance(records, list):
+            raise Invalid("records must be a list of row objects")
+        stamp = _stamp(now)
+        for index, row in enumerate(records):
+            if not isinstance(row, dict) or any(not isinstance(row.get(key, ""), str)
+                                                for key in ("title", "read_status", "other_reading")):
+                raise Invalid(f"record {index} must have text title, read_status and other_reading fields")
+            try:
+                encoded = json.dumps(row, ensure_ascii=False, allow_nan=False)
+            except (TypeError, ValueError) as error:
+                raise Invalid(f"record {index} must contain JSON values") from error
+            db.execute("""INSERT INTO observations
+                          (capture_id, attempt, row, read_status, title, other_reading, record, status, created_at)
+                          VALUES (?, ?, ?, ?, ?, ?, ?, 'open', ?)""",
+                       (job["capture_id"], job["attempts"], index, row.get("read_status", ""),
+                        row.get("title", ""), row.get("other_reading", ""), encoded, stamp))
+        db.execute("UPDATE jobs SET status = 'done', owner = NULL, finished_at = ?, error = NULL WHERE id = ?",
+                   (stamp, job_id))
+        return _get(db, "jobs", job_id)
+
+
+def observations(db, status="open", capture_id=None):
+    """List evidence with its original record and capture for review."""
+    _choice(status, ("open", "used", "dismissed", "superseded"), "observation status")
+    parameters = [status]
+    where = "status = ?"
+    if capture_id is not None:
+        _uuid(capture_id, "capture id")
+        where += " AND capture_id = ?"
+        parameters.append(capture_id)
+    result = []
+    for row in db.execute(f"SELECT * FROM observations WHERE {where} ORDER BY id", parameters):
+        observation = dict(row)
+        observation["record"] = json.loads(observation["record"])
+        observation["capture"] = _get(db, "captures", observation["capture_id"])
+        result.append(observation)
+    return result
