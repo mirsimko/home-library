@@ -1,7 +1,7 @@
 """JSON routes backed by the shared catalogue store."""
 from contextlib import closing
 
-from fastapi import APIRouter, Request
+from fastapi import APIRouter, HTTPException, Request
 from starlette.concurrency import run_in_threadpool
 from starlette.responses import JSONResponse, Response
 
@@ -74,8 +74,11 @@ def update_book(request: Request, id: int, body: dict):
 
 @router.post("/api/captures")
 async def add_capture(request: Request):
-    async with incoming(request) as (path, upload):
-        receipt = await run_in_threadpool(publish, request.app.state.data_root, path, upload, request.state.user)
+    try:
+        async with incoming(request) as (path, upload):
+            receipt = await run_in_threadpool(publish, request.app.state.data_root, path, upload, request.state.user)
+    except OSError as error:
+        raise HTTPException(503, "the photo could not be stored; retry the upload") from error
     return JSONResponse(receipt, status_code=201 if receipt["created"] else 200)
 
 
