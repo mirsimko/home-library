@@ -15,6 +15,8 @@ from python_multipart.multipart import parse_options_header
 from home_library import store
 from home_library.workspace import refuse_inside_checkout
 
+MAX_BYTES = 40_000_000
+
 FORMATS = {"JPEG": ("jpg", "image/jpeg"), "PNG": ("png", "image/png"), "WEBP": ("webp", "image/webp")}
 
 
@@ -66,6 +68,8 @@ class MultipartPhoto:
     def part_data(self, data, start, end):
         chunk = data[start:end]
         if self.is_file:
+            if self.bytes + len(chunk) > MAX_BYTES:
+                raise HTTPException(413, "the photo must be at most 40 MB")
             self.bytes += len(chunk)
             self.hash.update(chunk)
             self.target.write(chunk)
