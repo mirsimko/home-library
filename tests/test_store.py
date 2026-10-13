@@ -15,7 +15,7 @@ def test_open_creates_private_directories_and_migrates_once(tmp_path):
         assert db.execute("PRAGMA journal_mode").fetchone()[0] == "wal"
         assert db.execute("PRAGMA foreign_keys").fetchone()[0] == 1
         version = db.execute("PRAGMA user_version").fetchone()[0]
-        assert version == 3
+        assert version == 4
         db.execute("INSERT INTO locations (name, kind, created_at) VALUES ('Box A', 'box', '2026-01-01T00:00:00Z')")
     with store.open(root) as db:
         assert db.execute("PRAGMA user_version").fetchone()[0] == version
@@ -470,3 +470,38 @@ def test_an_invalid_batch_move_changes_no_book(db):
         with pytest.raises(error):
             store.move_books(db, ids, **changes, by="mover", now=NOW)
         assert store.book(db, original["id"]) == original
+
+
+def test_search_uses_trigrams_and_short_japanese_queries(db):
+    czech = typed_book(db, title="Měsíční člun", sort_key="a")
+    japanese = typed_book(db, title="ぐぽ", sort_key="b")
+    author = typed_book(db, title="The Glass Canoe", sort_key="c", author="Invented Author", series="Silver boats")
+    statements = []
+    db.set_trace_callback(statements.append)
+    assert store.search_books(db, "ěsí") == [czech]
+    assert any("books_fts" in sql and "MATCH" in sql for sql in statements)
+    assert db.execute("SELECT sql FROM sqlite_master WHERE name = 'books_fts'").fetchone()[0].find("trigram") >= 0
+    statements.clear()
+    assert store.search_books(db, "ぐぽ") == [japanese]
+    assert any("LIKE" in sql for sql in statements)
+    assert not any("MATCH" in sql for sql in statements)
+    db.set_trace_callback(None)
+    assert store.search_books(db, "ěs") == [czech]
+    assert store.search_books(db, "Author") == [author]
+    assert store.search_books(db, "boats") == [author]
+    assert store.search_books(db, "missing") == []
+    assert store.search_books(db, "a") == [czech, author]
+
+
+def test_search_filters_tags_state_location_and_pages_in_catalog_order(db):
+    store.add_location(db, "Shelf A", "shelf", now=NOW)
+    box = store.add_location(db, "Box B", "box", now=NOW)
+    first = typed_book(db, title="Alpha invented", sort_key="a", tags="moon, boats", state="Stored")
+    second = typed_book(db, title="Beta invented", sort_key="a", tags="moonlight", location_id=box["id"])
+    third = typed_book(db, title="Gamma invented", sort_key="c", tags="moon", location_id=box["id"], state="Gone")
+    assert store.search_books(db) == [first, second, third]
+    assert store.search_books(db, tag="moon") == [first, third]
+    assert store.search_books(db, state="Stored", tag="moon", location_id=1) == [first]
+    assert store.search_books(db, location_id=box["id"]) == [second, third]
+    assert store.search_books(db, "invented", state="Gone", tag="moon") == [third]
+    assert store.search_books(db, limit=1, offset=1) == [second]
