@@ -2,6 +2,7 @@
 import hashlib
 
 import pytest
+from fastapi.testclient import TestClient
 from store_helpers import CAPTURE_ID, SECOND_ID
 from web_helpers import client as client
 from web_helpers import photo
@@ -53,3 +54,55 @@ def test_upload_metadata_errors_use_store_messages_before_publishing(client, tmp
     assert response.status_code == 400 and response.json() == {"error": message}
     assert not [path for path in (tmp_path / "captures").iterdir() if path.is_file()]
 
+
+
+def test_retries_keep_the_stored_receipt_and_file_while_hash_conflicts_leave_it_untouched(client, tmp_path):
+    content = photo(size=(20, 10))
+    first = upload(client, content).json()
+    stored = tmp_path / "captures" / f"{CAPTURE_ID}.jpg"
+    before = stored.stat()
+    repeated = upload(client, content, kind="cover", state="Stored")
+    assert repeated.status_code == 200
+    assert repeated.json() == {**first, "created": False}
+    assert stored.stat().st_mtime_ns == before.st_mtime_ns and stored.stat().st_ino == before.st_ino
+    conflict = upload(client, photo("PNG", size=(10, 10)))
+    assert conflict.status_code == 409 and "different photo hash" in conflict.json()["error"]
+    assert stored.read_bytes() == content
+    assert not (tmp_path / "captures" / f"{CAPTURE_ID}.png").exists()
+
+
+def test_oversize_uploads_stop_before_reading_the_rest_of_the_body(client, tmp_path):
+    client.post("/api/locations", json={"name": "Shelf A", "kind": "shelf"})
+    consumed = []
+
+    def body():
+        yield (b'--test\r\nContent-Disposition: form-data; name="file"; filename="big.jpg"\r\n\r\n')
+        for index in range(42):
+            consumed.append(index)
+            yield b"x" * 1_000_000
+        yield b"\r\n--test--\r\n"
+
+    # TestClient buffers HTTPX generators; deliver separate ASGI chunks at the transport boundary.
+    chunks = iter(body())
+
+    async def streaming_app(scope, receive, send):
+        async def streamed_receive():
+            chunk = next(chunks, b"")
+            return {"type": "http.request", "body": chunk, "more_body": bool(chunk)}
+        await client.app(scope, streamed_receive, send)
+
+    streamed = TestClient(streaming_app)
+    response = streamed.post("/api/captures", headers={
+        "Content-Type": "multipart/form-data; boundary=test", "Sec-Fetch-Site": "same-origin"})
+    assert response.status_code == 413 and list(response.json()) == ["error"]
+    assert len(consumed) <= 41
+    assert not list((tmp_path / "captures" / ".incoming").glob("*.tmp"))
+
+
+def test_the_upload_limit_allows_exactly_forty_megabytes(client, tmp_path):
+    image = photo(size=(20, 10))
+    content = image + b"\0" * (40_000_000 - len(image))
+    response = upload(client, content)
+    assert response.status_code == 201
+    assert response.json()["capture"]["bytes"] == 40_000_000
+    assert (tmp_path / "captures" / f"{CAPTURE_ID}.jpg").stat().st_size == 40_000_000
