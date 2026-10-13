@@ -179,8 +179,8 @@ def build_records(merged: dict, candidates: dict | None = None, picks: dict | No
 
 def csv_cell(value) -> str:
     """Escape formula prefixes so a spreadsheet treats evidence as text."""
-    if value is True:
-        return "true"
+    if isinstance(value, bool):
+        return "true" if value else "false"
     text = str(value)
     return "'" + text if text[:1] in ("=", "+", "-", "@", "\t", "\r") else text
 
