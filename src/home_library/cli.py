@@ -58,6 +58,10 @@ def _parser():
     export.add_argument("--location", default="")
     command("gather", "Print one read's answers for all photos, in the shape the scoring tools take."
             ).add_argument("read_id")
+    serve = command("serve", "Serve the private catalogue and JSON API.")
+    serve.add_argument("--data-root", type=Path, help="private data directory (default: HL_DATA or ~/home-library)")
+    serve.add_argument("--port", type=int, default=8765)
+    serve.add_argument("--host", help="bind address (default: 127.0.0.1; other addresses must be explicit)")
     return parser
 
 
@@ -112,7 +116,11 @@ def _stage(args):
 
 
 def main(argv=None, *, run=subprocess.run, fetch=None, run_yaz=run_yaz_client):
-    args = _parser().parse_args(argv)
+    parser = _parser()
+    args = parser.parse_args(argv)
+    if args.command == "serve":
+        from home_library.web.serve import serve
+        return serve(args, parser)
     if args.command in ("run", "cover"):
         return _run(args, run=run, fetch=fetch, run_yaz=run_yaz)
     if args.command == "gather":
