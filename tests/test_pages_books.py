@@ -108,3 +108,11 @@ def test_after_a_move_the_search_that_was_showing_is_shown_again(client, tmp_pat
     moved = client.post("/books/move", data={"book_ids": ["1"], "location_id": "2", "state": "", "filter_tag": "night"}, headers=HX)
     assert "Paper Moon" in moved.text and "月とうさぎ" in moved.text and "Měsíční člun" not in moved.text
     assert "to Box 3" in moved.text
+
+
+def test_a_move_with_a_location_that_is_not_a_number_is_refused_before_anything_changes(client, tmp_path):
+    stock(tmp_path)
+    refused = client.post("/books/move", data={"book_ids": ["1"], "location_id": "box", "state": "Retired"}, headers=HX)
+    assert refused.status_code == 400 and "location" in refused.text and "<html" not in refused.text
+    with closing(store.open(tmp_path)) as db:
+        assert store.book(db, 1)["state"] == "Active" and store.book(db, 1)["version"] == 1
