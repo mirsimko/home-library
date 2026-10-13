@@ -5,7 +5,7 @@ import subprocess
 import sys
 from pathlib import Path
 
-from home_library import pipeline
+from home_library import catalog_cli, pipeline
 from home_library.lookup.nkcr import run_yaz_client
 from home_library.pick import run_pick
 from home_library.reader import BACKENDS, run_read
@@ -58,6 +58,7 @@ def _parser():
     export.add_argument("--location", default="")
     command("gather", "Print one read's answers for all photos, in the shape the scoring tools take."
             ).add_argument("read_id")
+    catalog_cli.add_commands(parser, commands)
     return parser
 
 
@@ -113,6 +114,8 @@ def _stage(args):
 
 def main(argv=None, *, run=subprocess.run, fetch=None, run_yaz=run_yaz_client):
     args = _parser().parse_args(argv)
+    if args.command == "catalog":
+        return catalog_cli.execute(args)
     if args.command in ("run", "cover"):
         return _run(args, run=run, fetch=fetch, run_yaz=run_yaz)
     if args.command == "gather":
