@@ -4,7 +4,7 @@ from datetime import datetime, timezone
 from fastapi import APIRouter, Request
 from PIL import Image
 
-from home_library import store
+from home_library import maintenance, store
 from home_library.web.api import call
 from home_library.web.files import photo_path
 from home_library.web.render import render
@@ -13,6 +13,7 @@ router = APIRouter()
 
 RECENT = 20
 SMALL_SIDE = 3000
+BACKUP_STALE = 2 * 86400
 
 
 def ago(seconds):
@@ -68,14 +69,29 @@ def panel_context(request):
             "failed": [job for job in jobs if job["status"] == "failed"], "recent": recent}
 
 
+def backup_context(request):
+    """When the last backup worked, whether that is too long ago, and why the latest one was refused, if it was."""
+    record = maintenance.backup_record(request.app.state.data_root)
+    now = datetime.now(timezone.utc)
+    try:
+        since = seconds_since(record["last_success"], now) if record.get("last_success") else None
+        failed = ago(seconds_since(record["failed_at"], now)) if record.get("failed_at") else None
+    except ValueError:
+        return {"state": "none", "last": None, "old": False, "failed": None, "error": None}
+    error = record.get("error") if failed else None
+    return {"state": "failed" if failed else "none" if since is None else "old" if since > BACKUP_STALE else "ok",
+            "last": ago(since) if since is not None else None, "old": since is not None and since > BACKUP_STALE,
+            "failed": failed, "error": error}
+
+
 @router.get("/status")
 def status(request: Request):
-    return render(request, "status.html", active="status", **panel_context(request))
+    return render(request, "status.html", active="status", backup=backup_context(request), **panel_context(request))
 
 
 @router.get("/status/panel")
 def panel(request: Request):
-    return render(request, "status_panel.html", **panel_context(request))
+    return render(request, "status_panel.html", backup=backup_context(request), **panel_context(request))
 
 
 @router.post("/status/jobs/{id}/retry")
