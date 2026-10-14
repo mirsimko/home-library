@@ -49,7 +49,7 @@ def backup(root, destination, *, run=subprocess.run, today=None):
     root = data_root(root)
     destination = refuse_inside_checkout(destination)
     targets = [destination, *(refuse_inside_checkout(destination / name)
-                             for name in ("catalog.db", "captures", "work"))]
+                             for name in ("catalog.db", "snapshots", "deleted", "captures", "work"))]
     if any(target.is_relative_to(root) or root.is_relative_to(target) for target in targets):
         raise ValueError("backup destination must not overlap the data root")
     destination.mkdir(parents=True, exist_ok=True)
