@@ -46,7 +46,7 @@ def _job(db, root, job, popen, heartbeat_interval, timeout, killpg, stop):
             finally:
                 done.set()
                 lease.join()
-            if stop.is_set():
+            if stop.is_set() and not (code == 0 and target.exists()):
                 _release(db, job)
                 return
             if lost.is_set():
