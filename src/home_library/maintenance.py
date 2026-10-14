@@ -7,7 +7,7 @@ import shutil
 import sqlite3
 import subprocess
 import tempfile
-from contextlib import closing
+from contextlib import closing, suppress
 from datetime import date, datetime, timedelta
 from pathlib import Path
 
@@ -46,9 +46,10 @@ def rotate_token(root=None):
 def backup(root, destination, *, run=subprocess.run, now=None, force=False):
     """Take a catalog snapshot and mirror photo evidence, refusing destructive overlaps and empty sources."""
     now = now or datetime.now()
-    today = now.date()
     root = data_root(root)
     destination = refuse_inside_checkout(destination)
+    earlier = _dated(destination / "snapshots", r"catalog-(\d{8})\.db")
+    today = max(now.date(), earlier[-1][0]) if earlier else now.date()  # a clock set back must not reuse an older day
     snapshot = destination / "snapshots" / f"catalog-{today:%Y%m%d}.db"
     kept = destination / "deleted" / f"{today:%Y%m%d}" / f"{now:%H%M%S}"
     _refuse_overlap(root, [destination, *(destination / name for name in ("catalog.db", "snapshots", "deleted", "captures", "work")),
@@ -57,23 +58,21 @@ def backup(root, destination, *, run=subprocess.run, now=None, force=False):
         raise ValueError(f"{root} has no catalog.db; is HL_DATA right? Nothing was backed up")
     destination.mkdir(parents=True, exist_ok=True)
     latest = destination / "catalog.db"
-    earlier = _dated(destination / "snapshots", r"catalog-\d{8}\.db")[-1:]
     with closing(store.open(root)) as db:
         if not force and (earlier or latest.is_file()):
-            _refuse_shrunken(db, earlier[0] if earlier else latest)
+            _refuse_shrunken(db, earlier[-1][1] if earlier else latest)
         if not earlier and latest.is_file():
             _keep_old_style(latest, destination / "snapshots", today)
         store.backup_database(db, snapshot)
     _copy_over(snapshot, destination / "catalog.db")
-    for old in _dated(destination / "snapshots", r"catalog-\d{8}\.db")[:-KEPT]:
+    for _, old in _dated(destination / "snapshots", r"catalog-(\d{8})\.db")[:-KEPT]:
         old.unlink()
     for name in ("captures", "work"):
         run(["rsync", "-a", "--delete", "--backup", f"--backup-dir={kept / name}",
              f"{root}/{name}/", f"{destination}/{name}/"],
             check=True, stdout=subprocess.DEVNULL, stderr=subprocess.PIPE)
-    oldest = f"{today - timedelta(days=KEPT - 1):%Y%m%d}"
-    for old in _dated(destination / "deleted", r"\d{8}"):
-        if old.name < oldest:
+    for day, old in _dated(destination / "deleted", r"(\d{8})"):
+        if day <= today - timedelta(days=KEPT):
             _forget(old)
 
 
@@ -127,8 +126,11 @@ def _forget(path):
 
 
 def _dated(directory, pattern):
-    """List the entries of directory whose names match the dated pattern, oldest first."""
-    if not directory.is_dir():
-        return []
-    return sorted((path for path in directory.iterdir() if re.fullmatch(pattern, path.name)),
-                  key=lambda path: path.name)
+    """List (day, entry) for the entries of directory named by pattern, whose group is a date, oldest first."""
+    found = []
+    for path in directory.iterdir() if directory.is_dir() else ():
+        match = re.fullmatch(pattern, path.name)
+        if match:
+            with suppress(ValueError):  # a name that only looks like a date is not ours
+                found.append((datetime.strptime(match[1], "%Y%m%d").date(), path))
+    return sorted(found)
