@@ -97,14 +97,34 @@ def test_a_failed_attempt_waits_5_then_15_minutes_before_the_job_is_claimed_agai
     assert store.claim_job(db, after(retry, days=1)) is None
 
 
-def test_a_waiting_job_does_not_hold_back_the_jobs_behind_it(db):
+def test_a_failed_attempt_holds_the_whole_queue_back_so_a_shared_cause_costs_one_attempt(db):
     capture(db)
     capture(db, SECOND_ID, now="2026-01-02T03:04:06Z")
     first = store.claim_job(db, NOW)
-    store.fail_job(db, first["id"], first["owner"], "rate limited", NOW)
-    assert store.claim_job(db, after(NOW, minutes=1))["capture_id"] == SECOND_ID
-    assert store.claim_job(db, after(NOW, minutes=2)) is None
+    store.fail_job(db, first["id"], first["owner"], "You've hit your usage limit", NOW)
+    assert store.claim_job(db, after(NOW, minutes=1)) is None  # an expired login or a usage limit hits every job
+    held = store.held_by(db, after(NOW, minutes=1))
+    assert held["id"] == first["id"] and held["error"] == "You've hit your usage limit"
+    assert held["retry_at"] == datetime(2026, 1, 2, 3, 9, 5, tzinfo=timezone.utc)
     assert store.claim_job(db, after(NOW, minutes=5))["capture_id"] == CAPTURE_ID
+    assert store.held_by(db, after(NOW, minutes=5)) is None
+
+
+def test_retry_skips_the_wait_of_a_job_that_holds_the_queue_and_keeps_its_attempts(db):
+    receipt = capture(db)
+    job = store.claim_job(db, NOW)
+    store.fail_job(db, job["id"], job["owner"], "network unreachable", NOW)
+    store.retry_job(db, receipt["job"]["id"])
+    assert store.held_by(db, after(NOW, minutes=1)) is None
+    assert store.claim_job(db, after(NOW, minutes=1))["attempts"] == 2
+
+
+def test_a_wait_longer_than_any_delay_comes_from_a_clock_jump_and_is_ignored(db):
+    capture(db)
+    job = store.claim_job(db, NOW)
+    store.fail_job(db, job["id"], job["owner"], "network unreachable", after(NOW, hours=3))
+    assert store.retry_at(capture(db)["job"], NOW) is None
+    assert store.claim_job(db, after(NOW, minutes=1))["attempts"] == 2
 
 
 def test_a_manual_retry_and_a_given_back_job_do_not_wait(db):
