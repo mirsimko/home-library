@@ -1,7 +1,7 @@
 """The status page: queue counts, the worker's heartbeat, failed jobs with a retry, and photo sizes."""
 from contextlib import closing
 
-from store_helpers import CAPTURE_ID, NOW, SECOND_ID, capture, fail_for_good
+from store_helpers import CAPTURE_ID, SECOND_ID, capture, fail_for_good
 from web_helpers import anonymous as anonymous
 from web_helpers import client as client
 from web_helpers import photo

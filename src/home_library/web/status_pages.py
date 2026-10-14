@@ -55,14 +55,17 @@ def panel_context(request):
     for receipt in call(request, store.captures)[:RECENT]:
         capture = receipt["capture"]
         size = image_size(photo_path(root, capture))
-        retry = store.retry_at(receipt["job"])
+        retry = store.retry_at(receipt["job"], now)
         recent.append({"id": capture["id"], "kind": capture["kind"], "location": names.get(capture["location_id"], ""),
                        "when": ago(seconds_since(capture["created_at"], now)), "job": receipt["job"]["status"],
-                       "retry": within((retry - now).total_seconds()) if retry and retry > now else None,
+                       "retry": within((retry - now).total_seconds()) if retry else None,
                        "open": receipt["open_observations"], "size": size,
                        "small": capture["kind"] == "shelf" and size is not None and max(size) < SMALL_SIDE})
     seen = health["worker_seen"]
-    return {"counts": {status: sum(job["status"] == status for job in jobs)
+    held = call(request, store.held_by, now)
+    if held:
+        held["wait"] = within((held["retry_at"] - now).total_seconds())
+    return {"held": held, "counts": {status: sum(job["status"] == status for job in jobs)
                        for status in ("queued", "running", "done", "failed")},
             "worker_seen": ago(seconds_since(seen, now)) if seen else None,
             "failed": [job for job in jobs if job["status"] == "failed"], "recent": recent}
@@ -79,9 +82,12 @@ def panel(request: Request):
 
 
 @router.post("/status/jobs/{id}/retry")
-def retry(request: Request, id: int):
+def retry(request: Request, id: int, then: str = "row"):
+    """Retry a failed job, or end the wait of the job that holds the queue (`then=panel` answers with the panel)."""
     try:
         job = call(request, store.retry_job, id)
     except store.Conflict as error:
         return render(request, "status_retried.html", status=409, job={"id": id}, error=str(error))
+    if then == "panel":
+        return render(request, "status_panel.html", **panel_context(request))
     return render(request, "status_retried.html", job=job, error=None)

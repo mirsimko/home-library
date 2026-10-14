@@ -7,6 +7,13 @@
       <span class="badge" data-done="{{ counts.done }}">{{ counts.done }} done</span>
       <span class="badge{% if counts.failed %} bad{% endif %}" data-failed="{{ counts.failed }}">{{ counts.failed }} failed</span>
     </p>
+    {% if held %}
+    <p class="notice" data-held="{{ held.id }}">
+      Reading is paused for {{ held.wait }} after a failed try (job #{{ held.id }}, try {{ held.attempts }} of 3):
+      <code style="white-space: pre-wrap; font-family: var(--mono)">{{ held.error }}</code>
+      <button type="button" hx-post="/status/jobs/{{ held.id }}/retry?then=panel" hx-target="#status-panel" hx-swap="outerHTML">Retry now</button>
+    </p>
+    {% endif %}
     <p class="muted small">
       {% if worker_seen %}Worker last seen {{ worker_seen }}, when it last reported on a photo.{% else %}The worker has not been seen yet.{% endif %}
     </p>
