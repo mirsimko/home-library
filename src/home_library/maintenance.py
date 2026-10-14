@@ -4,6 +4,7 @@ import os
 import re
 import secrets
 import shutil
+import sqlite3
 import subprocess
 import tempfile
 from contextlib import closing
@@ -56,6 +57,8 @@ def backup(root, destination, *, run=subprocess.run, today=None, force=False):
         raise ValueError(f"{root} has no catalog.db; is HL_DATA right? Nothing was backed up")
     destination.mkdir(parents=True, exist_ok=True)
     with closing(store.open(root)) as db:
+        if not force:
+            _refuse_shrunken(db, destination / "snapshots")
         snapshot = destination / "snapshots" / f"catalog-{today:%Y%m%d}.db"
         store.backup_database(db, snapshot)
     _copy_over(snapshot, destination / "catalog.db")
@@ -69,6 +72,22 @@ def backup(root, destination, *, run=subprocess.run, today=None, force=False):
     for old in _dated(destination / "deleted", r"\d{8}"):
         if old.name < oldest:
             shutil.rmtree(old)
+
+
+def _refuse_shrunken(db, snapshots):
+    """Raise when the catalog holds under half the books of the latest snapshot."""
+    latest = _dated(snapshots, r"catalog-\d{8}\.db")[-1:]
+    if not latest:
+        return
+    try:
+        with closing(sqlite3.connect(f"{latest[0].as_uri()}?mode=ro", uri=True)) as old:
+            before = old.execute("SELECT count(*) FROM books").fetchone()[0]
+    except sqlite3.Error as error:
+        raise ValueError(f"cannot read the latest snapshot {latest[0].name}: {error}; use --force to override") from error
+    now = db.execute("SELECT count(*) FROM books").fetchone()[0]
+    if now * 2 < before:
+        raise ValueError(f"the catalog has {now} of the {before} books in the latest snapshot ({latest[0].name}); "
+                         "refusing to back up, use --force to override")
 
 
 def _copy_over(source, target):

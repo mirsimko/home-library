@@ -47,9 +47,9 @@ def test_backup_keeps_the_latest_copy_and_a_dated_snapshot(tmp_path):
 def test_backup_keeps_only_the_fourteen_latest_snapshots(tmp_path):
     root, destination = source(tmp_path), tmp_path / "backup"
     snapshots = destination / "snapshots"
-    snapshots.mkdir(parents=True)
-    for day in range(1, 21):
-        (snapshots / f"catalog-202610{day:02d}.db").write_text("old")
+    run_backup(root, destination, "2026-10-01")
+    for day in range(2, 21):
+        shutil.copy(snapshots / "catalog-20261001.db", snapshots / f"catalog-202610{day:02d}.db")
     (snapshots / "notes.txt").write_text("not a snapshot")
     run_backup(root, destination, "2026-10-21")
     names = sorted(path.name for path in snapshots.iterdir())
@@ -138,7 +138,7 @@ def test_backup_refuses_a_catalog_with_under_half_the_books_of_the_latest_snapsh
     run_backup(root, destination, "2026-10-14")
     shrink(root, keep=1)
     called = []
-    with pytest.raises(ValueError, match=r"1 book.*4.*--force"):
+    with pytest.raises(ValueError, match=r"1 of the 4 books.*--force"):
         maintenance.backup(root, destination, run=lambda *a, **k: called.append(a), today=date(2026, 10, 15))
     assert called == [] and len(titles(destination / "catalog.db")) == 4
     assert [path.name for path in (destination / "snapshots").iterdir()] == ["catalog-20261014.db"]
@@ -160,3 +160,13 @@ def test_backup_accepts_an_empty_catalog_when_the_latest_snapshot_is_empty(tmp_p
     run_backup(root, destination, "2026-10-14")
     run_backup(root, destination, "2026-10-15")
     assert titles(destination / "catalog.db") == []
+
+
+def test_backup_names_an_unreadable_latest_snapshot_and_force_replaces_it(tmp_path):
+    root, destination = source(tmp_path), tmp_path / "backup"
+    (destination / "snapshots").mkdir(parents=True)
+    (destination / "snapshots" / "catalog-20261014.db").write_text("not a database")
+    with pytest.raises(ValueError, match=r"catalog-20261014\.db.*--force"):
+        run_backup(root, destination, "2026-10-15")
+    run_backup(root, destination, "2026-10-15", force=True)
+    assert titles(destination / "catalog.db") == ["Kniha 0"]
