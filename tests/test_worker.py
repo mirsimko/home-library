@@ -319,6 +319,26 @@ def test_stopping_kills_the_child_and_gives_its_job_back_to_the_queue(tmp_path):
     db.close()
 
 
+def test_a_stop_that_arrives_as_the_child_succeeds_keeps_its_records(tmp_path):
+    import threading
+
+    root = tmp_path / "private"
+    queued(root)
+    stop = threading.Event()
+
+    class FinishingChild(Child):
+        def wait(self, timeout=None):
+            stop.set()  # SIGTERM lands just after the child exited successfully
+            return 0
+
+    child = FinishingChild()
+    assert worker.run(root, once=True, popen=child, stop=stop) == 0
+    db = store.open(root)
+    assert capture(db)["job"]["status"] == "done"
+    assert [row["record"] for row in store.observations(db)] == child.rows
+    db.close()
+
+
 @pytest.mark.parametrize("interval", [5, 0.01])
 def test_idle_wait_is_injectable_and_can_be_interrupted(tmp_path, interval):
     import threading
