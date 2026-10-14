@@ -1,4 +1,5 @@
 """A backup keeps dated history, so a bad night cannot replace the only good copy."""
+import shutil
 import sqlite3
 from datetime import date
 
@@ -63,3 +64,34 @@ def test_rsync_keeps_deleted_and_replaced_photos_in_a_dated_directory(tmp_path):
         ["rsync", "-a", "--delete", "--backup", f"--backup-dir={destination}/deleted/20261015/{name}",
          f"{root}/{name}/", f"{destination}/{name}/"] for name in ("captures", "work")
     ]
+
+
+@pytest.mark.skipif(shutil.which("rsync") is None, reason="needs rsync")
+def test_real_rsync_mirrors_and_keeps_what_the_mirror_drops(tmp_path):
+    root, destination = source(tmp_path), tmp_path / "backup"
+    (root / "captures" / "gone.jpg").write_bytes(b"gone")
+    (root / "captures" / "changed.jpg").write_bytes(b"first")
+    (root / "work" / "p1").mkdir()
+    (root / "work" / "p1" / "tile.png").write_bytes(b"tile")
+    maintenance.backup(root, destination, today=date(2026, 10, 14))
+    (root / "captures" / "gone.jpg").unlink()
+    (root / "captures" / "changed.jpg").write_bytes(b"second")
+    shutil.rmtree(root / "work" / "p1")
+    maintenance.backup(root, destination, today=date(2026, 10, 15))
+    kept = destination / "deleted" / "20261015"
+    assert not (destination / "captures" / "gone.jpg").exists()
+    assert (destination / "captures" / "changed.jpg").read_bytes() == b"second"
+    assert (kept / "captures" / "gone.jpg").read_bytes() == b"gone"
+    assert (kept / "captures" / "changed.jpg").read_bytes() == b"first"
+    assert (kept / "work" / "p1" / "tile.png").read_bytes() == b"tile"
+    assert not (destination / "deleted" / "20261014").exists()
+
+
+def test_backup_drops_deleted_directories_older_than_fourteen_days(tmp_path):
+    root, destination = source(tmp_path), tmp_path / "backup"
+    deleted = destination / "deleted"
+    for name in ("20260930", "20261001", "20261002", "20261015", "elsewhere"):
+        (deleted / name).mkdir(parents=True)
+        (deleted / name / "photo.jpg").write_text("kept")
+    run_backup(root, destination, "2026-10-15")
+    assert sorted(path.name for path in deleted.iterdir()) == ["20261002", "20261015", "elsewhere"]
