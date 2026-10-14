@@ -279,7 +279,12 @@ tr.pick td { background: var(--accent-soft); }
 .keys { display: flex; flex-wrap: wrap; gap: 0.3rem 1rem; margin: 0.8rem 0; padding: 0.5rem 0.75rem; border: 1px dashed var(--line); border-radius: var(--radius); font-size: 0.8125rem; color: var(--muted); }
 kbd { font: 0.8125rem var(--mono); padding: 0.05rem 0.4rem; border: 1px solid var(--line); border-bottom-width: 2px; border-radius: 5px; background: var(--surface); color: var(--ink); }
 details > summary { cursor: pointer; min-height: 44px; display: flex; align-items: center; font-weight: 600; }
-.pager { display: flex; justify-content: space-between; align-items: center; gap: 0.6rem; margin: 0.4rem 0 0.8rem; }
+.pager { display: flex; flex-wrap: wrap; justify-content: space-between; align-items: center; gap: 0.4rem 0.6rem; margin: 0.4rem 0 0.8rem; }
+/* A phone has no keyboard, so the key hints give way to room for both buttons. */
+@media (max-width: 40rem) {
+  .pager .button { padding: 0 0.8rem; }
+  .pager kbd { display: none; }
+}
 .pager-links { display: flex; gap: 0.4rem; }
 
 .htmx-request .spinner, .spinner.htmx-request { opacity: 1; }
