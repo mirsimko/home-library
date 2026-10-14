@@ -2,9 +2,11 @@
 import hashlib
 import os
 import secrets
+import shutil
 import subprocess
 import tempfile
 from contextlib import closing
+from datetime import date
 from pathlib import Path
 
 from home_library import store
@@ -37,8 +39,9 @@ def rotate_token(root=None):
     return token
 
 
-def backup(root, destination, *, run=subprocess.run):
+def backup(root, destination, *, run=subprocess.run, today=None):
     """Take a catalog snapshot and mirror photo evidence, refusing destructive overlaps."""
+    today = today or date.today()
     root = data_root(root)
     destination = refuse_inside_checkout(destination)
     targets = [destination, *(refuse_inside_checkout(destination / name)
@@ -47,7 +50,20 @@ def backup(root, destination, *, run=subprocess.run):
         raise ValueError("backup destination must not overlap the data root")
     destination.mkdir(parents=True, exist_ok=True)
     with closing(store.open(root)) as db:
-        store.backup_database(db, destination / "catalog.db")
+        snapshot = destination / "snapshots" / f"catalog-{today:%Y%m%d}.db"
+        store.backup_database(db, snapshot)
+    _copy_over(snapshot, destination / "catalog.db")
     for name in ("captures", "work"):
         run(["rsync", "-a", "--delete", f"{root}/{name}/", f"{destination}/{name}/"],
             check=True, stdout=subprocess.DEVNULL, stderr=subprocess.PIPE)
+
+
+def _copy_over(source, target):
+    """Replace target with a copy of source in one step."""
+    with tempfile.NamedTemporaryFile(dir=target.parent, prefix=".catalog-", delete=False) as handle:
+        temporary = Path(handle.name)
+    try:
+        shutil.copyfile(source, temporary)
+        temporary.replace(target)
+    finally:
+        temporary.unlink(missing_ok=True)
