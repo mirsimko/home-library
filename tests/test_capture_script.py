@@ -151,3 +151,13 @@ def test_a_received_photo_lets_go_of_its_preview_and_its_file():
     assert result["item"] == {"state": "uploaded", "thumbnail": None, "file": None}
     assert result["waiting"]["thumbnail"] == "blob:other" and result["waiting"]["file"] == {"name": "y.jpg"}
     assert "revokeObjectURL" in SCRIPT.read_text()
+
+
+@node
+def test_a_released_photo_has_no_preview_left_to_show():
+    result = run_node("""
+      const item = { state: "uploaded", thumbnail: "blob:invented", file: {} };
+      const before = hl.hasPreview(item);
+      hl.releasePreview(item, () => {});
+      out({ before, after: hl.hasPreview(item), none: hl.hasPreview({ state: "waiting" }) });""")
+    assert result == {"before": True, "after": False, "none": False}
