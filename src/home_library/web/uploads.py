@@ -11,6 +11,7 @@ from PIL import Image, UnidentifiedImageError
 from python_multipart import MultipartParser
 from python_multipart.exceptions import MultipartParseError
 from python_multipart.multipart import parse_options_header
+from starlette.concurrency import run_in_threadpool
 
 from home_library import store
 from home_library.workspace import refuse_inside_checkout
@@ -87,6 +88,11 @@ class MultipartPhoto:
         self.complete = True
 
 
+def _sync(target):
+    target.flush()
+    os.fsync(target.fileno())
+
+
 @asynccontextmanager
 async def incoming(request):
     """Remove temporary bytes on success, rejection, or a disconnected upload."""
@@ -113,8 +119,7 @@ async def incoming(request):
             parser.finalize()
             if not upload.complete or upload.filename is None:
                 raise HTTPException(400, "a complete multipart file is required")
-            target.flush()
-            os.fsync(target.fileno())
+            await run_in_threadpool(_sync, target)
             yield path, upload
         except (MultipartParseError, UnicodeError) as error:
             raise HTTPException(400, "the multipart upload could not be read") from error
