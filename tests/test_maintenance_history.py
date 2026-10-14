@@ -111,3 +111,16 @@ def test_backup_refuses_history_directories_that_lead_into_the_data_root_or_a_ch
             maintenance.backup(root, destination, run=lambda *a, **k: called.append(a), today=date(2026, 10, 15))
         assert called == [] and not (checkout / "history").exists()
         (destination / name).unlink()
+
+
+def test_backup_refuses_a_data_root_without_a_catalog_and_creates_nothing(tmp_path):
+    root, destination = tmp_path / "wrong", tmp_path / "backup"
+    called = []
+    for force in (False, True):
+        with pytest.raises(ValueError, match="catalog.db"):
+            maintenance.backup(root, destination, run=lambda *a, **k: called.append(a),
+                               today=date(2026, 10, 15), force=force)
+    root.mkdir()
+    with pytest.raises(ValueError, match="catalog.db"):
+        run_backup(root, destination, "2026-10-15")
+    assert called == [] and list(root.iterdir()) == [] and not destination.exists()
