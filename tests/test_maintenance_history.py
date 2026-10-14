@@ -2,7 +2,7 @@
 import shutil
 import sqlite3
 from contextlib import closing
-from datetime import date
+from datetime import datetime
 
 import pytest
 from store_helpers import typed_book
@@ -25,7 +25,7 @@ def titles(path):
 
 
 def run_backup(root, destination, day, **options):
-    maintenance.backup(root, destination, run=lambda *a, **k: None, today=date.fromisoformat(day), **options)
+    maintenance.backup(root, destination, run=lambda *a, **k: None, now=datetime.fromisoformat(f"{day}T03:30:00"), **options)
 
 
 def test_backup_keeps_the_latest_copy_and_a_dated_snapshot(tmp_path):
@@ -60,7 +60,7 @@ def test_rsync_keeps_deleted_and_replaced_photos_in_a_dated_directory(tmp_path):
     root, destination = source(tmp_path), tmp_path / "backup"
     calls = []
     maintenance.backup(root, destination, run=lambda command, **kwargs: calls.append(command),
-                       today=date(2026, 10, 15))
+                       now=datetime(2026, 10, 15, 3, 30))
     assert calls == [
         ["rsync", "-a", "--delete", "--backup", f"--backup-dir={destination}/deleted/20261015/{name}",
          f"{root}/{name}/", f"{destination}/{name}/"] for name in ("captures", "work")
@@ -74,11 +74,11 @@ def test_real_rsync_mirrors_and_keeps_what_the_mirror_drops(tmp_path):
     (root / "captures" / "changed.jpg").write_bytes(b"first")
     (root / "work" / "p1").mkdir()
     (root / "work" / "p1" / "tile.png").write_bytes(b"tile")
-    maintenance.backup(root, destination, today=date(2026, 10, 14))
+    maintenance.backup(root, destination, now=datetime(2026, 10, 14, 3, 30))
     (root / "captures" / "gone.jpg").unlink()
     (root / "captures" / "changed.jpg").write_bytes(b"second")
     shutil.rmtree(root / "work" / "p1")
-    maintenance.backup(root, destination, today=date(2026, 10, 15))
+    maintenance.backup(root, destination, now=datetime(2026, 10, 15, 3, 30))
     kept = destination / "deleted" / "20261015"
     assert not (destination / "captures" / "gone.jpg").exists()
     assert (destination / "captures" / "changed.jpg").read_bytes() == b"second"
@@ -109,7 +109,7 @@ def test_backup_refuses_history_directories_that_lead_into_the_data_root_or_a_ch
         (destination / name).symlink_to(target)
         called = []
         with pytest.raises(ValueError):
-            maintenance.backup(root, destination, run=lambda *a, **k: called.append(a), today=date(2026, 10, 15))
+            maintenance.backup(root, destination, run=lambda *a, **k: called.append(a), now=datetime(2026, 10, 15, 3, 30))
         assert called == [] and not (checkout / "history").exists()
         (destination / name).unlink()
 
@@ -120,7 +120,7 @@ def test_backup_refuses_a_data_root_without_a_catalog_and_creates_nothing(tmp_pa
     for force in (False, True):
         with pytest.raises(ValueError, match="catalog.db"):
             maintenance.backup(root, destination, run=lambda *a, **k: called.append(a),
-                               today=date(2026, 10, 15), force=force)
+                               now=datetime(2026, 10, 15, 3, 30), force=force)
     root.mkdir()
     with pytest.raises(ValueError, match="catalog.db"):
         run_backup(root, destination, "2026-10-15")
@@ -139,7 +139,7 @@ def test_backup_refuses_a_catalog_with_under_half_the_books_of_the_latest_snapsh
     shrink(root, keep=1)
     called = []
     with pytest.raises(ValueError, match=r"1 of the 4 books.*--force"):
-        maintenance.backup(root, destination, run=lambda *a, **k: called.append(a), today=date(2026, 10, 15))
+        maintenance.backup(root, destination, run=lambda *a, **k: called.append(a), now=datetime(2026, 10, 15, 3, 30))
     assert called == [] and len(titles(destination / "catalog.db")) == 4
     assert [path.name for path in (destination / "snapshots").iterdir()] == ["catalog-20261014.db"]
     run_backup(root, destination, "2026-10-15", force=True)

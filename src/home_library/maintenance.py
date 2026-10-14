@@ -8,7 +8,7 @@ import sqlite3
 import subprocess
 import tempfile
 from contextlib import closing
-from datetime import date, timedelta
+from datetime import datetime, timedelta
 from pathlib import Path
 
 from home_library import store
@@ -43,9 +43,10 @@ def rotate_token(root=None):
     return token
 
 
-def backup(root, destination, *, run=subprocess.run, today=None, force=False):
+def backup(root, destination, *, run=subprocess.run, now=None, force=False):
     """Take a catalog snapshot and mirror photo evidence, refusing destructive overlaps and empty sources."""
-    today = today or date.today()
+    now = now or datetime.now()
+    today = now.date()
     root = data_root(root)
     destination = refuse_inside_checkout(destination)
     targets = [destination, *(refuse_inside_checkout(destination / name)
