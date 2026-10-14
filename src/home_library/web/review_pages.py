@@ -229,7 +229,10 @@ def dismiss(request: Request, id: int):
 def attach_search(request: Request, id: int, q: str = ""):
     names = {row["id"]: row["name"] for row in call(request, store.locations)}
     books = call(request, store.search_books, q.strip(), None, None, None, 8) if q.strip() else None
-    return render(request, "review_attach_results.html", observation_id=id, books=books, names=names)
+    group = call(request, store.observation, id)["capture"]["group_id"]
+    paired = group is not None and any(o["capture"]["group_id"] == group and o["id"] != id
+                                       for o in call(request, store.observations))
+    return render(request, "review_attach_results.html", observation_id=id, books=books, names=names, paired=paired)
 
 
 @router.post("/review/{id}/attach")

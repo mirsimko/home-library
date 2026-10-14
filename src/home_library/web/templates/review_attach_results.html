@@ -10,7 +10,7 @@
       <span class="title"><span{{ lang(book.language) }}>{{ book.title }}</span>
         <span class="muted small">{{ [book.author, names[book.location_id], book.state]|select|join(" · ") }}</span></span>
       <button type="button" hx-post="/review/{{ observation_id }}/attach" hx-vals='{"book_id": {{ book.id }}}'
-              hx-include="[name='also']" hx-target="#notice" hx-swap="innerHTML">Attach</button>
+              {% if paired %}hx-include="[name='also']" {% endif %}hx-target="#notice" hx-swap="innerHTML">Attach</button>
     </div>
   </li>
   {% endfor %}
