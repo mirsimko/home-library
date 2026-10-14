@@ -321,6 +321,7 @@ def finish_job(db, job_id, owner, records, now=None):
                    (stamp, job_id))
         return _get(db, "jobs", job_id)
 
+
 def observations(db, status="open", capture_id=None):
     """List evidence with its original record and capture for review."""
     _choice(status, ("open", "used", "dismissed", "superseded"), "observation status")
@@ -641,6 +642,8 @@ def backup_database(db, destination):
         temporary.replace(destination)
     finally:
         temporary.unlink(missing_ok=True)
+
+
 def capture(db, id):
     """Read a stored receipt with the number of observations still open."""
     result = _receipt(db, id, False)
