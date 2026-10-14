@@ -95,3 +95,19 @@ def test_backup_drops_deleted_directories_older_than_fourteen_days(tmp_path):
         (deleted / name / "photo.jpg").write_text("kept")
     run_backup(root, destination, "2026-10-15")
     assert sorted(path.name for path in deleted.iterdir()) == ["20261002", "20261015", "elsewhere"]
+
+
+@pytest.mark.parametrize("name", ["snapshots", "deleted"])
+def test_backup_refuses_history_directories_that_lead_into_the_data_root_or_a_checkout(tmp_path, name):
+    root, destination = source(tmp_path), tmp_path / "backup"
+    checkout = tmp_path / "repo"
+    checkout.mkdir()
+    (checkout / ".git").write_text("gitdir: elsewhere")
+    destination.mkdir()
+    for target in (root / "captures", checkout / "history"):
+        (destination / name).symlink_to(target)
+        called = []
+        with pytest.raises(ValueError):
+            maintenance.backup(root, destination, run=lambda *a, **k: called.append(a), today=date(2026, 10, 15))
+        assert called == [] and not (checkout / "history").exists()
+        (destination / name).unlink()
