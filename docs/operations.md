@@ -61,7 +61,7 @@ schtasks /create /tn HomeLibraryWSL /sc onstart /ru ai /rp * /tr "wsl.exe -d Ubu
 
 ### The subscriptions
 
-The worker runs `codex` and `pi` as `ai`, headless. When a login expires, jobs fail with the tool's own message, which the Status page shows. Log in again in WSL (`codex login`, and pi's own login), then press Retry on the failed jobs. A failed attempt is tried again by itself after 5 minutes, and the next after 15 more, so a short outage or rate limit may clear without help; only a job that failed all 3 attempts waits for Retry, which starts it at once.
+The worker runs `codex` and `pi` as `ai`, headless. When a login expires, jobs fail with the tool's own message, which the Status page shows. Log in again in WSL (`codex login`, and pi's own login), then press Retry on the failed jobs. After a failed attempt the whole queue pauses: the job is tried again by itself after 5 minutes, and the next time after 15 more, and no other photo is read meanwhile. A short outage or rate limit may clear without help, and a cause that hits every photo (an expired login, a usage limit) costs one try, not one per photo. The Status page says why reading is paused; "Retry now" ends the pause at once. Only a job that failed all 3 attempts waits for Retry.
 
 ## Agents
 
@@ -112,6 +112,6 @@ A worker restart kills a running read; its job is picked up again once the heart
 
 ## When something is wrong
 
-- **The Status page** shows the queue, the worker's last heartbeat and every failed job with its error. Retry from there.
+- **The Status page** shows the queue, the worker's last heartbeat, why reading is paused if it is, and every failed job with its error. Retry from there.
 - **Logs:** `journalctl --user -u hl-web -u hl-worker`. They name captures and jobs by id, never a title.
 - **`/health`** answers without a login and gives no titles, so it can be checked from anywhere on the tailnet.
