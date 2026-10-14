@@ -1,5 +1,6 @@
 """Private data maintenance that never puts secrets in a checkout."""
 import hashlib
+import json
 import os
 import re
 import secrets
@@ -8,13 +9,14 @@ import sqlite3
 import subprocess
 import tempfile
 from contextlib import closing, suppress
-from datetime import date, datetime, timedelta
+from datetime import date, datetime, timedelta, timezone
 from pathlib import Path
 
 from home_library import store
 from home_library.workspace import refuse_inside_checkout
 
 KEPT = 14
+RECORD = "backup.json"
 
 
 def data_root(root=None):
@@ -28,25 +30,62 @@ def rotate_token(root=None):
     refuse_inside_checkout(root / "agent-token")
     root.mkdir(parents=True, exist_ok=True)
     token = secrets.token_urlsafe(32)
-    temporary = None
-    try:
-        with tempfile.NamedTemporaryFile(mode="w", encoding="utf-8", dir=root, delete=False) as handle:
-            temporary = Path(handle.name)
-            os.fchmod(handle.fileno(), 0o600)
-            handle.write(hashlib.sha256(token.encode("utf-8")).hexdigest() + "\n")
-            handle.flush()
-            os.fsync(handle.fileno())
-        temporary.replace(root / "agent-token")
-    finally:
-        if temporary is not None:
-            temporary.unlink(missing_ok=True)
+    _write_private(root / "agent-token", hashlib.sha256(token.encode("utf-8")).hexdigest() + "\n")
     return token
 
 
+def _write_private(target, text):
+    """Replace target atomically with a file only its owner can read."""
+    temporary = None
+    try:
+        with tempfile.NamedTemporaryFile(mode="w", encoding="utf-8", dir=target.parent, delete=False) as handle:
+            temporary = Path(handle.name)
+            os.fchmod(handle.fileno(), 0o600)
+            handle.write(text)
+            handle.flush()
+            os.fsync(handle.fileno())
+        temporary.replace(target)
+    finally:
+        if temporary is not None:
+            temporary.unlink(missing_ok=True)
+
+
+def backup_record(root):
+    """The outcome of the last backup (last_success, failed_at, error); empty when none was recorded or it is damaged."""
+    try:
+        record = json.loads((Path(root) / RECORD).read_text(encoding="utf-8"))
+    except (OSError, ValueError):
+        return {}
+    return record if isinstance(record, dict) else {}
+
+
+def _record(root, now, error=None):
+    """Note in the data root that a backup succeeded at now, or failed with error; a success clears the failure."""
+    refuse_inside_checkout(root / RECORD)
+    stamp = now.astimezone(timezone.utc).isoformat(timespec="seconds").replace("+00:00", "Z")
+    last = backup_record(root).get("last_success")
+    record = {"last_success": last if error else stamp, "failed_at": stamp if error else None, "error": error}
+    _write_private(root / RECORD, json.dumps(record) + "\n")
+
+
 def backup(root, destination, *, run=subprocess.run, now=None, force=False):
-    """Take a catalog snapshot and mirror photo evidence, refusing destructive overlaps and empty sources."""
+    """Take a catalog snapshot and mirror photo evidence, refusing destructive overlaps and empty sources.
+
+    The outcome is noted in the data root (backup.json) for the Status page, unless the root has no catalog.
+    """
     now = now or datetime.now()
     root = data_root(root)
+    try:
+        _backup(root, destination, run, now, force)
+    except Exception as error:
+        if (root / "catalog.db").is_file():
+            with suppress(OSError, ValueError):
+                _record(root, now, " ".join(str(error).splitlines()) or type(error).__name__)
+        raise
+    _record(root, now)
+
+
+def _backup(root, destination, run, now, force):
     destination = refuse_inside_checkout(destination)
     earlier = _dated(destination / "snapshots", r"catalog-(\d{8})\.db")
     today = max(now.date(), earlier[-1][0]) if earlier else now.date()  # a clock set back must not reuse an older day
