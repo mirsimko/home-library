@@ -9,7 +9,7 @@ Most books are meant to enter the catalog from phone photos read by a vision-cap
 Early. As of 2026-10-13 the requirements are settled and the design is a draft with open decisions. Built so far:
 
 - A pipeline that reads shelf, cover and barcode photos and writes review-ready records to plain files.
-- A small web app on top of it: the phones send photos, a worker runs the pipeline on each, and the iPad or laptop reviews the results into a SQLite catalog. It is not yet tried on the real phones and iPad; the checks it rests on are listed in [app-spikes.md](docs/research/app-spikes.md).
+- A small web app on top of it: the phones (a Pixel 8 and a Galaxy A55) send photos, a worker runs the pipeline on each, and the iPad (9th generation, 10.2 in, 810 x 1080 CSS px) or a laptop reviews the results into a SQLite catalog. It is not yet tried on the real phones and iPad; the checks it rests on are listed in [app-spikes.md](docs/research/app-spikes.md).
 
 ## Running the shelf-photo pipeline
 
@@ -32,7 +32,7 @@ This reads the photo twice with two different models, accepts the titles both gi
 - [docs/research/existing-home-library-tools.md](docs/research/existing-home-library-tools.md): which existing tools could hold the catalog, and what would still have to be built around each.
 - [docs/research/book-metadata-sources.md](docs/research/book-metadata-sources.md): which free sources return metadata for children's books in the three languages, tested with real calls.
 - [docs/research/shelf-photo-reading-test.md](docs/research/shelf-photo-reading-test.md): how well five vision models read titles from real shelf photos, as whole photos and as tiles.
-- [docs/research/app-framework.md](docs/research/app-framework.md): which way to build the app for two Android phones and an iPad without a Mac.
+- [docs/research/app-framework.md](docs/research/app-framework.md): which way to build the app for two Android phones (a Pixel 8 and a Galaxy A55) and an iPad (9th generation, 10.2 in) without a Mac.
 - [docs/research/app-spikes.md](docs/research/app-spikes.md): the checks the app rests on, and what was found on the home machine.
 
 ## How these documents were made

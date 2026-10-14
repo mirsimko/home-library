@@ -57,7 +57,7 @@ The two scheduled tasks that keep WSL alive today (`WSLKeeper`, `WSLKeepalive`) 
 schtasks /create /tn HomeLibraryWSL /sc onstart /ru ai /rp * /tr "wsl.exe -d Ubuntu26 --exec /usr/bin/sleep infinity"
 ```
 
-`/rp *` asks for the password of `ai`; a task that runs without a logged-in user needs it stored. Then reboot without logging in and check from a phone that `/health` answers. This is the phase 0 host test; until it passes, the app is only up while someone is logged in on battlebox.
+`/rp *` asks for the password of `ai`; a task that runs without a logged-in user needs it stored. Then reboot without logging in and check from a phone (the Pixel 8 or the Galaxy A55) that `/health` answers. This is the phase 0 host test; until it passes, the app is only up while someone is logged in on battlebox.
 
 ### The subscriptions
 

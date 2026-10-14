@@ -30,11 +30,11 @@ Provenance: the host facts below were read on battlebox over SSH by Claude Code 
 
 **Open.** Method, once the app is up:
 
-1. On each phone, open `/capture`, choose a location and *Shelf*.
+1. On each phone (the Pixel 8 and the Galaxy A55), open `/capture`, choose a location and *Shelf*.
 2. Take one shelf photo with the camera button, then pick the same shelf's photo from the gallery with the gallery button.
-3. After each upload the page shows the size the server received, and warns when the longer side is under 3000 pixels. The Status page lists it too, with the EXIF orientation.
+3. After each upload the page shows the size the server received, and warns when the longer side of a shelf photo is under 3000 pixels (a cover or barcode photo can be any size). The Status page lists it too, with the EXIF orientation.
 4. Compare with the original in the camera roll: 4080x3072 on the phone used for the 2026-10-05 test, JPEG, sharp.
-5. Install the app to the home screen on both phones (browser menu, *Install* or *Add to home screen*), and open it on the iPad in Safari.
+5. Install the app to the home screen on both phones (browser menu, *Install* or *Add to home screen*), and open it on the iPad (9th generation, 10.2 in, 810 x 1080 CSS px) in Safari.
 
 **Kill criterion:** if both ways in deliver a smaller photo than the original, the Expo Android capture app (plan, phase 4) comes next.
 
@@ -44,7 +44,7 @@ Provenance: the host facts below were read on battlebox over SSH by Claude Code 
 
 ## 4. Store: is Grist good enough to replace the review pages?
 
-**Open, one evening at most.** Put 20 rows of an existing `records.csv` into Grist and into Google Sheets, correct them on the iPad with the keyboard, and note what was awkward. The app's own pages are built already, so Grist now has to be clearly better to win.
+**Open, one evening at most.** Put 20 rows of an existing `records.csv` into Grist and into Google Sheets, correct them on the iPad (9th generation, 10.2 in) with the keyboard, and note what was awkward. The app's own pages are built already, so Grist now has to be clearly better to win.
 
 ## 5. Answer key
 
