@@ -1,7 +1,7 @@
 """The status page: queue counts, the worker's heartbeat, failed jobs with a retry, and photo sizes."""
 from contextlib import closing
 
-from store_helpers import CAPTURE_ID, SECOND_ID, capture, fail_for_good
+from store_helpers import CAPTURE_ID, NOW, SECOND_ID, capture, fail_for_good
 from web_helpers import anonymous as anonymous
 from web_helpers import client as client
 from web_helpers import photo
@@ -61,6 +61,20 @@ def test_failed_jobs_show_their_error_and_can_be_retried(client, tmp_path):
     assert again.status_code == 409 and "only a failed job" in again.text
     assert client.post("/status/jobs/99/retry").status_code == 404
     assert 'data-failed="0"' in client.get("/status/panel").text
+
+
+def test_a_job_waiting_out_its_retry_delay_says_when_it_may_run_again(client, tmp_path):
+    upload(client, CAPTURE_ID, (400, 300))
+    upload(client, SECOND_ID, (400, 300))
+    with closing(store.open(tmp_path)) as db:
+        for _ in range(2):
+            job = store.claim_job(db)
+            store.fail_job(db, job["id"], job["owner"], "rate limited", NOW if job["capture_id"] == SECOND_ID else None)
+        waiting = store.jobs(db)[0]
+    page = client.get("/status").text
+    assert 'data-queued="2"' in page and 'data-failed="0"' in page
+    assert page.count("retrying after") == 1
+    assert f"retrying after {store.retry_at(waiting):%H:%M} UTC" in page
 
 
 def test_status_pages_need_access(anonymous):
