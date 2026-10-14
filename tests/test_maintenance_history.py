@@ -281,3 +281,20 @@ def test_force_still_keeps_an_unreadable_old_style_catalog_before_replacing_it(t
     assert titles(destination / "catalog.db") == ["Kniha 0"]
     kept = [path for path in (destination / "snapshots").iterdir() if path.read_bytes() == b"not a database"]
     assert len(kept) == 1
+
+
+def test_a_clock_set_back_does_not_overwrite_an_older_snapshot_or_date_the_run_earlier(tmp_path):
+    root, destination = source(tmp_path, books=2), tmp_path / "backup"
+    run_backup(root, destination, "2026-10-10")
+    db = store.open(root)
+    typed_book(db, title="Třetí")
+    db.close()
+    run_backup(root, destination, "2026-10-15")
+    calls = []
+    maintenance.backup(root, destination, run=lambda command, **kwargs: calls.append(command),
+                       now=datetime(2026, 10, 13, 3, 30))
+    snapshots = destination / "snapshots"
+    assert sorted(path.name for path in snapshots.iterdir()) == ["catalog-20261010.db", "catalog-20261015.db"]
+    assert titles(snapshots / "catalog-20261010.db") == ["Kniha 0", "Kniha 1"]
+    assert titles(snapshots / "catalog-20261015.db") == ["Kniha 0", "Kniha 1", "Třetí"]
+    assert calls[0][4] == f"--backup-dir={destination}/deleted/20261015/033000/captures"
