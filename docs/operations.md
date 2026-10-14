@@ -61,7 +61,7 @@ schtasks /create /tn HomeLibraryWSL /sc onstart /ru ai /rp * /tr "wsl.exe -d Ubu
 
 ### The subscriptions
 
-The worker runs `codex` and `pi` as `ai`, headless. When a login expires, jobs fail with the tool's own message, which the Status page shows. Log in again in WSL (`codex login`, and pi's own login), then press Retry on the failed jobs.
+The worker runs `codex` and `pi` as `ai`, headless. When a login expires, jobs fail with the tool's own message, which the Status page shows. Log in again in WSL (`codex login`, and pi's own login), then press Retry on the failed jobs. A failed attempt is tried again by itself after 5 minutes, and the next after 15 more, so a short outage or rate limit may clear without help; only a job that failed all 3 attempts waits for Retry, which starts it at once.
 
 ## Agents
 
