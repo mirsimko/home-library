@@ -19,8 +19,9 @@ def add_commands(parser, commands):
     worker_command.add_argument("--once", action="store_true")
     data_root(worker_command)
     data_root(commands.add_parser("token", help="Rotate and print the agent token."))
-    backup = commands.add_parser("backup", help="Snapshot the catalog and mirror private photos and work.")
+    backup = commands.add_parser("backup", help="Snapshot the catalog and mirror private photos and work, keeping what the mirror drops.")
     backup.add_argument("destination", type=Path)
+    backup.add_argument("--force", action="store_true", help="Back up a catalog that has lost over half its books.")
     data_root(backup)
     catalog = commands.add_parser("catalog", help="Read and change the catalog.")
     data_root(catalog)
@@ -138,7 +139,7 @@ def execute(args, *, run=subprocess.run, popen=subprocess.Popen):
         if args.command == "token":
             print(maintenance.rotate_token(args.data_root))
         elif args.command == "backup":
-            maintenance.backup(args.data_root, args.destination, run=run)
+            maintenance.backup(args.data_root, args.destination, run=run, force=args.force)
         else:
             with closing(store.open(args.data_root)) as db:
                 _catalog(db, args)

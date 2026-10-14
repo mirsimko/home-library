@@ -14,7 +14,6 @@ from pathlib import Path
 from home_library import store
 from home_library.workspace import refuse_inside_checkout
 
-
 KEPT = 14
 
 
