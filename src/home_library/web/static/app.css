@@ -231,6 +231,7 @@ tr.pick td { background: var(--accent-soft); }
   border-radius: var(--radius);
 }
 .photo img { width: 4.5rem; height: 4.5rem; object-fit: cover; border-radius: 6px; background: var(--sunk); }
+.photo.no-preview { grid-template-columns: 1fr; }
 .photo .top { display: flex; flex-wrap: wrap; gap: 0.4rem 0.6rem; align-items: center; }
 .photo .detail { font-size: 0.875rem; color: var(--muted); margin-top: 0.2rem; }
 .photo .detail.warn { color: var(--warn); }

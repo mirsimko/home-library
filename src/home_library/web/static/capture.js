@@ -54,6 +54,11 @@
     item.file = null;
   }
 
+  // Whether the thumbnail still has a picture behind it: not once the phone has let go of the file.
+  function hasPreview(item) {
+    return Boolean(item.thumbnail);
+  }
+
   // The phase 0 capture test: the camera's original is well over 3000 px on its long side.
   function isSmall(width, height) {
     return Math.max(width, height) < SMALL_SIDE;
@@ -164,7 +169,7 @@
   }
 
   const logic = {
-    RETRY_DELAYS, statusOf, isFinal, isUnreceived, releasePreview, isSmall, startFlow, assign, askBarcode, nextBook, prompt,
+    RETRY_DELAYS, statusOf, isFinal, isUnreceived, releasePreview, hasPreview, isSmall, startFlow, assign, askBarcode, nextBook, prompt,
     retryDelay, isRetryable, createUploader,
   };
   if (typeof module !== "undefined" && module.exports) module.exports = logic;
@@ -229,10 +234,14 @@
       document.getElementById("photos").prepend(li);
     }
     const li = item.element;
-    if (item.state === "uploaded" && item.thumbnail) {
-      releasePreview(item, (url) => URL.revokeObjectURL(url));
-      li.querySelector("img").removeAttribute("src"); // an empty square stays; the status says what it is
-    }
+    if (item.state === "uploaded") releasePreview(item, (url) => URL.revokeObjectURL(url));
+    // Once released there is nothing to show, and a broken-image icon would be worse than none: the thumbnail
+    // goes and the status text takes its room. (The server's copy is a full camera original, too big to fetch
+    // for a thumbnail.)
+    const thumb = li.querySelector("img");
+    thumb.hidden = !hasPreview(item);
+    if (thumb.hidden) thumb.removeAttribute("src");
+    li.classList.toggle("no-preview", thumb.hidden);
     const label = statusOf(item);
     const badge = li.querySelector(".badge");
     badge.textContent = label;
