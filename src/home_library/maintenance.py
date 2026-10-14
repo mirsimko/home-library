@@ -65,7 +65,7 @@ def backup(root, destination, *, run=subprocess.run, now=None, force=False):
     for old in _dated(destination / "snapshots", r"catalog-\d{8}\.db")[:-KEPT]:
         old.unlink()
     for name in ("captures", "work"):
-        run(["rsync", "-a", "--delete", "--backup", f"--backup-dir={destination}/deleted/{today:%Y%m%d}/{name}",
+        run(["rsync", "-a", "--delete", "--backup", f"--backup-dir={destination}/deleted/{today:%Y%m%d}/{now:%H%M%S}/{name}",
              f"{root}/{name}/", f"{destination}/{name}/"],
             check=True, stdout=subprocess.DEVNULL, stderr=subprocess.PIPE)
     oldest = f"{today - timedelta(days=KEPT - 1):%Y%m%d}"
