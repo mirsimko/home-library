@@ -491,3 +491,21 @@ def test_a_location_that_starts_with_a_dash_cannot_be_read_as_an_option(tmp_path
     (args, _), = child.calls
     assert args[-1] == "--location=-x"
     assert cli._parser().parse_args(args[3:]).location == "-x"  # the real command line parser agrees
+
+
+@pytest.mark.parametrize("stderr", [
+    "x.jpg: ReadError: codex is not installed",
+    "x.jpg: ReadError: pi is not installed",
+    "x.jpg: Unavailable: the yaz-client program is not installed",
+    "x.jpg: codex not found or could not be run: [Errno 2] No such file or directory",
+])
+def test_a_missing_tool_fails_the_job_at_once_instead_of_burning_every_attempt(tmp_path, stderr):
+    root = tmp_path / "private"
+    queued(root)
+    assert worker.run(root, once=True, popen=Child(returncode=1, stderr=stderr)) == 0
+    db = store.open(root)
+    job = capture(db)["job"]
+    assert job["status"] == "failed" and job["attempts"] == 1
+    assert "child exited with status 1" in job["error"] and stderr in job["error"]
+    assert store.claim_job(db) is None
+    db.close()
