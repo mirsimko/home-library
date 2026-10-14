@@ -75,6 +75,37 @@ def test_failure_requeues_twice_then_stays_visible_until_retry(db):
     assert store.claim_job(db, NOW)["attempts"] == 1
 
 
+def after(stamp, **delta):
+    return (datetime.fromisoformat(stamp.replace("Z", "+00:00")) + timedelta(**delta)).isoformat().replace("+00:00", "Z")
+
+
+def test_a_failed_attempt_waits_5_then_15_minutes_before_the_job_is_claimed_again(db):
+    capture(db)
+    first = store.claim_job(db, NOW)
+    store.fail_job(db, first["id"], first["owner"], "rate limited", NOW)
+    assert store.claim_job(db, after(NOW, minutes=4, seconds=59)) is None
+    retry = after(NOW, minutes=5)
+    second = store.claim_job(db, retry)
+    assert second["id"] == first["id"] and second["attempts"] == 2
+    store.fail_job(db, second["id"], second["owner"], "rate limited", retry)
+    assert store.claim_job(db, after(retry, minutes=14, seconds=59)) is None
+    third = store.claim_job(db, after(retry, minutes=15))
+    assert third["attempts"] == 3
+    final = store.fail_job(db, third["id"], third["owner"], "rate limited", after(retry, minutes=15))
+    assert final["status"] == "failed"
+    assert store.claim_job(db, after(retry, days=1)) is None
+
+
+def test_a_waiting_job_does_not_hold_back_the_jobs_behind_it(db):
+    capture(db)
+    capture(db, SECOND_ID, now="2026-01-02T03:04:06Z")
+    first = store.claim_job(db, NOW)
+    store.fail_job(db, first["id"], first["owner"], "rate limited", NOW)
+    assert store.claim_job(db, after(NOW, minutes=1))["capture_id"] == SECOND_ID
+    assert store.claim_job(db, after(NOW, minutes=2)) is None
+    assert store.claim_job(db, after(NOW, minutes=5))["capture_id"] == CAPTURE_ID
+
+
 def test_a_superseded_worker_cannot_fail_or_retry_a_running_job(db):
     capture(db)
     old = store.claim_job(db, NOW)
