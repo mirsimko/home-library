@@ -278,3 +278,8 @@ details > summary { cursor: pointer; min-height: 44px; display: flex; align-item
 
 .htmx-request .spinner, .spinner.htmx-request { opacity: 1; }
 .spinner { opacity: 0; transition: opacity 0.2s; color: var(--muted); }
+
+/* ---- keyboard hints: noise on a device with no keyboard to press them on ---- */
+@media (hover: none) and (pointer: coarse) {
+  .key-hints, .button kbd, button kbd { display: none; }
+}
