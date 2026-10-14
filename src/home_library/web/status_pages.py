@@ -49,8 +49,10 @@ def panel_context(request):
     for receipt in call(request, store.captures)[:RECENT]:
         capture = receipt["capture"]
         size = image_size(photo_path(root, capture))
+        retry = store.retry_at(receipt["job"])
         recent.append({"id": capture["id"], "kind": capture["kind"], "location": names.get(capture["location_id"], ""),
                        "when": ago(seconds_since(capture["created_at"], now)), "job": receipt["job"]["status"],
+                       "retry": f"{retry:%H:%M} UTC" if retry and retry > now else None,
                        "open": receipt["open_observations"], "size": size,
                        "small": capture["kind"] == "shelf" and size is not None and max(size) < SMALL_SIDE})
     seen = health["worker_seen"]
