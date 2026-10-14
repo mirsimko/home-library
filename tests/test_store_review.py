@@ -199,3 +199,14 @@ def test_approval_fills_a_book_with_the_same_rule_whatever_order_the_evidence_co
     for key in ("title", "sort_key", "publisher", "year", "isbn", "series", "source", "source_id", "language",
                 "location_id", "state", "cover_capture_id"):
         assert book[key] == expected[key], key
+
+
+def test_both_ages_come_from_the_same_record_so_approval_cannot_build_a_backwards_range(db):
+    (cover,) = finish(db, [record("Měsíční člun", source="test", source_id="1", age_from="10", age_to="")],
+                      kind="cover", now="2026-01-02T03:04:05Z")
+    (barcode,) = finish(db, [record("", read_status="barcode", source="test", source_id="2", age_from="3", age_to="6")],
+                        SECOND_ID, kind="barcode", sha256="b" * 64, now="2026-01-02T03:04:09Z")
+    fields = store.default_fields(db, [cover["id"], barcode["id"]])
+    assert (fields["age_from"], fields["age_to"]) == ("10", "")
+    book = store.approve(db, [cover["id"], barcode["id"]], {}, "reviewer", now=NOW)
+    assert (book["age_from"], book["age_to"]) == (10, None)
