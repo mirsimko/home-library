@@ -61,4 +61,16 @@
   {% else %}
   <p class="muted">No photos yet.</p>
   {% endif %}
+
+  <section aria-label="Backup" class="card" data-backup="{{ backup.state }}">
+    <h2 style="margin-top:0">Backup</h2>
+    <p>
+      {% if backup.last %}Last backup: {{ backup.last }}{% else %}No backup has been recorded yet{% endif %}
+      {% if backup.old or not backup.last %}<span class="badge warn">{% if backup.last %}older than 2 days{% else %}no backup to restore from{% endif %}</span>{% endif %}
+    </p>
+    {% if backup.failed %}
+    <p><span class="badge bad">Last backup attempt failed</span> <span class="muted small">{{ backup.failed }}</span><br>
+      <code style="white-space: pre-wrap; font-family: var(--mono)">{{ backup.error }}</code></p>
+    {% endif %}
+  </section>
 </div>
