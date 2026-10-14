@@ -82,7 +82,7 @@ def move_books(request: Request, form=Depends(form_data)):
         words.append(f"Moved {count_of('book', len(moved))} to {place}")
     if state:
         words.append(f"changed {'them' if location else count_of('book', len(moved))} to {state}")
-    return results(request, values, message=" and ".join(words) if location else words[0].capitalize())
+    return results(request, values, message=" and ".join(words) if location else words[0][:1].upper() + words[0][1:])
 
 
 # ---- adding and editing one book ----------------------------------------------------------------------
