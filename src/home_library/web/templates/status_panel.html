@@ -15,13 +15,13 @@
   {% if failed %}
   <h2>Failed</h2>
   <div class="table-wrap">
-    <table>
+    <table class="stack">
       <thead><tr><th>Job</th><th>Error</th><th></th></tr></thead>
       <tbody>
         {% for job in failed %}
         <tr id="job-{{ job.id }}">
-          <td>#{{ job.id }}<br><span class="muted small">{{ job.attempts }} tries</span></td>
-          <td class="title small"><code style="white-space: pre-wrap; font-family: var(--mono)">{{ job.error }}</code></td>
+          <td data-label="Job">#{{ job.id }}<br><span class="muted small">{{ job.attempts }} tries</span></td>
+          <td class="title small" data-label="Error"><code style="white-space: pre-wrap; font-family: var(--mono)">{{ job.error }}</code></td>
           <td><button type="button" hx-post="/status/jobs/{{ job.id }}/retry" hx-target="#job-{{ job.id }}" hx-swap="outerHTML">Retry</button></td>
         </tr>
         {% endfor %}
@@ -33,18 +33,18 @@
   <h2>Recent photos</h2>
   {% if recent %}
   <div class="table-wrap">
-    <table>
+    <table class="stack">
       <thead><tr><th>Photo</th><th>Where</th><th>Size received</th><th>Reading</th></tr></thead>
       <tbody>
         {% for photo in recent %}
         <tr>
-          <td>{{ photo.kind }}<br><span class="muted small">{{ photo.when }}</span></td>
-          <td>{{ photo.location }}</td>
-          <td>
+          <td data-label="Photo">{{ photo.kind }}<br><span class="muted small">{{ photo.when }}</span></td>
+          <td data-label="Where">{{ photo.location }}</td>
+          <td data-label="Size received">
             {% if photo.size %}{{ photo.size[0] }} × {{ photo.size[1] }}{% if photo.small %} <span class="badge warn">smaller than 3000 px</span>{% endif %}
             {% else %}<span class="badge bad">file missing</span>{% endif %}
           </td>
-          <td>{{ photo.job }}{% if photo.open %}, <a href="/review">{{ photo.open }} to review</a>{% endif %}</td>
+          <td data-label="Reading">{{ photo.job }}{% if photo.open %}, <a href="/review">{{ photo.open }} to review</a>{% endif %}</td>
         </tr>
         {% endfor %}
       </tbody>
