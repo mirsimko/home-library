@@ -72,13 +72,21 @@ The worker runs `codex` and `pi` as `ai`, headless. When a login expires, jobs f
 Every night `hl backup ~/home-library-backup` writes the catalog through `VACUUM INTO`, so the copy is consistent while the app runs, and copies `captures/` and `work/` with `rsync`. The directory holds:
 
 - `catalog.db`: the latest catalog copy.
-- `snapshots/catalog-YYYYMMDD.db`: one catalog copy per day, the 14 most recent kept. A second backup on the same day replaces that day's snapshot.
+- `snapshots/catalog-YYYYMMDD.db`: one catalog copy per day, the 14 most recent kept. A second backup on the same day replaces that day's snapshot. If the clock has gone back (WSL can lag after sleep), the run goes into the newest snapshot's day instead of writing an older one. A backup directory from before snapshots has only `catalog.db`; the first run saves that copy as a snapshot named by the day it was written.
 - `captures/` and `work/`: a mirror of the data root.
-- `deleted/YYYYMMDD/captures/` and `deleted/YYYYMMDD/work/`: the files that the mirror deleted or replaced on that day, kept for 14 days.
+- `deleted/YYYYMMDD/HHMMSS/captures/` and `deleted/YYYYMMDD/HHMMSS/work/`: the files that the mirror deleted or replaced in the run that started at that time. Every run has its own directory, so a file replaced twice in a day keeps both earlier versions. Whole days are dropped after 14 days.
 
 So a bad night (a bulk edit through the API, deleted photos) can be undone from an older snapshot and from `deleted/`.
 
-`hl backup` refuses to run, and says why, when the data root has no `catalog.db` (a wrong `HL_DATA`; it does not create an empty one), or when the catalog has fewer than half the books of the latest snapshot. If you really removed that many books, run `uv run hl backup --force ~/home-library-backup` in the checkout. Until then the nightly run fails, which shows in `systemctl --user status hl-backup`.
+`hl backup` refuses to run, and says why, when:
+
+- the data root has no `catalog.db` (a wrong `HL_DATA`; it does not create an empty one);
+- the catalog has fewer than half the books of the latest snapshot (or of `catalog.db`, if there is no snapshot yet), or that copy cannot be read;
+- the destination, or a snapshot or `deleted/` entry in it, leads into the data root or a git checkout (a symlink, for example).
+
+The app cannot delete books, so a catalog with half its books gone means a wrong data root, a restore from the wrong copy, or direct SQL. Find out which before going on. `uv run hl backup --force ~/home-library-backup` in the checkout overrides the book-count check and replaces an unreadable latest copy; it does not override the overlap checks.
+
+Each run leaves its outcome in `backup.json` in the data root (owner-only): the time of the last success and, after a refusal or error, the time and message. The Status page shows it as "Last backup: ... ago", with a warning when the last success is over 2 days old, none is recorded, or the latest run failed (with its message). A refused nightly run also fails in `systemctl --user status hl-backup`. A run against a data root without `catalog.db` records nothing, since that is not the data root.
 
 Battlebook pulls that directory whenever it is on. As a user crontab line or a systemd user timer there:
 
@@ -86,7 +94,7 @@ Battlebook pulls that directory whenever it is on. As a user crontab line or a s
 rsync -a battlebox-wsl:home-library-backup/ ~/home-library-backup/
 ```
 
-There is no `--delete` on purpose: if the backup on battlebox is wiped or emptied, the laptop copy stays. Old snapshots and `deleted/` directories that battlebox has pruned stay on the laptop until you remove them; do that by hand now and then.
+There is no `--delete` on purpose: if the backup on battlebox is wiped or emptied, the laptop copy stays. Old snapshots and `deleted/` directories that battlebox has pruned stay on the laptop until you remove them; do that by hand now and then. The same goes for `captures/` and `work/`: a photo removed from the data root is gone from the battlebox mirror, but the laptop keeps it for good, so a restore from the laptop can bring such orphan photos back.
 
 `battlebox-wsl` is an SSH host entry that reaches WSL on battlebox. The photos stay inside the house: no cloud copy unless the family decides otherwise (plan, question 2).
 
@@ -97,7 +105,7 @@ There is no `--delete` on purpose: if the backup on battlebox is wiped or emptie
 3. Copy the backup into place, but not `snapshots/` and `deleted/`: `rsync -a ~/home-library-backup/{catalog.db,captures,work} ~/home-library/`.
 4. Start them again. Jobs that were `running` when the backup was taken are taken over once their heartbeat is stale, after at most 20 minutes.
 
-To go back to an older day, do step 3 and then replace the catalog with that day's snapshot: `cp ~/home-library-backup/snapshots/catalog-YYYYMMDD.db ~/home-library/catalog.db`. Photos that were deleted since are in `deleted/` under the day they were removed; copy them back, for example `cp ~/home-library-backup/deleted/YYYYMMDD/captures/<file> ~/home-library/captures/`.
+To go back to an older day, do step 3 and then replace the catalog with that day's snapshot: `cp ~/home-library-backup/snapshots/catalog-YYYYMMDD.db ~/home-library/catalog.db`. Photos that were deleted or replaced since are in `deleted/` under the day and time of the run that removed them; copy them back, for example `cp ~/home-library-backup/deleted/YYYYMMDD/HHMMSS/captures/<file> ~/home-library/captures/`.
 
 Try a restore once on Battlebook, into an empty directory with `HL_DATA` pointing at it and `HL_DEV_USER` set (and `HL_USERS` unset; `hl serve` refuses both), and check that the books and photos are there.
 
@@ -112,6 +120,6 @@ A worker restart kills a running read; its job is picked up again once the heart
 
 ## When something is wrong
 
-- **The Status page** shows the queue, the worker's last heartbeat and every failed job with its error. Retry from there.
+- **The Status page** shows the queue, the worker's last heartbeat and every failed job with its error. Retry from there. Its Backup block says when the last backup worked and warns when that was over 2 days ago or the latest run was refused.
 - **Logs:** `journalctl --user -u hl-web -u hl-worker`. They name captures and jobs by id, never a title.
 - **`/health`** answers without a login and gives no titles, so it can be checked from anywhere on the tailnet.

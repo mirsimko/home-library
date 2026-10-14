@@ -182,7 +182,7 @@ Server-rendered with Jinja2 (`web/templates/`, one module per area under `web/`)
 | `hl catalog locations`, `hl catalog add-location NAME --kind box` | Locations. |
 | `hl catalog export --csv|--json` | Every book to standard output. |
 | `hl token` | A new agent token (see Access). |
-| `hl backup <dest>` | A consistent copy of the data root: `catalog.db` through `VACUUM INTO`, plus a dated snapshot of it (14 kept), then `captures/` and `work/` copied with `rsync -a --delete`, keeping what that removes in `deleted/YYYYMMDD/` for 14 days. Refused when `catalog.db` is missing or the catalog has under half the books of the latest snapshot; `--force` overrides the second. |
+| `hl backup <dest>` | A consistent copy of the data root: `catalog.db` through `VACUUM INTO`, plus a dated snapshot of it (14 kept), then `captures/` and `work/` copied with `rsync -a --delete`, keeping what that removes or replaces in `deleted/YYYYMMDD/HHMMSS/` (one directory per run) for 14 days. Refused when `catalog.db` is missing, when the destination or a dated entry in it leads into the data root or a git checkout, or when the catalog has under half the books of the latest snapshot; `--force` overrides that book-count check and replaces an unreadable latest snapshot. The outcome is saved in `backup.json` in the data root and shown on the Status page. |
 
 All of them take `--data-root`, defaulting to `$HL_DATA` or `~/home-library/`.
 

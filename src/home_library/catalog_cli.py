@@ -21,7 +21,7 @@ def add_commands(parser, commands):
     data_root(commands.add_parser("token", help="Rotate and print the agent token."))
     backup = commands.add_parser("backup", help="Snapshot the catalog and mirror private photos and work, keeping what the mirror drops.")
     backup.add_argument("destination", type=Path)
-    backup.add_argument("--force", action="store_true", help="Back up a catalog that has lost over half its books.")
+    backup.add_argument("--force", action="store_true", help="Back up a catalog with under half the books of the latest snapshot, and replace an unreadable snapshot.")
     data_root(backup)
     catalog = commands.add_parser("catalog", help="Read and change the catalog.")
     data_root(catalog)

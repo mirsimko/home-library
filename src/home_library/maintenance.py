@@ -120,7 +120,7 @@ def _refuse_overlap(root, paths):
     for path in paths:
         target = refuse_inside_checkout(path)
         if target.is_relative_to(root) or root.is_relative_to(target):
-            raise ValueError("backup destination must not overlap the data root")
+            raise ValueError(f"backup destination must not overlap the data root: {path} resolves to {target}")
 
 
 def _refuse_shrunken(db, earlier):
