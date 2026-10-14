@@ -25,6 +25,12 @@ def ago(seconds):
             return f"{count} {unit}{'' if count == 1 else 's'} ago"
 
 
+def within(seconds):
+    """How soon, in whole minutes rounded up, so a wait never reads as over before it is."""
+    count = max(1, -int(-seconds // 60))
+    return f"{count} minute{'' if count == 1 else 's'}"
+
+
 def seconds_since(stamp, now):
     return max(0, (now - datetime.fromisoformat(stamp.replace("Z", "+00:00"))).total_seconds())
 
@@ -52,7 +58,7 @@ def panel_context(request):
         retry = store.retry_at(receipt["job"])
         recent.append({"id": capture["id"], "kind": capture["kind"], "location": names.get(capture["location_id"], ""),
                        "when": ago(seconds_since(capture["created_at"], now)), "job": receipt["job"]["status"],
-                       "retry": f"{retry:%H:%M} UTC" if retry and retry > now else None,
+                       "retry": within((retry - now).total_seconds()) if retry and retry > now else None,
                        "open": receipt["open_observations"], "size": size,
                        "small": capture["kind"] == "shelf" and size is not None and max(size) < SMALL_SIDE})
     seen = health["worker_seen"]

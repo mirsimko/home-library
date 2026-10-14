@@ -44,7 +44,7 @@
             {% if photo.size %}{{ photo.size[0] }} × {{ photo.size[1] }}{% if photo.small %} <span class="badge warn">smaller than 3000 px</span>{% endif %}
             {% else %}<span class="badge bad">file missing</span>{% endif %}
           </td>
-          <td data-label="Reading">{{ photo.job }}{% if photo.retry %} <span class="muted small">(retrying after {{ photo.retry }})</span>{% endif %}{% if photo.open %}, <a href="/review">{{ photo.open }} to review</a>{% endif %}</td>
+          <td data-label="Reading">{{ photo.job }}{% if photo.retry %} <span class="muted small">(retrying in {{ photo.retry }})</span>{% endif %}{% if photo.open %}, <a href="/review">{{ photo.open }} to review</a>{% endif %}</td>
         </tr>
         {% endfor %}
       </tbody>
