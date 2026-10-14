@@ -49,29 +49,36 @@ def backup(root, destination, *, run=subprocess.run, now=None, force=False):
     today = now.date()
     root = data_root(root)
     destination = refuse_inside_checkout(destination)
-    targets = [destination, *(refuse_inside_checkout(destination / name)
-                             for name in ("catalog.db", "snapshots", "deleted", "captures", "work"))]
-    if any(target.is_relative_to(root) or root.is_relative_to(target) for target in targets):
-        raise ValueError("backup destination must not overlap the data root")
+    snapshot = destination / "snapshots" / f"catalog-{today:%Y%m%d}.db"
+    kept = destination / "deleted" / f"{today:%Y%m%d}" / f"{now:%H%M%S}"
+    _refuse_overlap(root, [destination, *(destination / name for name in ("catalog.db", "snapshots", "deleted", "captures", "work")),
+                           snapshot, kept.parent, kept, *(kept / name for name in ("captures", "work"))])
     if not (root / "catalog.db").is_file():
         raise ValueError(f"{root} has no catalog.db; is HL_DATA right? Nothing was backed up")
     destination.mkdir(parents=True, exist_ok=True)
     with closing(store.open(root)) as db:
         if not force:
             _refuse_shrunken(db, destination / "snapshots")
-        snapshot = destination / "snapshots" / f"catalog-{today:%Y%m%d}.db"
         store.backup_database(db, snapshot)
     _copy_over(snapshot, destination / "catalog.db")
     for old in _dated(destination / "snapshots", r"catalog-\d{8}\.db")[:-KEPT]:
         old.unlink()
     for name in ("captures", "work"):
-        run(["rsync", "-a", "--delete", "--backup", f"--backup-dir={destination}/deleted/{today:%Y%m%d}/{now:%H%M%S}/{name}",
+        run(["rsync", "-a", "--delete", "--backup", f"--backup-dir={kept / name}",
              f"{root}/{name}/", f"{destination}/{name}/"],
             check=True, stdout=subprocess.DEVNULL, stderr=subprocess.PIPE)
     oldest = f"{today - timedelta(days=KEPT - 1):%Y%m%d}"
     for old in _dated(destination / "deleted", r"\d{8}"):
         if old.name < oldest:
             shutil.rmtree(old)
+
+
+def _refuse_overlap(root, paths):
+    """Raise when any path, symlinks followed, lies in the data root, holds it, or lies in a checkout."""
+    for path in paths:
+        target = refuse_inside_checkout(path)
+        if target.is_relative_to(root) or root.is_relative_to(target):
+            raise ValueError("backup destination must not overlap the data root")
 
 
 def _refuse_shrunken(db, snapshots):
