@@ -129,6 +129,31 @@ def test_backup_refuses_history_directories_that_lead_into_the_data_root_or_a_ch
         (destination / name).unlink()
 
 
+LINKS = [("catalog.db", "catalog.db"), ("snapshots/catalog-20261015.db", "catalog.db"),
+         ("deleted/20261015", "captures"), ("deleted/20261015/033000", "captures"),
+         ("deleted/20261015/033000/captures", "captures"),
+         ("deleted/20261015/033000/work", "work")]
+
+
+@pytest.mark.parametrize("link, target", LINKS)
+@pytest.mark.parametrize("into", ["root", "checkout"])
+def test_backup_refuses_dated_entries_that_lead_into_the_data_root_or_a_checkout(tmp_path, link, target, into):
+    root, destination = source(tmp_path), tmp_path / "backup"
+    checkout = tmp_path / "repo"
+    (checkout / "captures").mkdir(parents=True)
+    (checkout / ".git").write_text("gitdir: elsewhere")
+    (root / "captures" / "live.jpg").write_bytes(b"live")
+    live = (root / "catalog.db").read_bytes()
+    (destination / link).parent.mkdir(parents=True)
+    (destination / link).symlink_to((root if into == "root" else checkout) / target)
+    called = []
+    with pytest.raises(ValueError):
+        maintenance.backup(root, destination, run=lambda *a, **k: called.append(a), now=datetime(2026, 10, 15, 3, 30))
+    assert called == [] and (root / "catalog.db").read_bytes() == live
+    assert (root / "captures" / "live.jpg").read_bytes() == b"live"
+    assert sorted(path.name for path in checkout.iterdir()) == [".git", "captures"] and not list((checkout / "captures").iterdir())
+
+
 def test_backup_refuses_a_data_root_without_a_catalog_and_creates_nothing(tmp_path):
     root, destination = tmp_path / "wrong", tmp_path / "backup"
     called = []
