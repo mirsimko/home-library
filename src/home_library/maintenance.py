@@ -70,7 +70,7 @@ def backup(root, destination, *, run=subprocess.run, now=None, force=False):
     oldest = f"{today - timedelta(days=KEPT - 1):%Y%m%d}"
     for old in _dated(destination / "deleted", r"\d{8}"):
         if old.name < oldest:
-            shutil.rmtree(old)
+            _forget(old)
 
 
 def _refuse_overlap(root, paths):
@@ -106,6 +106,14 @@ def _copy_over(source, target):
         temporary.replace(target)
     finally:
         temporary.unlink(missing_ok=True)
+
+
+def _forget(path):
+    """Remove a dated directory with what it holds, or a stray link or file, never following a link."""
+    if path.is_dir() and not path.is_symlink():
+        shutil.rmtree(path)
+    else:
+        path.unlink()
 
 
 def _dated(directory, pattern):
