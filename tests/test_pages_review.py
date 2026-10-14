@@ -175,3 +175,14 @@ def test_a_dealt_with_or_unknown_observation_offers_no_actions(client, tmp_path)
     assert 'id="approve-form"' not in page.text
     assert client.get("/review/999").status_code == 404
     assert client.get("/review/wrong").status_code == 400
+
+
+def test_a_barcode_only_observation_is_headed_by_the_catalogue_title(client, tmp_path):
+    _, cover, barcode = stock(tmp_path)
+    page = client.get(f"/review/{barcode[0]['id']}").text
+    (heading,) = page.split("<h1")[1:2]
+    heading = heading.split("</h1>")[0]
+    assert "Paper Moon (catalogue)" in heading and "nothing read" not in heading
+    assert "(empty)" not in page and "nothing read, barcode only" in page
+    bare = client.get(f"/review/{cover[0]['id']}").text
+    assert "nothing read, barcode only" not in bare and "(empty)" not in bare
