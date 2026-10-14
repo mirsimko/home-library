@@ -129,6 +129,21 @@ def test_backup_refuses_history_directories_that_lead_into_the_data_root_or_a_ch
         (destination / name).unlink()
 
 
+def test_pruning_unlinks_symlinks_and_files_and_never_follows_them(tmp_path):
+    root, destination = source(tmp_path), tmp_path / "backup"
+    outside = tmp_path / "outside"
+    outside.mkdir()
+    (outside / "keep.txt").write_text("kept")
+    (destination / "deleted").mkdir(parents=True)
+    (destination / "deleted" / "20260101").symlink_to(outside, target_is_directory=True)
+    (destination / "deleted" / "20260102").write_text("a file")
+    (destination / "deleted" / "20260103").mkdir()
+    (destination / "deleted" / "20260103" / "link").symlink_to(outside, target_is_directory=True)
+    run_backup(root, destination, "2026-10-15")
+    assert list((destination / "deleted").iterdir()) == []
+    assert (outside / "keep.txt").read_text() == "kept"
+
+
 LINKS = [("catalog.db", "catalog.db"), ("snapshots/catalog-20261015.db", "catalog.db"),
          ("deleted/20261015", "captures"), ("deleted/20261015/033000", "captures"),
          ("deleted/20261015/033000/captures", "captures"),
