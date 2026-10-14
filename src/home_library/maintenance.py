@@ -7,7 +7,7 @@ import shutil
 import subprocess
 import tempfile
 from contextlib import closing
-from datetime import date
+from datetime import date, timedelta
 from pathlib import Path
 
 from home_library import store
@@ -63,6 +63,10 @@ def backup(root, destination, *, run=subprocess.run, today=None):
         run(["rsync", "-a", "--delete", "--backup", f"--backup-dir={destination}/deleted/{today:%Y%m%d}/{name}",
              f"{root}/{name}/", f"{destination}/{name}/"],
             check=True, stdout=subprocess.DEVNULL, stderr=subprocess.PIPE)
+    oldest = f"{today - timedelta(days=KEPT - 1):%Y%m%d}"
+    for old in _dated(destination / "deleted", r"\d{8}"):
+        if old.name < oldest:
+            shutil.rmtree(old)
 
 
 def _copy_over(source, target):
