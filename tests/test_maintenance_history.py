@@ -1,6 +1,7 @@
 """A backup keeps dated history, so a bad night cannot replace the only good copy."""
 import shutil
 import sqlite3
+from contextlib import closing
 from datetime import date
 
 import pytest
@@ -124,3 +125,38 @@ def test_backup_refuses_a_data_root_without_a_catalog_and_creates_nothing(tmp_pa
     with pytest.raises(ValueError, match="catalog.db"):
         run_backup(root, destination, "2026-10-15")
     assert called == [] and list(root.iterdir()) == [] and not destination.exists()
+
+
+def shrink(root, keep):
+    with closing(store.open(root)) as db:
+        db.execute("DELETE FROM books WHERE id > ?", (keep,))
+        db.commit()
+
+
+def test_backup_refuses_a_catalog_with_under_half_the_books_of_the_latest_snapshot(tmp_path):
+    root, destination = source(tmp_path, books=4), tmp_path / "backup"
+    run_backup(root, destination, "2026-10-14")
+    shrink(root, keep=1)
+    called = []
+    with pytest.raises(ValueError, match=r"1 book.*4.*--force"):
+        maintenance.backup(root, destination, run=lambda *a, **k: called.append(a), today=date(2026, 10, 15))
+    assert called == [] and len(titles(destination / "catalog.db")) == 4
+    assert [path.name for path in (destination / "snapshots").iterdir()] == ["catalog-20261014.db"]
+    run_backup(root, destination, "2026-10-15", force=True)
+    assert titles(destination / "catalog.db") == ["Kniha 0"]
+    assert (destination / "snapshots" / "catalog-20261015.db").is_file()
+
+
+def test_backup_accepts_exactly_half_the_books(tmp_path):
+    root, destination = source(tmp_path, books=4), tmp_path / "backup"
+    run_backup(root, destination, "2026-10-14")
+    shrink(root, keep=2)
+    run_backup(root, destination, "2026-10-15")
+    assert len(titles(destination / "catalog.db")) == 2
+
+
+def test_backup_accepts_an_empty_catalog_when_the_latest_snapshot_is_empty(tmp_path):
+    root, destination = source(tmp_path, books=0), tmp_path / "backup"
+    run_backup(root, destination, "2026-10-14")
+    run_backup(root, destination, "2026-10-15")
+    assert titles(destination / "catalog.db") == []
