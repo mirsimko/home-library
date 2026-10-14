@@ -9,8 +9,10 @@ EnvironmentFile=%h/.config/home-library/env
 Environment=PATH=%h/.local/bin:/usr/local/bin:/usr/bin:/bin
 WorkingDirectory=%h/dev/home-library
 ExecStart=%h/.local/bin/uv run --frozen hl worker
-# A running read is killed on stop; its job is taken over once its heartbeat is stale.
-KillMode=control-group
+# Stop signals only the worker, which kills its running read and gives the job back without spending an attempt.
+# control-group would also signal the read itself, and a read that dies first counts as a failed attempt.
+# Anything still running when TimeoutStopSec ends is killed.
+KillMode=mixed
 TimeoutStopSec=30
 Restart=on-failure
 RestartSec=30
