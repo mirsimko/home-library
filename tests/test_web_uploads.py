@@ -44,19 +44,19 @@ def test_flushing_an_upload_to_disk_does_not_hold_up_other_requests(client, monk
     import asyncio
     import os
 
-    on_loop, real_fsync = [], os.fsync
+    on_loop, off_loop, real_fsync = [], [], os.fsync
 
     def fsync(fd):
         try:
             asyncio.get_running_loop()
             on_loop.append(fd)
         except RuntimeError:
-            pass
+            off_loop.append(fd)
         real_fsync(fd)
 
     monkeypatch.setattr(os, "fsync", fsync)
     assert upload(client, photo("JPEG")).status_code == 201
-    assert on_loop == []
+    assert on_loop == [] and off_loop
 
 
 def test_an_mpo_photo_from_an_android_camera_is_kept_as_a_jpeg(client, tmp_path):
