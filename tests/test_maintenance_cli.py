@@ -108,6 +108,9 @@ def test_backup_reports_rsync_failure(tmp_path, capsys):
     def rsync(command, **kwargs):
         raise subprocess.CalledProcessError(12, command)
 
+    from home_library import store
+
+    store.open(tmp_path / "private").close()
     assert main(["backup", str(tmp_path / "backup"), "--data-root", str(tmp_path / "private")], run=rsync) == 1
     output = capsys.readouterr()
     assert output.out == "" and len(output.err.splitlines()) == 1

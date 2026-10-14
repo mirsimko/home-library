@@ -43,8 +43,8 @@ def rotate_token(root=None):
     return token
 
 
-def backup(root, destination, *, run=subprocess.run, today=None):
-    """Take a catalog snapshot and mirror photo evidence, refusing destructive overlaps."""
+def backup(root, destination, *, run=subprocess.run, today=None, force=False):
+    """Take a catalog snapshot and mirror photo evidence, refusing destructive overlaps and empty sources."""
     today = today or date.today()
     root = data_root(root)
     destination = refuse_inside_checkout(destination)
@@ -52,6 +52,8 @@ def backup(root, destination, *, run=subprocess.run, today=None):
                              for name in ("catalog.db", "snapshots", "deleted", "captures", "work"))]
     if any(target.is_relative_to(root) or root.is_relative_to(target) for target in targets):
         raise ValueError("backup destination must not overlap the data root")
+    if not (root / "catalog.db").is_file():
+        raise ValueError(f"{root} has no catalog.db; is HL_DATA right? Nothing was backed up")
     destination.mkdir(parents=True, exist_ok=True)
     with closing(store.open(root)) as db:
         snapshot = destination / "snapshots" / f"catalog-{today:%Y%m%d}.db"
