@@ -17,6 +17,8 @@ from home_library.workspace import refuse_inside_checkout
 LOG = logging.getLogger(__name__)
 EXTENSIONS = {"image/jpeg": "jpg", "image/png": "png", "image/webp": "webp"}
 HEARTBEAT_FAILURES = 3  # consecutive failed renewals after which the lease counts as lost
+# What the pipeline says when codex, pi or yaz-client is missing: trying again cannot help until it is installed.
+MISSING_TOOL = ("is not installed", "not found or could not be run")
 COMMANDS = {"shelf": "run", "cover": "cover", "barcode": "barcode"}
 
 
@@ -139,7 +141,8 @@ def _fail(db, job, errors, reason):
     errors.seek(max(0, size - 8000))
     tail = errors.read().decode("utf-8", errors="replace")[-2000:]
     try:
-        store.fail_job(db, job["id"], job["owner"], reason + ("\n" + tail if tail else ""))
+        store.fail_job(db, job["id"], job["owner"], reason + ("\n" + tail if tail else ""),
+                       permanent=any(sign in tail for sign in MISSING_TOOL))
         LOG.warning("job %s failed", job["id"])
     except store.Conflict:
         LOG.warning("job %s no longer owned", job["id"])

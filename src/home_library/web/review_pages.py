@@ -43,6 +43,12 @@ def display_title(record):
     return "(nothing read)", "", ""
 
 
+def heading(record):
+    """The page heading: what was read, else the catalogue's title for a barcode alone, else a plain note."""
+    title, language, _ = display_title(record)
+    return {"title": title, "language": language}
+
+
 def row_view(observation):
     title, language, note = display_title(observation["record"])
     return {"id": observation["id"], "number": observation["row"] + 1, "title": title, "language": language,
@@ -143,7 +149,7 @@ def detail(request, id, status=200, without=(), **extra):
     names = {row["id"]: row["name"] for row in call(request, store.locations)}
     book = call(request, store.book, observation["book_id"]) if observation["book_id"] else None
     return render(request, "review_detail.html", status=status, active="review", observation=observation,
-                  record=observation["record"], capture=capture, location=names.get(capture["location_id"], ""),
+                  record=observation["record"], heading=heading(observation["record"]), capture=capture, location=names.get(capture["location_id"], ""),
                   evidence=evidence(root, observation), book=book,
                   siblings=[{**row_view(o), "photo": f"/api/captures/{o['capture_id']}/photo", "included": o["id"] not in without}
                             for o in siblings],
@@ -223,7 +229,10 @@ def dismiss(request: Request, id: int):
 def attach_search(request: Request, id: int, q: str = ""):
     names = {row["id"]: row["name"] for row in call(request, store.locations)}
     books = call(request, store.search_books, q.strip(), None, None, None, 8) if q.strip() else None
-    return render(request, "review_attach_results.html", observation_id=id, books=books, names=names)
+    group = call(request, store.observation, id)["capture"]["group_id"]
+    paired = group is not None and any(o["capture"]["group_id"] == group and o["id"] != id
+                                       for o in call(request, store.observations))
+    return render(request, "review_attach_results.html", observation_id=id, books=books, names=names, paired=paired)
 
 
 @router.post("/review/{id}/attach")

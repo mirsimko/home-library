@@ -175,3 +175,27 @@ def test_a_dealt_with_or_unknown_observation_offers_no_actions(client, tmp_path)
     assert 'id="approve-form"' not in page.text
     assert client.get("/review/999").status_code == 404
     assert client.get("/review/wrong").status_code == 400
+
+
+def test_a_barcode_only_observation_is_headed_by_the_catalogue_title(client, tmp_path):
+    _, cover, barcode = stock(tmp_path)
+    page = client.get(f"/review/{barcode[0]['id']}").text
+    (heading,) = page.split("<h1")[1:2]
+    heading = heading.split("</h1>")[0]
+    assert "Paper Moon (catalogue)" in heading and "nothing read" not in heading
+    assert "(empty)" not in page and "nothing read, barcode only" in page
+    bare = client.get(f"/review/{cover[0]['id']}").text
+    assert "nothing read, barcode only" not in bare and "(empty)" not in bare
+
+
+def test_keyboard_hints_are_hidden_on_touch_screens(client, tmp_path):
+    from pathlib import Path
+
+    with closing(store.open(tmp_path)) as db:
+        (row,) = finish(db, [record("Paper Moon")])
+    for path in ("/review", f"/review/{row['id']}"):
+        assert any("key-hints" in item.get("class", "").split() for item in tags(client.get(path).text, "div"))
+    css = (Path(__file__).resolve().parent.parent / "src/home_library/web/static/app.css").read_text()
+    rule = css[css.index("@media (hover: none) and (pointer: coarse)"):]
+    hidden = rule[:rule.index("}") + 1]
+    assert ".key-hints" in hidden and ".button kbd" in hidden and "button kbd" in hidden and "display: none" in hidden

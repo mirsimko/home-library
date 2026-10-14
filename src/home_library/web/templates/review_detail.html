@@ -1,5 +1,5 @@
 {% extends "base.html" %}
-{% block title %}{{ record.title or "Review" }} · Home library{% endblock %}
+{% block title %}{{ heading.title if record.title or record.catalogue_title else "Review" }} · Home library{% endblock %}
 {% block body_class %}review wide{% endblock %}
 {% block main %}
 <div id="review"{% if previous %} data-prev="{{ previous }}"{% endif %}{% if following %} data-next="{{ following }}"{% endif %}>
@@ -31,7 +31,7 @@
     </section>
 
     <section aria-label="The book">
-      <h1 class="title"><span{{ lang(record.language) }}>{{ record.title or "(nothing read)" }}</span></h1>
+      <h1 class="title"><span{{ lang(record.language) }}>{{ heading.title }}</span></h1>
       <p class="muted small">{{ capture.kind|capitalize }} photo · {{ location }} · sent by {{ capture.uploaded_by }}</p>
 
       {% if observation.status != "open" %}
@@ -43,7 +43,7 @@
       {% endif %}
 
       <dl class="readings">
-        <dt>Read as</dt><dd><span{{ lang(record.language) }}>{{ record.title or "(empty)" }}</span> <span class="badge">{{ observation.read_status }}</span></dd>
+        <dt>Read as</dt><dd>{% if record.title %}<span{{ lang(record.language) }}>{{ record.title }}</span>{% elif record.catalogue_title %}<span class="muted">nothing read, barcode only</span>{% else %}<span class="muted">(empty)</span>{% endif %} <span class="badge">{{ observation.read_status }}</span></dd>
         {% if observation.other_reading %}<dt>Second reading</dt><dd><span{{ lang(record.language) }}>{{ observation.other_reading }}</span></dd>{% endif %}
         {% if record.other_text %}<dt>Other text</dt><dd><span{{ lang(record.language) }}>{{ record.other_text }}</span></dd>{% endif %}
         {% if record.catalogue_title %}<dt>Catalogue says</dt><dd>{{ record.catalogue_title }}</dd>{% endif %}
@@ -148,7 +148,7 @@
       </details>
       {% endif %}
 
-      <div class="keys" aria-label="Keyboard shortcuts">
+      <div class="keys key-hints" aria-label="Keyboard shortcuts">
         <span><kbd>j</kbd> next</span><span><kbd>k</kbd> previous</span><span><kbd>Enter</kbd> approve and go to the next</span>
         <span><kbd>e</kbd> edit the first field</span><span><kbd>x</kbd> dismiss</span><span><kbd>Esc</kbd> leave a field</span>
       </div>

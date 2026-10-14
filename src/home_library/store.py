@@ -260,11 +260,11 @@ def _owned(db, job_id, owner):
     return job
 
 
-def fail_job(db, job_id, owner, error, now=None):
-    """Keep a failure visible and requeue it while attempts remain."""
+def fail_job(db, job_id, owner, error, now=None, permanent=False):
+    """Keep a failure visible and requeue it while attempts remain; a permanent one is final at once."""
     with _write(db):
         job = _owned(db, job_id, owner)
-        status = "queued" if job["attempts"] < 3 else "failed"
+        status = "queued" if job["attempts"] < 3 and not permanent else "failed"
         db.execute("UPDATE jobs SET status = ?, owner = NULL, error = ?, finished_at = ? WHERE id = ?",
                    (status, error, _stamp(now), job_id))
         return _get(db, "jobs", job_id)
