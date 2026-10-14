@@ -1,7 +1,7 @@
 """Queue status and retries expose failures without hiding evidence."""
 from contextlib import closing
 
-from store_helpers import CAPTURE_ID, NOW, SECOND_ID, capture, finish, record
+from store_helpers import CAPTURE_ID, SECOND_ID, capture, fail_for_good, finish, record
 from web_helpers import client as client
 
 from home_library import store
@@ -11,16 +11,14 @@ def test_queue_heartbeats_and_retries_use_the_shared_store(client, tmp_path):
     with closing(store.open(tmp_path)) as db:
         finish(db, [record("Paper Moon")])
         queued = capture(db, SECOND_ID)
-        for _ in range(3):
-            job = store.claim_job(db, NOW)
-            store.fail_job(db, job["id"], job["owner"], "invented failure", NOW)
+        last = fail_for_good(db)
     response = client.get("/api/jobs")
     assert response.status_code == 200
     jobs = response.json()
     assert [job["status"] for job in jobs] == ["done", "failed"]
-    assert jobs[1]["heartbeat_at"] == NOW and jobs[1]["error"] == "invented failure"
+    assert jobs[1]["heartbeat_at"] == last and jobs[1]["error"] == "invented failure"
     health = client.get("/health").json()
-    assert health == {"ok": True, "worker_seen": NOW, "queued": 0, "failed": 1}
+    assert health == {"ok": True, "worker_seen": last, "queued": 0, "failed": 1}
     done = client.post(f"/api/jobs/{jobs[0]['id']}/retry")  # finished work is not redone
     assert done.status_code == 409 and "only a failed job" in done.json()["error"]
     retried = client.post(f"/api/jobs/{jobs[1]['id']}/retry")
