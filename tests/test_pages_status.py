@@ -58,23 +58,26 @@ def test_failed_jobs_show_their_error_and_can_be_retried(client, tmp_path):
     with closing(store.open(tmp_path)) as db:
         assert store.jobs(db)[0]["status"] == "queued" and store.jobs(db)[0]["attempts"] == 0
     again = client.post("/status/jobs/1/retry", headers={"HX-Request": "true"})
-    assert again.status_code == 409 and "only a failed job" in again.text
+    assert again.status_code == 409 and "only a failed or waiting job" in again.text
     assert client.post("/status/jobs/99/retry").status_code == 404
     assert 'data-failed="0"' in client.get("/status/panel").text
 
 
-def test_a_job_waiting_out_its_retry_delay_says_how_soon_it_runs_again(client, tmp_path):
+def test_a_paused_queue_says_why_and_for_how_long_and_retry_now_resumes_it(client, tmp_path):
     upload(client, CAPTURE_ID, (400, 300))
     upload(client, SECOND_ID, (400, 300))
     with closing(store.open(tmp_path)) as db:
-        for _ in range(2):
-            job = store.claim_job(db)
-            store.fail_job(db, job["id"], job["owner"], "rate limited", NOW if job["capture_id"] == SECOND_ID else None)
-        waiting = store.jobs(db)[0]
+        job = store.claim_job(db)
+        store.fail_job(db, job["id"], job["owner"], "You've hit your usage limit <soon>")
     page = client.get("/status").text
     assert 'data-queued="2"' in page and 'data-failed="0"' in page
+    assert 'data-held="1"' in page and "Reading is paused for 5 minutes" in page
+    assert "You&#39;ve hit your usage limit &lt;soon&gt;" in page
     assert page.count("retrying in") == 1 and "retrying in 5 minutes" in page
-    assert store.retry_at(waiting) is not None
+    resumed = client.post("/status/jobs/1/retry?then=panel", headers={"HX-Request": "true"})
+    assert resumed.status_code == 200 and 'id="status-panel"' in resumed.text and "data-held" not in resumed.text
+    with closing(store.open(tmp_path)) as db:
+        assert store.claim_job(db)["attempts"] == 2
 
 
 def test_status_pages_need_access(anonymous):
