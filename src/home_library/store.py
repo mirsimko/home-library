@@ -11,6 +11,11 @@ from uuid import UUID, uuid4
 
 from home_library.workspace import refuse_inside_checkout
 
+# How long a failed attempt waits before the job is claimed again, by the number of attempts made so far. A rate limit
+# or an expired login usually clears within minutes, so the second try comes after 5 and the third after 15 more:
+# the last of the 3 attempts starts 20 minutes after the first failure, not seconds after it.
+RETRY_DELAYS = (timedelta(minutes=5), timedelta(minutes=15))
+
 
 def open(data_root=None):
     """Open a private WAL database and apply each packaged migration once."""
@@ -217,10 +222,22 @@ def _claimed(db, id):
     return job
 
 
+def _time(stamp):
+    return datetime.fromisoformat(stamp.replace("Z", "+00:00"))
+
+
+def retry_at(job):
+    """When a queued job that has failed may be claimed again, as a time; None when nothing holds it back."""
+    if job["status"] != "queued" or job["finished_at"] is None or job["attempts"] < 1:
+        return None
+    return _time(job["finished_at"]) + RETRY_DELAYS[min(job["attempts"], len(RETRY_DELAYS)) - 1]
+
+
 def claim_job(db, now=None):
-    """Lease the oldest eligible job, retiring workers that stopped three times."""
+    """Lease the oldest eligible job, retiring workers that stopped three times; a failed attempt waits first."""
     stamp = _stamp(now)
-    cutoff = datetime.fromisoformat(stamp.replace("Z", "+00:00")) - timedelta(minutes=20)
+    current = _time(stamp)
+    cutoff = current - timedelta(minutes=20)
     with _write(db):
         candidates = db.execute("""SELECT jobs.*, captures.created_at AS uploaded_at FROM jobs
                                    JOIN captures ON captures.id = jobs.capture_id
@@ -230,9 +247,10 @@ def claim_job(db, now=None):
                                          row["id"]))
         for row in candidates:
             if row["status"] == "running" and row["heartbeat_at"] is not None:
-                heartbeat_at = datetime.fromisoformat(row["heartbeat_at"].replace("Z", "+00:00"))
-                if heartbeat_at >= cutoff:
+                if _time(row["heartbeat_at"]) >= cutoff:
                     continue
+            if (waiting := retry_at(row)) is not None and waiting > current:
+                continue
             if row["attempts"] >= 3:
                 db.execute("""UPDATE jobs SET status = 'failed', owner = NULL, finished_at = ?,
                               error = 'the worker stopped responding 3 times' WHERE id = ?""", (stamp, row["id"]))

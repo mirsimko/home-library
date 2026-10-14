@@ -17,6 +17,10 @@ from store_helpers import db as db
 from home_library import store
 
 
+def after(stamp, **delta):
+    return (datetime.fromisoformat(stamp.replace("Z", "+00:00")) + timedelta(**delta)).isoformat().replace("+00:00", "Z")
+
+
 def test_claims_are_oldest_first_and_carry_capture_and_location(db):
     later = capture(db, now="2026-01-02T03:04:06Z")
     earlier = capture(db, SECOND_ID)
@@ -62,21 +66,18 @@ def test_stale_jobs_are_reclaimed_only_after_twenty_minutes(db):
 def test_failure_requeues_twice_then_stays_visible_until_retry(db):
     receipt = capture(db)
     for attempt in range(1, 4):
-        job = store.claim_job(db, NOW)
+        at = after(NOW, hours=attempt)
+        job = store.claim_job(db, at)
         assert job["attempts"] == attempt
-        failed = store.fail_job(db, job["id"], job["owner"], "invented failure", NOW)
+        failed = store.fail_job(db, job["id"], job["owner"], "invented failure", at)
         assert failed["status"] == ("queued" if attempt < 3 else "failed")
         assert failed["error"] == "invented failure"
-        assert not store.heartbeat(db, job["id"], job["owner"], NOW)
-    assert store.claim_job(db, NOW) is None
+        assert not store.heartbeat(db, job["id"], job["owner"], at)
+    assert store.claim_job(db, after(NOW, days=1)) is None
     retried = store.retry_job(db, receipt["job"]["id"])
     assert retried["status"] == "queued" and retried["attempts"] == 0
     assert retried["owner"] is None and retried["finished_at"] is None
-    assert store.claim_job(db, NOW)["attempts"] == 1
-
-
-def after(stamp, **delta):
-    return (datetime.fromisoformat(stamp.replace("Z", "+00:00")) + timedelta(**delta)).isoformat().replace("+00:00", "Z")
+    assert store.claim_job(db, after(NOW, days=1))["attempts"] == 1
 
 
 def test_a_failed_attempt_waits_5_then_15_minutes_before_the_job_is_claimed_again(db):
@@ -104,6 +105,29 @@ def test_a_waiting_job_does_not_hold_back_the_jobs_behind_it(db):
     assert store.claim_job(db, after(NOW, minutes=1))["capture_id"] == SECOND_ID
     assert store.claim_job(db, after(NOW, minutes=2)) is None
     assert store.claim_job(db, after(NOW, minutes=5))["capture_id"] == CAPTURE_ID
+
+
+def test_a_manual_retry_and_a_given_back_job_do_not_wait(db):
+    receipt = capture(db)
+    for minutes in (0, 5, 20):
+        job = store.claim_job(db, after(NOW, minutes=minutes))
+        store.fail_job(db, job["id"], job["owner"], "rate limited", after(NOW, minutes=minutes))
+    assert capture(db)["job"]["status"] == "failed"
+    store.retry_job(db, receipt["job"]["id"])
+    assert store.claim_job(db, after(NOW, minutes=20))["attempts"] == 1
+    again = capture(db)["job"]
+    store.fail_job(db, again["id"], again["owner"], "rate limited", after(NOW, minutes=20))
+    waiting = store.claim_job(db, after(NOW, minutes=25))
+    store.release_job(db, waiting["id"], waiting["owner"])
+    assert store.claim_job(db, after(NOW, minutes=25))["attempts"] == 2
+
+
+def test_a_permanent_failure_stays_final_and_never_waits(db):
+    capture(db)
+    job = store.claim_job(db, NOW)
+    failed = store.fail_job(db, job["id"], job["owner"], "codex is not installed", NOW, permanent=True)
+    assert failed["status"] == "failed"
+    assert store.claim_job(db, after(NOW, days=1)) is None
 
 
 def test_a_superseded_worker_cannot_fail_or_retry_a_running_job(db):
@@ -189,7 +213,7 @@ def test_every_stamped_write_accepts_an_injected_utc_time(db):
     assert store.heartbeat(db, job["id"], job["owner"], local + timedelta(seconds=1))
     assert capture(db)["job"]["heartbeat_at"] == "2026-01-02T03:04:06Z"
     assert store.fail_job(db, job["id"], job["owner"], "test", local)["finished_at"] == NOW
-    job = store.claim_job(db, local)
+    job = store.claim_job(db, local + timedelta(minutes=5))
     assert store.finish_job(db, job["id"], job["owner"], [record()], local)["finished_at"] == NOW
     (observation,) = store.observations(db)
     assert observation["created_at"] == NOW

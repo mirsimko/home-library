@@ -1,4 +1,5 @@
 """Invented records and temporary databases shared by store tests."""
+from datetime import datetime, timedelta
 from importlib.resources import files
 
 import pytest
@@ -78,3 +79,13 @@ def requeue(db, job_id):
     db.execute("""UPDATE jobs SET status = 'queued', attempts = 0, owner = NULL, heartbeat_at = NULL,
                   started_at = NULL, finished_at = NULL, error = NULL WHERE id = ?""", (job_id,))
     db.commit()
+
+
+def fail_for_good(db, error="invented failure"):
+    """Fail the queue's oldest job on each of its 3 attempts, waiting out every delay; returns when the last began."""
+    started = NOW
+    for hour in range(3):
+        started = (datetime.fromisoformat(NOW.replace("Z", "+00:00")) + timedelta(hours=hour)).isoformat().replace("+00:00", "Z")
+        job = store.claim_job(db, started)
+        store.fail_job(db, job["id"], job["owner"], error, started)
+    return started

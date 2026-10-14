@@ -14,7 +14,7 @@ pytest.importorskip("playwright")
 import uvicorn  # noqa: E402
 from PIL import Image, ImageDraw  # noqa: E402
 from playwright.sync_api import sync_playwright  # noqa: E402
-from store_helpers import NOW, capture, finish, record, typed_book  # noqa: E402
+from store_helpers import NOW, capture, fail_for_good, finish, record, typed_book  # noqa: E402
 
 from home_library import store  # noqa: E402
 from home_library.web import create_app  # noqa: E402
@@ -45,9 +45,7 @@ def seed(root):
         finish(db, [], COVER_ID, kind="cover", group_id=GROUP, sha256="b" * 64, now="2026-01-03T00:00:00Z")
         finish(db, [], BARCODE_ID, kind="barcode", group_id=GROUP, sha256="c" * 64, now="2026-01-03T00:00:05Z")
         capture(db, FAILED_ID, sha256="d" * 64, now="2026-01-04T00:00:00Z")
-        for _ in range(3):
-            job = store.claim_job(db, NOW)
-            store.fail_job(db, job["id"], job["owner"], "the reader did not answer", NOW)
+        fail_for_good(db, "the reader did not answer")
         book_ids = [book["id"] for book in store.search_books(db)]
     for id, size in ((SHELF_ID, (4080, 3072)), (COVER_ID, (1600, 1200)), (BARCODE_ID, (800, 600)), (FAILED_ID, (4080, 3072))):
         image = Image.new("RGB", size, (200, 180, 150))

@@ -1,7 +1,7 @@
 """The status page: queue counts, the worker's heartbeat, failed jobs with a retry, and photo sizes."""
 from contextlib import closing
 
-from store_helpers import CAPTURE_ID, NOW, SECOND_ID, capture
+from store_helpers import CAPTURE_ID, SECOND_ID, capture, fail_for_good
 from web_helpers import anonymous as anonymous
 from web_helpers import client as client
 from web_helpers import photo
@@ -50,9 +50,7 @@ def test_recent_captures_show_the_received_size_and_flag_small_photos(client):
 def test_failed_jobs_show_their_error_and_can_be_retried(client, tmp_path):
     upload(client, CAPTURE_ID, (400, 300))
     with closing(store.open(tmp_path)) as db:
-        for _ in range(3):
-            job = store.claim_job(db, NOW)
-            store.fail_job(db, job["id"], job["owner"], "invented failure <b>text</b>", NOW)
+        fail_for_good(db, "invented failure <b>text</b>")
     page = client.get("/status").text
     assert "invented failure &lt;b&gt;text&lt;/b&gt;" in page and 'hx-post="/status/jobs/1/retry"' in page
     retried = client.post("/status/jobs/1/retry", headers={"HX-Request": "true"})

@@ -13,7 +13,7 @@ import httpx
 import pytest
 import uvicorn
 from PIL import Image
-from store_helpers import CAPTURE_ID, NOW, SECOND_ID, typed_book
+from store_helpers import CAPTURE_ID, SECOND_ID, fail_for_good, typed_book
 
 from home_library import store
 from home_library.web import create_app
@@ -59,9 +59,7 @@ def base_url(tmp_path_factory):
             http.post("/api/captures", data={"id": id, "kind": "shelf", "location_id": "1"},
                       files={"file": ("invented.jpg", jpeg(size), "image/jpeg")}).raise_for_status()
     with closing(store.open(root)) as db:
-        for _ in range(3):
-            job = store.claim_job(db, NOW)
-            store.fail_job(db, job["id"], job["owner"], "invented failure with a fairly long explanation text", NOW)
+        fail_for_good(db, "invented failure with a fairly long explanation text")
     yield url
     server.should_exit = True
     thread.join(timeout=5)
