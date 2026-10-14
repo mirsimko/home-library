@@ -8,7 +8,7 @@ How the capture and review app ([app.md](app.md)) runs at home: on battlebox, in
 |---|---|---|
 | `hl serve` | WSL on battlebox, user `ai`, systemd user service `hl-web` | The web app, on `127.0.0.1:8765` only. |
 | `hl worker` | the same, service `hl-worker` | Reads uploaded photos with the pipeline, one at a time. Needs `codex` and `pi` logged in, and `yaz-client` for Czech look-ups. |
-| `hl backup` | the same, `hl-backup.timer`, nightly at 03:30 | A consistent copy of the data root in `~/home-library-backup/`. |
+| `hl backup` | the same, `hl-backup.timer`, nightly at 03:30 | A consistent copy of the data root in `~/home-library-backup/`, with 14 days of catalog snapshots and of deleted photos. |
 | Tailscale Serve | Windows on battlebox | Puts `127.0.0.1:8765` on the tailnet at `https://battlebox.<tailnet>.ts.net/`, with HTTPS and the `Tailscale-User-Login` header. |
 | Backup pull | Battlebook | Copies `~/home-library-backup/` from battlebox whenever the laptop is on. |
 
@@ -69,13 +69,24 @@ The worker runs `codex` and `pi` as `ai`, headless. When a login expires, jobs f
 
 ## Backups
 
-Every night `hl backup ~/home-library-backup` writes `catalog.db` through `VACUUM INTO`, so the copy is consistent while the app runs, and copies `captures/` and `work/` with `rsync`.
+Every night `hl backup ~/home-library-backup` writes the catalog through `VACUUM INTO`, so the copy is consistent while the app runs, and copies `captures/` and `work/` with `rsync`. The directory holds:
+
+- `catalog.db`: the latest catalog copy.
+- `snapshots/catalog-YYYYMMDD.db`: one catalog copy per day, the 14 most recent kept. A second backup on the same day replaces that day's snapshot.
+- `captures/` and `work/`: a mirror of the data root.
+- `deleted/YYYYMMDD/captures/` and `deleted/YYYYMMDD/work/`: the files that the mirror deleted or replaced on that day, kept for 14 days.
+
+So a bad night (a bulk edit through the API, deleted photos) can be undone from an older snapshot and from `deleted/`.
+
+`hl backup` refuses to run, and says why, when the data root has no `catalog.db` (a wrong `HL_DATA`; it does not create an empty one), or when the catalog has fewer than half the books of the latest snapshot. If you really removed that many books, run `uv run hl backup --force ~/home-library-backup` in the checkout. Until then the nightly run fails, which shows in `systemctl --user status hl-backup`.
 
 Battlebook pulls that directory whenever it is on. As a user crontab line or a systemd user timer there:
 
 ```sh
-rsync -a --delete battlebox-wsl:home-library-backup/ ~/home-library-backup/
+rsync -a battlebox-wsl:home-library-backup/ ~/home-library-backup/
 ```
+
+There is no `--delete` on purpose: if the backup on battlebox is wiped or emptied, the laptop copy stays. Old snapshots and `deleted/` directories that battlebox has pruned stay on the laptop until you remove them; do that by hand now and then.
 
 `battlebox-wsl` is an SSH host entry that reaches WSL on battlebox. The photos stay inside the house: no cloud copy unless the family decides otherwise (plan, question 2).
 
@@ -83,8 +94,10 @@ rsync -a --delete battlebox-wsl:home-library-backup/ ~/home-library-backup/
 
 1. Stop the services: `systemctl --user stop hl-web hl-worker`.
 2. Remove the old write-ahead files, so that SQLite does not replay them over the restored database: `rm -f ~/home-library/catalog.db-wal ~/home-library/catalog.db-shm`.
-3. Copy the backup into place: `rsync -a ~/home-library-backup/ ~/home-library/`.
+3. Copy the backup into place, but not `snapshots/` and `deleted/`: `rsync -a ~/home-library-backup/{catalog.db,captures,work} ~/home-library/`.
 4. Start them again. Jobs that were `running` when the backup was taken are taken over once their heartbeat is stale, after at most 20 minutes.
+
+To go back to an older day, do step 3 and then replace the catalog with that day's snapshot: `cp ~/home-library-backup/snapshots/catalog-YYYYMMDD.db ~/home-library/catalog.db`. Photos that were deleted since are in `deleted/` under the day they were removed; copy them back, for example `cp ~/home-library-backup/deleted/YYYYMMDD/captures/<file> ~/home-library/captures/`.
 
 Try a restore once on Battlebook, into an empty directory with `HL_DATA` pointing at it and `HL_DEV_USER` set (and `HL_USERS` unset; `hl serve` refuses both), and check that the books and photos are there.
 

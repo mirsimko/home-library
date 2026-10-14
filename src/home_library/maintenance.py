@@ -1,14 +1,20 @@
 """Private data maintenance that never puts secrets in a checkout."""
 import hashlib
 import os
+import re
 import secrets
+import shutil
+import sqlite3
 import subprocess
 import tempfile
 from contextlib import closing
+from datetime import date, timedelta
 from pathlib import Path
 
 from home_library import store
 from home_library.workspace import refuse_inside_checkout
+
+KEPT = 14
 
 
 def data_root(root=None):
@@ -37,17 +43,66 @@ def rotate_token(root=None):
     return token
 
 
-def backup(root, destination, *, run=subprocess.run):
-    """Take a catalog snapshot and mirror photo evidence, refusing destructive overlaps."""
+def backup(root, destination, *, run=subprocess.run, today=None, force=False):
+    """Take a catalog snapshot and mirror photo evidence, refusing destructive overlaps and empty sources."""
+    today = today or date.today()
     root = data_root(root)
     destination = refuse_inside_checkout(destination)
     targets = [destination, *(refuse_inside_checkout(destination / name)
-                             for name in ("catalog.db", "captures", "work"))]
+                             for name in ("catalog.db", "snapshots", "deleted", "captures", "work"))]
     if any(target.is_relative_to(root) or root.is_relative_to(target) for target in targets):
         raise ValueError("backup destination must not overlap the data root")
+    if not (root / "catalog.db").is_file():
+        raise ValueError(f"{root} has no catalog.db; is HL_DATA right? Nothing was backed up")
     destination.mkdir(parents=True, exist_ok=True)
     with closing(store.open(root)) as db:
-        store.backup_database(db, destination / "catalog.db")
+        if not force:
+            _refuse_shrunken(db, destination / "snapshots")
+        snapshot = destination / "snapshots" / f"catalog-{today:%Y%m%d}.db"
+        store.backup_database(db, snapshot)
+    _copy_over(snapshot, destination / "catalog.db")
+    for old in _dated(destination / "snapshots", r"catalog-\d{8}\.db")[:-KEPT]:
+        old.unlink()
     for name in ("captures", "work"):
-        run(["rsync", "-a", "--delete", f"{root}/{name}/", f"{destination}/{name}/"],
+        run(["rsync", "-a", "--delete", "--backup", f"--backup-dir={destination}/deleted/{today:%Y%m%d}/{name}",
+             f"{root}/{name}/", f"{destination}/{name}/"],
             check=True, stdout=subprocess.DEVNULL, stderr=subprocess.PIPE)
+    oldest = f"{today - timedelta(days=KEPT - 1):%Y%m%d}"
+    for old in _dated(destination / "deleted", r"\d{8}"):
+        if old.name < oldest:
+            shutil.rmtree(old)
+
+
+def _refuse_shrunken(db, snapshots):
+    """Raise when the catalog holds under half the books of the latest snapshot."""
+    latest = _dated(snapshots, r"catalog-\d{8}\.db")[-1:]
+    if not latest:
+        return
+    try:
+        with closing(sqlite3.connect(f"{latest[0].as_uri()}?mode=ro", uri=True)) as old:
+            before = old.execute("SELECT count(*) FROM books").fetchone()[0]
+    except sqlite3.Error as error:
+        raise ValueError(f"cannot read the latest snapshot {latest[0].name}: {error}; use --force to override") from error
+    now = db.execute("SELECT count(*) FROM books").fetchone()[0]
+    if now * 2 < before:
+        raise ValueError(f"the catalog has {now} of the {before} books in the latest snapshot ({latest[0].name}); "
+                         "refusing to back up, use --force to override")
+
+
+def _copy_over(source, target):
+    """Replace target with a copy of source in one step."""
+    with tempfile.NamedTemporaryFile(dir=target.parent, prefix=".catalog-", delete=False) as handle:
+        temporary = Path(handle.name)
+    try:
+        shutil.copyfile(source, temporary)
+        temporary.replace(target)
+    finally:
+        temporary.unlink(missing_ok=True)
+
+
+def _dated(directory, pattern):
+    """List the entries of directory whose names match the dated pattern, oldest first."""
+    if not directory.is_dir():
+        return []
+    return sorted((path for path in directory.iterdir() if re.fullmatch(pattern, path.name)),
+                  key=lambda path: path.name)
