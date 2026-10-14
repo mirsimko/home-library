@@ -180,3 +180,16 @@ def test_only_a_plain_path_on_this_site_is_followed_after_adding_a_book(client, 
     assert fine.headers["location"] == "/review/5?done=added"
     assert 'value="/review/5"' in client.get("/books/new", params={"next": "/review/5"}).text
     assert "evil" not in client.get("/books/new", params={"next": "/\\evil.example"}).text
+
+
+def test_attach_buttons_include_the_ticked_pairs_only_when_there_are_pairs(client, tmp_path):
+    """htmx logs an error for an hx-include selector that matches nothing, so a lone photo gets none."""
+    shelf, cover, _ = stock(tmp_path)
+    with closing(store.open(tmp_path)) as db:
+        typed_book(db, title="Paper Moon")
+    paired = client.get(f"/review/{cover[0]['id']}/attach-search", params={"q": "moon"}, headers=HX).text
+    (button,) = [item for item in tags(paired, "button") if item.get("hx-post")]
+    assert button["hx-include"] == "[name='also']"
+    alone = client.get(f"/review/{shelf[0]['id']}/attach-search", params={"q": "moon"}, headers=HX).text
+    (button,) = [item for item in tags(alone, "button") if item.get("hx-post")]
+    assert "hx-include" not in button
