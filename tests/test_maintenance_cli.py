@@ -115,3 +115,31 @@ def test_backup_reports_rsync_failure(tmp_path, capsys):
     output = capsys.readouterr()
     assert output.out == "" and len(output.err.splitlines()) == 1
     assert "12" in output.err
+
+
+def test_backup_refusals_are_one_line_and_force_overrides_a_shrunken_catalog(tmp_path, capsys):
+    from contextlib import closing
+
+    from store_helpers import typed_book
+
+    from home_library import store
+
+    root, destination = tmp_path / "private", tmp_path / "backup"
+    with closing(store.open(root)) as db:
+        for number in range(4):
+            typed_book(db, title=f"Kniha {number}")
+    calls = []
+    args = ["backup", str(destination), "--data-root", str(root)]
+    assert main(args, run=lambda *a, **k: calls.append(a)) == 0
+    with closing(store.open(root)) as db:
+        db.execute("DELETE FROM books WHERE id > 1")
+        db.commit()
+    assert main(args, run=lambda *a, **k: calls.append(a)) == 1
+    output = capsys.readouterr()
+    assert output.out == "" and len(output.err.splitlines()) == 1 and "--force" in output.err
+    assert len(calls) == 2
+    assert main([*args, "--force"], run=lambda *a, **k: calls.append(a)) == 0
+    assert len(calls) == 4
+    assert main(["backup", str(destination), "--data-root", str(tmp_path / "wrong")], run=lambda *a, **k: None) == 1
+    output = capsys.readouterr()
+    assert len(output.err.splitlines()) == 1 and "catalog.db" in output.err and not (tmp_path / "wrong").exists()
