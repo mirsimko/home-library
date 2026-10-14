@@ -63,7 +63,7 @@ def test_failed_jobs_show_their_error_and_can_be_retried(client, tmp_path):
     assert 'data-failed="0"' in client.get("/status/panel").text
 
 
-def test_a_job_waiting_out_its_retry_delay_says_when_it_may_run_again(client, tmp_path):
+def test_a_job_waiting_out_its_retry_delay_says_how_soon_it_runs_again(client, tmp_path):
     upload(client, CAPTURE_ID, (400, 300))
     upload(client, SECOND_ID, (400, 300))
     with closing(store.open(tmp_path)) as db:
@@ -73,8 +73,8 @@ def test_a_job_waiting_out_its_retry_delay_says_when_it_may_run_again(client, tm
         waiting = store.jobs(db)[0]
     page = client.get("/status").text
     assert 'data-queued="2"' in page and 'data-failed="0"' in page
-    assert page.count("retrying after") == 1
-    assert f"retrying after {store.retry_at(waiting):%H:%M} UTC" in page
+    assert page.count("retrying in") == 1 and "retrying in 5 minutes" in page
+    assert store.retry_at(waiting) is not None
 
 
 def test_status_pages_need_access(anonymous):
