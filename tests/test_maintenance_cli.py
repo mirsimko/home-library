@@ -64,7 +64,10 @@ def test_backup_vacuums_rows_and_mirrors_private_directories(tmp_path, capsys, m
     original = typed_book(db)
     db.close()
     destination.mkdir()
-    (destination / "catalog.db").write_text("older snapshot")
+    older = sqlite3.connect(destination / "catalog.db")
+    older.execute("CREATE TABLE books (id)")
+    older.commit()
+    older.close()
     monkeypatch.setenv("HL_DATA", str(root))
     args = ["backup", str(destination)]
     if position != "environment":

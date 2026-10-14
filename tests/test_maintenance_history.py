@@ -1,4 +1,5 @@
 """A backup keeps dated history, so a bad night cannot replace the only good copy."""
+import os
 import shutil
 import sqlite3
 from contextlib import closing
@@ -225,3 +226,58 @@ def test_backup_names_an_unreadable_latest_snapshot_and_force_replaces_it(tmp_pa
         run_backup(root, destination, "2026-10-15")
     run_backup(root, destination, "2026-10-15", force=True)
     assert titles(destination / "catalog.db") == ["Kniha 0"]
+
+
+def old_style(tmp_path, destination, books, day="2026-10-10"):
+    """A backup made before snapshots: only catalog.db, last written on day."""
+    older = source(tmp_path / "older", books)
+    run_backup(older, tmp_path / "older-backup", day)
+    destination.mkdir(exist_ok=True)
+    shutil.copy(tmp_path / "older-backup" / "catalog.db", destination / "catalog.db")
+    stamp = datetime.fromisoformat(f"{day}T12:00:00").timestamp()
+    os.utime(destination / "catalog.db", (stamp, stamp))
+
+
+def test_backup_without_snapshots_compares_with_the_catalog_of_an_old_style_backup(tmp_path):
+    root, destination = source(tmp_path, books=1), tmp_path / "backup"
+    old_style(tmp_path, destination, books=4)
+    called = []
+    with pytest.raises(ValueError, match=r"1 of the 4 books.*catalog\.db.*--force"):
+        maintenance.backup(root, destination, run=lambda *a, **k: called.append(a), now=datetime(2026, 10, 15, 3, 30))
+    assert called == [] and len(titles(destination / "catalog.db")) == 4
+    assert not (destination / "snapshots").exists()
+    run_backup(root, destination, "2026-10-15", force=True)
+    assert titles(destination / "catalog.db") == ["Kniha 0"]
+
+
+def test_the_first_snapshot_run_keeps_the_old_style_catalog_as_a_snapshot_of_its_day(tmp_path):
+    root, destination = source(tmp_path, books=2), tmp_path / "backup"
+    old_style(tmp_path, destination, books=3)
+    run_backup(root, destination, "2026-10-15")
+    snapshots = destination / "snapshots"
+    assert sorted(path.name for path in snapshots.iterdir()) == ["catalog-20261010.db", "catalog-20261015.db"]
+    assert len(titles(snapshots / "catalog-20261010.db")) == 3
+    assert len(titles(snapshots / "catalog-20261015.db")) == 2 and len(titles(destination / "catalog.db")) == 2
+
+
+def test_the_old_style_catalog_of_today_does_not_take_the_name_of_todays_snapshot(tmp_path):
+    root, destination = source(tmp_path, books=2), tmp_path / "backup"
+    old_style(tmp_path, destination, books=3, day="2026-10-15")
+    run_backup(root, destination, "2026-10-15")
+    snapshots = destination / "snapshots"
+    assert sorted(path.name for path in snapshots.iterdir()) == ["catalog-20261014.db", "catalog-20261015.db"]
+    assert len(titles(snapshots / "catalog-20261014.db")) == 3
+    assert len(titles(snapshots / "catalog-20261015.db")) == 2
+
+
+def test_force_still_keeps_an_unreadable_old_style_catalog_before_replacing_it(tmp_path):
+    root, destination = source(tmp_path), tmp_path / "backup"
+    destination.mkdir()
+    (destination / "catalog.db").write_text("not a database")
+    with pytest.raises(ValueError, match=r"catalog\.db.*--force"):
+        run_backup(root, destination, "2026-10-15")
+    assert (destination / "catalog.db").read_text() == "not a database"
+    run_backup(root, destination, "2026-10-15", force=True)
+    assert titles(destination / "catalog.db") == ["Kniha 0"]
+    kept = [path for path in (destination / "snapshots").iterdir() if path.read_bytes() == b"not a database"]
+    assert len(kept) == 1
