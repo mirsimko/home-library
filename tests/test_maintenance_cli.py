@@ -81,9 +81,9 @@ def test_backup_vacuums_rows_and_mirrors_private_directories(tmp_path, capsys, m
     copy.row_factory = sqlite3.Row
     assert store.book(copy, original["id"]) == original
     copy.close()
-    assert [call[0] for call in calls] == [
-        ["rsync", "-a", "--delete", f"{root}/captures/", f"{destination}/captures/"],
-        ["rsync", "-a", "--delete", f"{root}/work/", f"{destination}/work/"],
+    assert [(call[0][:3], call[0][-2:]) for call in calls] == [
+        (["rsync", "-a", "--delete"], [f"{root}/captures/", f"{destination}/captures/"]),
+        (["rsync", "-a", "--delete"], [f"{root}/work/", f"{destination}/work/"]),
     ]
     assert all(call[1]["check"] is True for call in calls)
 

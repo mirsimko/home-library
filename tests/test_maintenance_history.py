@@ -52,3 +52,14 @@ def test_backup_keeps_only_the_fourteen_latest_snapshots(tmp_path):
     run_backup(root, destination, "2026-10-21")
     names = sorted(path.name for path in snapshots.iterdir())
     assert names == [*(f"catalog-202610{day:02d}.db" for day in range(8, 22)), "notes.txt"]
+
+
+def test_rsync_keeps_deleted_and_replaced_photos_in_a_dated_directory(tmp_path):
+    root, destination = source(tmp_path), tmp_path / "backup"
+    calls = []
+    maintenance.backup(root, destination, run=lambda command, **kwargs: calls.append(command),
+                       today=date(2026, 10, 15))
+    assert calls == [
+        ["rsync", "-a", "--delete", "--backup", f"--backup-dir={destination}/deleted/20261015/{name}",
+         f"{root}/{name}/", f"{destination}/{name}/"] for name in ("captures", "work")
+    ]
