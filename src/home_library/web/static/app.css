@@ -190,6 +190,19 @@ tr.pick td { background: var(--accent-soft); }
 .selectcell { width: 3rem; }
 .selectcell input { margin: 0.35rem 0.4rem; }
 
+/* Tables on phones: below 40rem, columns marked "roomy" fold under the title (Books) and tables marked "stack"
+   become one block per row, each cell labelled by its data-label (Status). Above 40rem nothing changes. */
+.fold { display: none; }
+@media (max-width: 40rem) {
+  .roomy { display: none; }
+  .fold { display: block; margin-top: 0.15rem; }
+  table.stack thead { position: absolute; width: 1px; height: 1px; overflow: hidden; clip: rect(0 0 0 0); }
+  table.stack, table.stack tbody, table.stack tr, table.stack td { display: block; }
+  table.stack tr { padding: 0.45rem 0; border-bottom: 1px solid var(--line); }
+  table.stack td { padding: 0.15rem 0.6rem; border: 0; }
+  table.stack td[data-label]::before { content: attr(data-label); display: block; font-size: 0.8125rem; text-transform: uppercase; letter-spacing: 0.04em; color: var(--muted); font-weight: 600; }
+}
+
 .selection-bar {
   position: sticky;
   bottom: 0;

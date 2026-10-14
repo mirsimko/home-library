@@ -3,11 +3,12 @@
   <td class="selectcell"><input type="checkbox" name="book_ids" value="{{ book.id }}" aria-label="Select {{ book.title }}"></td>
   <td>
     <a class="title" href="/books/{{ book.id }}"><span{{ lang(book.language) }}>{{ book.title }}</span></a>
+    <div class="fold small muted"><span{{ lang(book.language) }}>{{ book.author }}</span>{% if book.author and names[book.location_id] %} · {% endif %}{{ names[book.location_id] }}</div>
     {% if book.needs_review %}<span class="badge warn">needs review</span>{% endif %}
     {% if book.tags %}<div class="small muted">{% for tag in book.tags.split(", ") %}<a href="/books?tag={{ tag|urlencode }}">{{ tag }}</a>{% if not loop.last %}, {% endif %}{% endfor %}</div>{% endif %}
   </td>
-  <td class="title"><span{{ lang(book.language) }}>{{ book.author }}</span></td>
-  <td>{{ names[book.location_id] }}</td>
+  <td class="title roomy"><span{{ lang(book.language) }}>{{ book.author }}</span></td>
+  <td class="roomy">{{ names[book.location_id] }}</td>
   <td><span class="badge{% if book.state == 'Active' %} good{% endif %}">{{ book.state }}</span></td>
 </tr>
 {% endfor %}
