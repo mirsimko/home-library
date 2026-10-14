@@ -379,6 +379,8 @@ def _book_fields(db, fields):
             result[field] = int(value)
         elif type(value) is not int:
             raise Invalid(f"{field} must be an integer or empty")
+    if None not in (result["age_from"], result["age_to"]) and result["age_from"] > result["age_to"]:
+        raise Invalid("age from must not be more than age to")
     if type(result["needs_review"]) is not bool:
         raise Invalid("needs_review must be true or false")
     return result
