@@ -30,7 +30,7 @@ def test_a_book_typed_by_hand_is_a_plain_versioned_record(db):
 
 @pytest.mark.parametrize("changes", [
     {"title": " \n\t "}, {"title": None}, {"state": "lost"}, {"unknown": "x"}, {"version": 7},
-    {"author": []}, {"age_from": "three"}, {"age_to": 2.5}, {"needs_review": "false"},
+    {"author": []}, {"age_from": "three"}, {"age_to": 2.5}, {"age_from": "9", "age_to": "3"}, {"needs_review": "false"},
 ])
 def test_invalid_book_fields_leave_no_book(db, changes):
     with pytest.raises(store.Invalid):
