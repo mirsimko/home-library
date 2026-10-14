@@ -437,6 +437,18 @@ class StopAfterWaits(__import__("threading").Event):
         return self.is_set()
 
 
+def test_a_job_waiting_out_its_retry_delay_makes_the_loop_idle_not_spin(tmp_path):
+    root = tmp_path / "private"
+    queued(root)
+    child, stop = Child(returncode=1), StopAfterWaits(3)
+    assert worker.run(root, popen=child, stop=stop, idle_wait=7) == 0
+    assert len(child.calls) == 1 and stop.waits == [7, 7, 7]
+    db = store.open(root)
+    job = capture(db)["job"]
+    assert job["status"] == "queued" and job["attempts"] == 1
+    db.close()
+
+
 def test_a_database_error_when_claiming_waits_and_the_loop_goes_on(tmp_path, monkeypatch):
     import sqlite3
 
