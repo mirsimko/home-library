@@ -226,15 +226,31 @@ def _time(stamp):
     return datetime.fromisoformat(stamp.replace("Z", "+00:00"))
 
 
-def retry_at(job):
-    """When a queued job that has failed may be claimed again, as a time; None when nothing holds it back."""
+def retry_at(job, now=None):
+    """When a queued job that has failed may be claimed again, as a time; None when nothing holds it back now.
+
+    A wait longer than the longest delay can only come from a clock that jumped, so it is ignored.
+    """
     if job["status"] != "queued" or job["finished_at"] is None or job["attempts"] < 1:
         return None
-    return _time(job["finished_at"]) + RETRY_DELAYS[min(job["attempts"], len(RETRY_DELAYS)) - 1]
+    current = _time(_stamp(now))
+    until = _time(job["finished_at"]) + RETRY_DELAYS[min(job["attempts"], len(RETRY_DELAYS)) - 1]
+    return until if current < until <= current + RETRY_DELAYS[-1] else None
+
+
+def held_by(db, now=None):
+    """The failed job that holds the whole queue back, with its error and `retry_at`; None when nothing waits.
+
+    A cause that hits every job, such as an expired login or a usage limit, then costs one attempt, not one per job.
+    """
+    waiting = [{**dict(row), "retry_at": until} for row in db.execute(
+        "SELECT * FROM jobs WHERE status = 'queued' AND finished_at IS NOT NULL ORDER BY id")
+        if (until := retry_at(row, now))]
+    return max(waiting, key=lambda job: job["retry_at"], default=None)
 
 
 def claim_job(db, now=None):
-    """Lease the oldest eligible job, retiring workers that stopped three times; a failed attempt waits first."""
+    """Lease the oldest eligible job, retiring workers that stopped three times; a failed attempt holds all back."""
     stamp = _stamp(now)
     current = _time(stamp)
     cutoff = current - timedelta(minutes=20)
@@ -245,12 +261,12 @@ def claim_job(db, now=None):
         # SQLite's date functions round to milliseconds; lease boundaries need the full saved precision.
         candidates.sort(key=lambda row: (datetime.fromisoformat(row["uploaded_at"].replace("Z", "+00:00")),
                                          row["id"]))
+        if any(retry_at(row, current) for row in candidates):
+            return None
         for row in candidates:
             if row["status"] == "running" and row["heartbeat_at"] is not None:
                 if _time(row["heartbeat_at"]) >= cutoff:
                     continue
-            if (waiting := retry_at(row)) is not None and waiting > current:
-                continue
             if row["attempts"] >= 3:
                 db.execute("""UPDATE jobs SET status = 'failed', owner = NULL, finished_at = ?,
                               error = 'the worker stopped responding 3 times' WHERE id = ?""", (stamp, row["id"]))
@@ -298,11 +314,14 @@ def release_job(db, job_id, owner):
 
 
 def retry_job(db, job_id):
-    """Restart a failed job with a fresh retry allowance; finished work is not redone."""
+    """Restart a failed job with a fresh retry allowance, or end a waiting job's delay; finished work is not redone."""
     with _write(db):
         job = _get(db, "jobs", job_id)
+        if job["status"] == "queued" and job["finished_at"] is not None:
+            db.execute("UPDATE jobs SET finished_at = NULL WHERE id = ?", (job_id,))
+            return _get(db, "jobs", job_id)
         if job["status"] != "failed":
-            raise Conflict("only a failed job can be retried")
+            raise Conflict("only a failed or waiting job can be retried")
         db.execute("""UPDATE jobs SET status = 'queued', attempts = 0, owner = NULL,
                       heartbeat_at = NULL, started_at = NULL, finished_at = NULL, error = NULL WHERE id = ?""",
                    (job_id,))

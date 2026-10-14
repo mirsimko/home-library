@@ -20,7 +20,7 @@ def test_queue_heartbeats_and_retries_use_the_shared_store(client, tmp_path):
     health = client.get("/health").json()
     assert health == {"ok": True, "worker_seen": last, "queued": 0, "failed": 1}
     done = client.post(f"/api/jobs/{jobs[0]['id']}/retry")  # finished work is not redone
-    assert done.status_code == 409 and "only a failed job" in done.json()["error"]
+    assert done.status_code == 409 and "only a failed or waiting job" in done.json()["error"]
     retried = client.post(f"/api/jobs/{jobs[1]['id']}/retry")
     assert retried.status_code == 200 and retried.json()["status"] == "queued"
     assert retried.json()["attempts"] == 0
