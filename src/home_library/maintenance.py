@@ -8,7 +8,7 @@ import sqlite3
 import subprocess
 import tempfile
 from contextlib import closing
-from datetime import datetime, timedelta
+from datetime import date, datetime, timedelta
 from pathlib import Path
 
 from home_library import store
@@ -56,9 +56,13 @@ def backup(root, destination, *, run=subprocess.run, now=None, force=False):
     if not (root / "catalog.db").is_file():
         raise ValueError(f"{root} has no catalog.db; is HL_DATA right? Nothing was backed up")
     destination.mkdir(parents=True, exist_ok=True)
+    latest = destination / "catalog.db"
+    earlier = _dated(destination / "snapshots", r"catalog-\d{8}\.db")[-1:]
     with closing(store.open(root)) as db:
-        if not force:
-            _refuse_shrunken(db, destination / "snapshots")
+        if not force and (earlier or latest.is_file()):
+            _refuse_shrunken(db, earlier[0] if earlier else latest)
+        if not earlier and latest.is_file():
+            _keep_old_style(latest, destination / "snapshots", today)
         store.backup_database(db, snapshot)
     _copy_over(snapshot, destination / "catalog.db")
     for old in _dated(destination / "snapshots", r"catalog-\d{8}\.db")[:-KEPT]:
@@ -81,20 +85,26 @@ def _refuse_overlap(root, paths):
             raise ValueError("backup destination must not overlap the data root")
 
 
-def _refuse_shrunken(db, snapshots):
-    """Raise when the catalog holds under half the books of the latest snapshot."""
-    latest = _dated(snapshots, r"catalog-\d{8}\.db")[-1:]
-    if not latest:
-        return
+def _refuse_shrunken(db, earlier):
+    """Raise when the catalog holds under half the books of the earlier copy, or that copy cannot be read."""
     try:
-        with closing(sqlite3.connect(f"{latest[0].as_uri()}?mode=ro", uri=True)) as old:
+        with closing(sqlite3.connect(f"{earlier.as_uri()}?mode=ro", uri=True)) as old:
             before = old.execute("SELECT count(*) FROM books").fetchone()[0]
     except sqlite3.Error as error:
-        raise ValueError(f"cannot read the latest snapshot {latest[0].name}: {error}; use --force to override") from error
+        raise ValueError(f"cannot read the earlier copy {earlier.name}: {error}; use --force to override") from error
     now = db.execute("SELECT count(*) FROM books").fetchone()[0]
     if now * 2 < before:
-        raise ValueError(f"the catalog has {now} of the {before} books in the latest snapshot ({latest[0].name}); "
+        raise ValueError(f"the catalog has {now} of the {before} books in the earlier copy ({earlier.name}); "
                          "refusing to back up, use --force to override")
+
+
+def _keep_old_style(latest, snapshots, today):
+    """Save the catalog of a backup made before snapshots under the day it was written, before it is replaced."""
+    day = min(date.fromtimestamp(latest.stat().st_mtime), today - timedelta(days=1))
+    while (snapshots / f"catalog-{day:%Y%m%d}.db").exists():
+        day -= timedelta(days=1)
+    snapshots.mkdir(exist_ok=True)
+    _copy_over(latest, snapshots / f"catalog-{day:%Y%m%d}.db")
 
 
 def _copy_over(source, target):
