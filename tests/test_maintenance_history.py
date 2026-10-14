@@ -51,4 +51,4 @@ def test_backup_keeps_only_the_fourteen_latest_snapshots(tmp_path):
     (snapshots / "notes.txt").write_text("not a snapshot")
     run_backup(root, destination, "2026-10-21")
     names = sorted(path.name for path in snapshots.iterdir())
-    assert names == ["notes.txt", *(f"catalog-202610{day:02d}.db" for day in range(8, 22))]
+    assert names == [*(f"catalog-202610{day:02d}.db" for day in range(8, 22)), "notes.txt"]

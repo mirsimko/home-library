@@ -1,6 +1,7 @@
 """Private data maintenance that never puts secrets in a checkout."""
 import hashlib
 import os
+import re
 import secrets
 import shutil
 import subprocess
@@ -11,6 +12,9 @@ from pathlib import Path
 
 from home_library import store
 from home_library.workspace import refuse_inside_checkout
+
+
+KEPT = 14
 
 
 def data_root(root=None):
@@ -53,6 +57,8 @@ def backup(root, destination, *, run=subprocess.run, today=None):
         snapshot = destination / "snapshots" / f"catalog-{today:%Y%m%d}.db"
         store.backup_database(db, snapshot)
     _copy_over(snapshot, destination / "catalog.db")
+    for old in _dated(destination / "snapshots", r"catalog-\d{8}\.db")[:-KEPT]:
+        old.unlink()
     for name in ("captures", "work"):
         run(["rsync", "-a", "--delete", f"{root}/{name}/", f"{destination}/{name}/"],
             check=True, stdout=subprocess.DEVNULL, stderr=subprocess.PIPE)
@@ -67,3 +73,11 @@ def _copy_over(source, target):
         temporary.replace(target)
     finally:
         temporary.unlink(missing_ok=True)
+
+
+def _dated(directory, pattern):
+    """List the entries of directory whose names match the dated pattern, oldest first."""
+    if not directory.is_dir():
+        return []
+    return sorted((path for path in directory.iterdir() if re.fullmatch(pattern, path.name)),
+                  key=lambda path: path.name)
