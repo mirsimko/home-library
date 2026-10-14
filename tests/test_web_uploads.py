@@ -40,6 +40,25 @@ def test_uploads_are_sniffed_and_keep_the_full_photo_and_orientation(client, tmp
     assert not list((tmp_path / "captures" / ".incoming").glob("*.tmp"))
 
 
+def test_flushing_an_upload_to_disk_does_not_hold_up_other_requests(client, monkeypatch):
+    import asyncio
+    import os
+
+    on_loop, real_fsync = [], os.fsync
+
+    def fsync(fd):
+        try:
+            asyncio.get_running_loop()
+            on_loop.append(fd)
+        except RuntimeError:
+            pass
+        real_fsync(fd)
+
+    monkeypatch.setattr(os, "fsync", fsync)
+    assert upload(client, photo("JPEG")).status_code == 201
+    assert on_loop == []
+
+
 def test_an_mpo_photo_from_an_android_camera_is_kept_as_a_jpeg(client, tmp_path):
     output = BytesIO()
     first, second = Image.new("RGB", (4080, 3072), "white"), Image.new("RGB", (400, 300), "gray")
