@@ -56,13 +56,13 @@ def test_backup_keeps_only_the_fourteen_latest_snapshots(tmp_path):
     assert names == [*(f"catalog-202610{day:02d}.db" for day in range(8, 22)), "notes.txt"]
 
 
-def test_rsync_keeps_deleted_and_replaced_photos_in_a_dated_directory(tmp_path):
+def test_rsync_keeps_deleted_and_replaced_photos_in_a_directory_of_the_run(tmp_path):
     root, destination = source(tmp_path), tmp_path / "backup"
     calls = []
     maintenance.backup(root, destination, run=lambda command, **kwargs: calls.append(command),
                        now=datetime(2026, 10, 15, 3, 30))
     assert calls == [
-        ["rsync", "-a", "--delete", "--backup", f"--backup-dir={destination}/deleted/20261015/{name}",
+        ["rsync", "-a", "--delete", "--backup", f"--backup-dir={destination}/deleted/20261015/033000/{name}",
          f"{root}/{name}/", f"{destination}/{name}/"] for name in ("captures", "work")
     ]
 
@@ -79,13 +79,28 @@ def test_real_rsync_mirrors_and_keeps_what_the_mirror_drops(tmp_path):
     (root / "captures" / "changed.jpg").write_bytes(b"second")
     shutil.rmtree(root / "work" / "p1")
     maintenance.backup(root, destination, now=datetime(2026, 10, 15, 3, 30))
-    kept = destination / "deleted" / "20261015"
+    kept = destination / "deleted" / "20261015" / "033000"
     assert not (destination / "captures" / "gone.jpg").exists()
     assert (destination / "captures" / "changed.jpg").read_bytes() == b"second"
     assert (kept / "captures" / "gone.jpg").read_bytes() == b"gone"
     assert (kept / "captures" / "changed.jpg").read_bytes() == b"first"
     assert (kept / "work" / "p1" / "tile.png").read_bytes() == b"tile"
     assert not (destination / "deleted" / "20261014").exists()
+
+
+@pytest.mark.skipif(shutil.which("rsync") is None, reason="needs rsync")
+def test_a_photo_replaced_twice_in_a_day_keeps_every_earlier_version(tmp_path):
+    root, destination = source(tmp_path), tmp_path / "backup"
+    (root / "captures" / "changed.jpg").write_bytes(b"first")
+    maintenance.backup(root, destination, now=datetime(2026, 10, 15, 3, 30))
+    for version, hour in ((b"second", 9), (b"third", 18)):
+        (root / "captures" / "changed.jpg").write_bytes(version)
+        maintenance.backup(root, destination, now=datetime(2026, 10, 15, hour, 0))
+    kept = destination / "deleted" / "20261015"
+    assert sorted(path.name for path in kept.iterdir()) == ["090000", "180000"]
+    assert (kept / "090000" / "captures" / "changed.jpg").read_bytes() == b"first"
+    assert (kept / "180000" / "captures" / "changed.jpg").read_bytes() == b"second"
+    assert (destination / "captures" / "changed.jpg").read_bytes() == b"third"
 
 
 def test_backup_drops_deleted_directories_older_than_fourteen_days(tmp_path):
