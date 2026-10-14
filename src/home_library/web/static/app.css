@@ -280,6 +280,13 @@ tr.pick td { background: var(--accent-soft); }
   .detail-grid .evidence { position: sticky; top: 4.5rem; }
 }
 .evidence img { display: block; max-width: 100%; max-height: 70vh; margin: 0 auto; border-radius: var(--radius); background: var(--sunk); }
+
+/* Review photo in portrait: on a tall, narrow screen the photo (full width) would fill the first screen, so cap its
+   height and letterbox it; the read details, candidates and the start of the form then show below it.
+   Side by side (landscape) keeps the 70vh cap above. */
+@media (orientation: portrait) {
+  .evidence > a > img { width: 100%; height: auto; max-height: 42vh; object-fit: contain; }
+}
 .readings { display: grid; grid-template-columns: auto 1fr; gap: 0.15rem 0.8rem; margin: 0.6rem 0; font-size: 0.9375rem; }
 .readings dt { color: var(--muted); }
 .readings dd { margin: 0; overflow-wrap: anywhere; }
