@@ -186,3 +186,16 @@ def test_a_barcode_only_observation_is_headed_by_the_catalogue_title(client, tmp
     assert "(empty)" not in page and "nothing read, barcode only" in page
     bare = client.get(f"/review/{cover[0]['id']}").text
     assert "nothing read, barcode only" not in bare and "(empty)" not in bare
+
+
+def test_keyboard_hints_are_hidden_on_touch_screens(client, tmp_path):
+    from pathlib import Path
+
+    with closing(store.open(tmp_path)) as db:
+        (row,) = finish(db, [record("Paper Moon")])
+    for path in ("/review", f"/review/{row['id']}"):
+        assert any("key-hints" in item.get("class", "").split() for item in tags(client.get(path).text, "div"))
+    css = (Path(__file__).resolve().parent.parent / "src/home_library/web/static/app.css").read_text()
+    rule = css[css.index("@media (hover: none) and (pointer: coarse)"):]
+    hidden = rule[:rule.index("}") + 1]
+    assert ".key-hints" in hidden and ".button kbd" in hidden and "button kbd" in hidden and "display: none" in hidden
