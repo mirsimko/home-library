@@ -502,6 +502,11 @@ def _defaults(evidence):
         fields[key] = first(matched, key)
         if fields[key] == "":
             fields[key] = first(records, key)
+    # The two ages are one range: taken apart from two records they could run backwards.
+    ages = [row for row in matched + records if any(row.get(key) not in (None, "") for key in ("age_from", "age_to"))]
+    for key in ("age_from", "age_to"):
+        value = ages[0].get(key) if ages else None
+        fields[key] = "" if value is None else value
     fields["tags"] = first(records, "tags")
     # A barcode reads no title, so a book made from one alone is named by its catalogue record.
     titles = [row.get(key) for key in ("title", "catalogue_title") for row in records]
