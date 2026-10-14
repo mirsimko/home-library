@@ -64,6 +64,12 @@
     return Math.max(width, height) < SMALL_SIDE;
   }
 
+  // The size matters for shelf photos only: a cover is shrunk to 2000 px for reading anyway, and a barcode
+  // photo can be any size.
+  function warnsSmall(kind, width, height) {
+    return kind === "shelf" && isSmall(width, height);
+  }
+
   // ---- what each photo is: shelf, cover or barcode ----------------------------------------------
 
   function startFlow(mode) {
@@ -169,7 +175,7 @@
   }
 
   const logic = {
-    RETRY_DELAYS, statusOf, isFinal, isUnreceived, releasePreview, hasPreview, isSmall, startFlow, assign, askBarcode, nextBook, prompt,
+    RETRY_DELAYS, statusOf, isFinal, isUnreceived, releasePreview, hasPreview, isSmall, warnsSmall, startFlow, assign, askBarcode, nextBook, prompt,
     retryDelay, isRetryable, createUploader,
   };
   if (typeof module !== "undefined" && module.exports) module.exports = logic;
@@ -254,7 +260,7 @@
     li.querySelector("button").hidden = !(item.state === "failed" || item.state === "rejected");
     detail.textContent = detailText(item);
     const image = item.receipt && item.receipt.image;
-    warning.hidden = !(image && isSmall(image.width, image.height));
+    warning.hidden = !(image && warnsSmall(item.kind, image.width, image.height));
     warning.textContent = warning.hidden ? "" : "This photo is smaller than the camera's original; check the camera settings.";
   }
 

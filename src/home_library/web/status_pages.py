@@ -52,7 +52,7 @@ def panel_context(request):
         recent.append({"id": capture["id"], "kind": capture["kind"], "location": names.get(capture["location_id"], ""),
                        "when": ago(seconds_since(capture["created_at"], now)), "job": receipt["job"]["status"],
                        "open": receipt["open_observations"], "size": size,
-                       "small": size is not None and max(size) < SMALL_SIDE})
+                       "small": capture["kind"] == "shelf" and size is not None and max(size) < SMALL_SIDE})
     seen = health["worker_seen"]
     return {"counts": {status: sum(job["status"] == status for job in jobs)
                        for status in ("queued", "running", "done", "failed")},
