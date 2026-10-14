@@ -78,7 +78,7 @@ def test_selected_books_move_or_change_state_together(client, tmp_path):
         assert [(b["location_id"], b["state"]) for b in map(lambda i: store.book(db, i), (1, 2, 3))] == [
             (2, "Active"), (2, "Stored"), (2, "Active")]
     changed = client.post("/books/move", data={"book_ids": ["1"], "location_id": "", "state": "Retired"}, headers=HX)
-    assert changed.status_code == 200 and "Changed 1 book" in changed.text
+    assert changed.status_code == 200 and "Changed 1 book to Retired" in changed.text
     with closing(store.open(tmp_path)) as db:
         assert store.book(db, 1)["state"] == "Retired" and store.book(db, 1)["version"] == 3
 
