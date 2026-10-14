@@ -69,3 +69,14 @@ def test_status_pages_need_access(anonymous):
     for path in ("/status", "/status/panel"):
         assert anonymous.get(path).status_code == 401
     assert anonymous.post("/status/jobs/1/retry").status_code == 401
+
+
+def test_only_a_small_shelf_photo_is_flagged_not_a_cover_or_a_barcode(client):
+    client.post("/api/locations", json={"name": "Shelf A", "kind": "shelf"})
+    for number, kind in enumerate(("shelf", "cover", "barcode"), start=1):
+        client.post("/api/captures", data={"id": f"10000000-0000-4000-8000-00000000000{number}", "kind": kind, "location_id": "1"},
+                    files={"file": ("invented.jpg", photo(size=(800, 600)), "image/jpeg")})
+    page = client.get("/status").text
+    assert page.count("800 × 600") == 3
+    assert page.count("smaller than 3000 px") == 1
+    assert "for a shelf photo" in page

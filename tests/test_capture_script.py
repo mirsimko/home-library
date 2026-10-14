@@ -161,3 +161,10 @@ def test_a_released_photo_has_no_preview_left_to_show():
       hl.releasePreview(item, () => {});
       out({ before, after: hl.hasPreview(item), none: hl.hasPreview({ state: "waiting" }) });""")
     assert result == {"before": True, "after": False, "none": False}
+
+
+@node
+def test_only_a_shelf_photo_is_warned_about_for_being_small():
+    flags = run_node("""out([hl.warnsSmall("shelf", 1600, 1200), hl.warnsSmall("shelf", 4080, 3072),
+                           hl.warnsSmall("cover", 1600, 1200), hl.warnsSmall("barcode", 800, 600)]);""")
+    assert flags == [True, False, False, False]
