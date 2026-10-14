@@ -40,3 +40,15 @@ def test_backup_keeps_the_latest_copy_and_a_dated_snapshot(tmp_path):
         "catalog-20261014.db", "catalog-20261015.db"]
     assert titles(destination / "snapshots" / "catalog-20261014.db") == ["Druhá", "Kniha 0"]
     assert titles(destination / "catalog.db") == ["Druhá", "Kniha 0"]
+
+
+def test_backup_keeps_only_the_fourteen_latest_snapshots(tmp_path):
+    root, destination = source(tmp_path), tmp_path / "backup"
+    snapshots = destination / "snapshots"
+    snapshots.mkdir(parents=True)
+    for day in range(1, 21):
+        (snapshots / f"catalog-202610{day:02d}.db").write_text("old")
+    (snapshots / "notes.txt").write_text("not a snapshot")
+    run_backup(root, destination, "2026-10-21")
+    names = sorted(path.name for path in snapshots.iterdir())
+    assert names == ["notes.txt", *(f"catalog-202610{day:02d}.db" for day in range(8, 22))]
