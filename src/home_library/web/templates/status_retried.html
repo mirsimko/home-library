@@ -1,0 +1,6 @@
+<tr id="job-{{ job.id }}">
+  <td colspan="3">
+    {% if error %}<span class="notice error" role="alert">Job #{{ job.id }}: {{ error }}</span>
+    {% else %}<span class="notice">Job #{{ job.id }} is queued again.</span>{% endif %}
+  </td>
+</tr>

@@ -1,0 +1,16 @@
+# The web app, on 127.0.0.1 only. Tailscale Serve on Windows puts it on the tailnet (docs/operations.md).
+[Unit]
+Description=Home library web app
+After=network-online.target
+
+[Service]
+EnvironmentFile=%h/.config/home-library/env
+# codex, pi and uv live here; a user service does not get the login shell's PATH.
+Environment=PATH=%h/.local/bin:/usr/local/bin:/usr/bin:/bin
+WorkingDirectory=%h/dev/home-library
+ExecStart=%h/.local/bin/uv run --frozen hl serve --port 8765
+Restart=on-failure
+RestartSec=5
+
+[Install]
+WantedBy=default.target

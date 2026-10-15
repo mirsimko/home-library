@@ -1,0 +1,24 @@
+{% extends "base.html" %}
+{% block title %}Locations · Home library{% endblock %}
+{% block main %}
+<h1>Locations</h1>
+<p class="muted">A location is a shelf or a box. Every book has one.</p>
+
+<form class="card inline" hx-post="/locations" hx-target="#locations" hx-swap="outerHTML"
+      hx-on::after-request="if (event.detail.successful) this.reset()">
+  <div>
+    <label for="new-name">New location</label>
+    <input type="text" id="new-name" name="name" required autocomplete="off" placeholder="Living room, left shelf">
+  </div>
+  <div>
+    <label for="new-kind">Kind</label>
+    <select id="new-kind" name="kind">
+      <option value="shelf">Shelf</option>
+      <option value="box">Box</option>
+    </select>
+  </div>
+  <button type="submit" class="primary">Add</button>
+</form>
+
+{% include "locations_list.html" %}
+{% endblock %}

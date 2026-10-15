@@ -1,13 +1,13 @@
-# Shelf photo pipeline: stages and file formats
+# Photo pipeline: stages and file formats
 
-This is the contract between the stages of the shelf-photo reading pipeline. Each stage is a module under `src/home_library/` with a small public interface, and each reads and writes plain UTF-8 files in a work directory. The design reasons are in [spec.md](spec.md) section 2.4 and 2.5 and in the [research notes](research/).
+This is the contract between the stages of the shelf, cover and barcode photo pipeline. Each stage is a module under `src/home_library/` with a small public interface, and each reads and writes plain UTF-8 files in a work directory. The design reasons are in [spec.md](spec.md) section 2.4 and 2.5 and in the [research notes](research/).
 
-Status: built and tried on the four test photos on 2026-10-05. Cover photos, barcode photos and a catalog store are not part of it yet.
+Status: the shelf pipeline was built and tried on the four test photos on 2026-10-05. Cover and barcode commands were added on 2026-10-13 and tested with generated images and faked model and catalogue calls. They have not yet been tried on real cover or barcode photos. A catalog store is a separate app slice; see [app.md](app.md).
 
 ## Rules that hold everywhere
 
 - **No private data in this repository.** Photos, tiles, model answers and book lists live in a work directory outside any git checkout. Tests use generated images and invented titles, or public catalogue records of well-known books.
-- **No traditional OCR.** Only a vision LLM reads a photo.
+- **No traditional OCR.** A vision LLM reads titles and author names. A barcode decoder reads bars, never printed text.
 - **One photo per model session**, started fresh, with about 5 MB of images. Few requests at once: the home uplink is about 10 Mbit/s.
 - **A read never sees another read.** A reader gets the tiles and the prompt, nothing else.
 - **Nothing is lost silently.** An entry that cannot be parsed, an answer that was cut off, a title only one read gave and a look-up that failed all reach the review output with a reason.
@@ -29,6 +29,36 @@ This cuts the tiles, reads each photo twice, merges the reads, looks the titles 
 - **What runs at once.** The two reads of one photo run at the same time. Photos are read one after another. The look-ups and the pick of a photo run in the background while the next photo is read, because one NDL title search takes 10 to 15 seconds.
 - **From an agent harness,** start a run of several photos as a background job: a photo takes about two minutes, and a harness may cap a single command at ten.
 - Each stage is also a command of its own, for repeating one step: `hl tiles`, `hl read`, `hl merge`, `hl lookup`, `hl pick`, `hl export`. Each takes the photo and the same `--work-root`. When `hl tiles` cuts other tiles than the stored ones, because another photo has the same name or the same photo is cut or encoded differently, it removes the reads of the old tiles and what was made from them. `hl merge` refuses a read made from other tiles than the stored ones. `hl gather <read-id>` prints one read's answers for all photos in the shape the scoring tools of the 2026-10-05 tests take.
+
+## Cover photos (`hl cover`)
+
+```sh
+uv run hl cover ~/photos/cover-1.jpg --location "Box 3"
+```
+
+The same stages as `hl run` read one book seen from the front. Stage 1 applies EXIF orientation and writes one metadata-free JPEG, `tiles/cover-r0.jpg`, scaled proportionally so that its longer side is at most 2000 pixels. Smaller photos are never enlarged. JPEG quality is 88, as for shelf tiles.
+
+`tiles.json` has `"kind": "cover"`. Its `width`, `height` and the image's `box` describe the original upright photo. The `layout` has one row and column, both at 0, and `tile_width` and `tile_height` describe the saved image. Each image has its byte count and hash, as for a shelf tile. A shelf manifest without a `kind` is still a shelf manifest.
+
+The reader chooses `prompts/cover_read.txt` by manifest kind. It asks for the same nine fields, plus an optional `author` as printed in its original script. Both blind reads, the merge, look-up, pick and records use the existing pipeline. Look-up uses the first reading's author; without a catalogue match the record keeps that author, even when the title could not be read.
+
+`--work-root`, `--second-reader` and `--force` work as for `hl run`. A rerun reuses reads only for the same manifest, and changing the photo or switching between shelf and cover removes old reads and their results. The command writes both record files, prints one summary line and exits with 1 on failure.
+
+## Barcode photos (`hl barcode`)
+
+```sh
+uv run hl barcode ~/photos/barcode-1.jpg --location "Box 3"
+```
+
+`home_library.barcode` applies EXIF orientation, then decodes with `zxing-cpp`, installed with the project. The first decoded EAN-13 with prefix 978 or 979 and a valid ISBN-13 check digit is used. Printed ISBN text is never read.
+
+The registration groups `978-4`, `978-80`, and `978-0`, `978-1`, `979-8` select Japanese, Czech and English respectively. For other groups the Japanese, Czech and English sources are tried in that order, stopping at the first language that returns candidates. If all return nothing the language is `unknown`. Only ISBN look-up runs: an empty title never starts a title search. The first candidate in source order whose normalised ISBN equals the decoded ISBN is the match. No reader or pick model is called.
+
+`barcode.json` keeps `file`, `codes` (every decoded code's `format` and `text`, in decoder order) and `isbn` (the selected number, or null). ISBN look-up also writes `lookup/candidates.json` and uses the existing cache. Delete `lookup/cache/` to refresh its answers. Each attempt removes old barcode and reading results from this photo's directory, keeping the catalogue cache.
+
+Both record files contain one row with `needs_review` true and an empty `title`. With a decoded ISBN, `read_status` is `barcode`, `isbn` keeps that number, and a match fills the catalogue fields. Without a match, or when a catalogue failed, `notes` explains why. Without a decoded ISBN, `read_status` is `no_barcode` and the note asks the person to type the number in. This is a successful run with an observation to review.
+
+The command accepts `--work-root` and `--location`, writes into `work/<photo-stem>/`, prints one summary line and exits with 1 on processing failure. Its summary counts a decoded ISBN as one row to review, or an unreadable barcode as one unreadable row.
 
 ## Measured on 2026-10-05
 
@@ -88,6 +118,7 @@ One directory per photo, named after the photo's file stem:
     run.json                  backend, model, command, start time, seconds, return code
     read.json                 the parsed read
   merged.json
+  barcode.json                decoded codes and selected ISBN, for barcode photos
   lookup/
     candidates.json
     picks.raw.txt             the pick model's answer, untouched
@@ -165,7 +196,7 @@ Two backends:
 
 `command` leaves the prompt out; it is in `prompt.txt`. `tool_calls` lists the type of every event that was not reasoning or an answer. `usage` is what the harness reported, or null.
 
-A read entry has nine fields. The scoring tools of the 2026-10-05 tests depend on these names, so they do not change:
+A shelf read entry has nine core fields. The scoring tools of the 2026-10-05 tests depend on these names, so they do not change:
 
 | Field | Values |
 |---|---|
@@ -178,6 +209,8 @@ A read entry has nine fields. The scoring tools of the 2026-10-05 tests depend o
 | `readable` | `yes`, `partial` or `no`. |
 | `confidence` | `high`, `medium` or `low`. |
 | `inferred` | A guess where text was not legible, or empty. |
+
+Cover answers may also include `author`, the name as printed in its original script, or empty. The shelf prompt is unchanged.
 
 The model answers with `{"file": "<photo>", "books": [<entries>]}`.
 
@@ -192,7 +225,7 @@ Turns a raw answer into a read, entry by entry, so that one malformed entry does
   "file": "shelf-1.jpg",
   "books": [
     {"n": 1, "where": "r1c1-r0.jpg, left", "visible": "spine", "title": "Zelený drak", "other_text": "",
-     "language": "cs", "readable": "yes", "confidence": "high", "inferred": ""}
+     "language": "cs", "readable": "yes", "confidence": "high", "inferred": "", "author": ""}
   ],
   "errors": [
     {"position": 3, "offset": 812, "reason": "Expecting ',' delimiter", "raw": "{\"n\": 3, ..."}
@@ -201,7 +234,7 @@ Turns a raw answer into a read, entry by entry, so that one malformed entry does
 }
 ```
 
-- `books` holds every entry that decoded as a JSON object, in the model's order. All nine fields are present. `n` is an integer; the others are strings. A missing field is the empty string, and a missing or unusable `n` is the entry's position counted from 1.
+- `books` holds every entry that decoded as a JSON object, in the model's order. All nine core fields and `author` are present. The optional author is kept when given and is empty otherwise. `n` is an integer; the others are strings. A missing field is the empty string, and a missing or unusable `n` is the entry's position counted from 1.
 - `readable` is always `yes`, `partial` or `no`. Any other value becomes `partial`, so the entry goes to review.
 - An empty place in the list, as two commas in a row leave, is an error too: an entry was lost there.
 - `errors` lists each piece of the answer that could not be decoded: its position in the list counted from 1, its character offset in the raw text, the reason, and the raw text itself. Every element of the list counts towards the position, decodable or not. An entry the answer was cut off in is listed too.
@@ -230,18 +263,18 @@ Compares two reads of the same photo that could not see each other.
   "reads": ["a-sol", "b-spark"],
   "items": [
     {"status": "accepted", "reason": "agreed", "title": "Zelený drak", "language": "cs", "exact": true,
-     "readings": [{"read_id": "a-sol", "n": 1, "...": "the nine fields"}, {"read_id": "b-spark", "n": 4, "...": "the nine fields"}]},
+     "readings": [{"read_id": "a-sol", "n": 1, "...": "the read fields, including author"}, {"read_id": "b-spark", "n": 4, "...": "the read fields, including author"}]},
     {"status": "review", "reason": "solo", "title": "The Blue Kite", "language": "en", "exact": false,
-     "readings": [{"read_id": "b-spark", "n": 7, "...": "the nine fields"}]}
+     "readings": [{"read_id": "b-spark", "n": 7, "...": "the read fields, including author"}]}
   ],
-  "unreadable": [{"read_id": "a-sol", "n": 9, "...": "the nine fields"}],
+  "unreadable": [{"read_id": "a-sol", "n": 9, "...": "the read fields, including author"}],
   "incomplete": [],
   "parse_errors": [{"read_id": "a-sol", "position": 3, "offset": 812, "reason": "...", "raw": "..."}]
 }
 ```
 
 - `status` is `accepted` or `review`. `reason` is `agreed`, `near`, `split`, `solo` or `partial`.
-- `title` and `language` come from the first read that has the entry.
+- `title` and `language` come from the first read that has the entry. The readings keep `author` so look-up can use the first reading's name.
 - `exact` is true when the two titles are equal after Unicode NFC and trimming of outer white space only. It is false for an item with one reading.
 - `items` keeps the order of the first read, followed by entries only the second read gave.
 - `incomplete` lists the reads whose `complete` is false.
@@ -259,7 +292,7 @@ Fetches candidate catalogue records for a title, from the sources tested in [boo
 | Open Library (`openlibrary`) | none | English: by ISBN, or by title and author |
 | Library of Congress SRU (`loc`) | none | English: by ISBN, or by title and author |
 
-- Every free title search is exact on characters, so a title is searched in a short ladder: title with author when an author is known, then the title alone, then a shortened title. The ladder stops at the first step that returns something, and makes at most three requests per source for one book. A shelf photo gives no separate author and no ISBN, so today only the last two steps run; the author and ISBN steps are for cover and barcode photos.
+- Every free title search is exact on characters, so a title is searched in a short ladder: title with author when an author is known, then the title alone, then a shortened title. The ladder stops at the first step that returns something, and makes at most three requests per source for one book. A shelf photo gives no separate author and no ISBN, so its last two steps run; cover photos can add the author step and barcode photos use only the ISBN step.
 - The language is matched without regard to case and surrounding white space. A language with no source is not looked up, and the record says so.
 - Requests to one HTTP source are paced: NDL caps concurrent requests, and Open Library allows one request per second. The whole run makes its look-ups one after another.
 - A source that fails or is not installed never stops the run. Its status is recorded, any failure ends that source's ladder for the book, and a source that could not be reached or was rate limited is not asked again for the rest of the photo: its later queries are recorded with the step `skipped`.
@@ -343,12 +376,12 @@ The pick step gives a model the reading and its candidates as text and asks whic
 `title, sort_key, author, illustrator, publisher, year, language, isbn, series, age_from, age_to, tags, state, location, cover_photo, source, source_id, needs_review, notes, photo, read_status, other_reading, catalogue_title, other_text, where, read_ids, pick_verdict, candidate_count`
 
 - `needs_review` is always true: no person has seen the record yet.
-- `title` is the reading from the photo, never a catalogue title. `language` is the read's too.
+- `title` is the reading from the photo, never a catalogue title. `language` is the read's too. For a barcode row the title is empty and language comes from its ISBN group or the source language tried.
 - `other_reading` is the second reading's title where an item has two readings whose titles differ. Otherwise it is empty.
-- The catalogue fields are filled only from a candidate picked as `match`: `catalogue_title`, `author` (the candidate's authors joined with `; `), `publisher`, `year`, `isbn`, `series`, `source`, `source_id`, and `sort_key` (the candidate's title reading). Without a match, or without a title reading, `sort_key` is the title.
+- The catalogue fields are filled only from a candidate picked as `match`: `catalogue_title`, `author` (the candidate's authors joined with `; `), `publisher`, `year`, `isbn`, `series`, `source`, `source_id`, and `sort_key` (the candidate's title reading). Without a match, or without a title reading, `sort_key` is the title. Without a match, `author` is the first reading's author when present. A barcode row always keeps its decoded ISBN.
 - `age_from` and `age_to` come from a matched candidate's age note, and only where it states an age in years, as in `od 3 let`, `5-8 let`, `od 3 do 6 let` or `Ages 4-8`. A grade, a reading level or a year in the note is not taken for an age.
 - `illustrator`, `tags`, `state` and `cover_photo` are empty in this version. `location` is filled only when it was given for the photo.
-- `read_status` is `agreed`, `near`, `split`, `solo`, `partial`, `unreadable`, `unparsed` or `incomplete`.
+- `read_status` is `agreed`, `near`, `split`, `solo`, `partial`, `unreadable`, `unparsed`, `incomplete`, `barcode` or `no_barcode`.
 - After the items and the unreadable entries come the rows for what a read lost. Each entry that could not be parsed is an `unparsed` row with its raw text in `other_text`. A read whose answer was cut off, and whose loss is not already listed entry by entry, is an `incomplete` row.
 - `other_text` and `where` come from the item's first reading. `read_ids` joins the readings' read ids with `; `.
 - `notes` says in plain words why the row needs a look: which read gave a solo title, that two reads divide the words differently, a guess the model put in `inferred`, a catalogue that could not be asked or does not cover the language, why no catalogue record was matched, an ambiguous match with its reason, a catalogue age or audience note.

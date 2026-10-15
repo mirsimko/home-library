@@ -642,3 +642,29 @@ def test_an_item_without_a_type_counts_as_a_tool_call_named_unknown(tmp_path):
     info = json.loads((read_dir_of(work, "a-sol") / "run.json").read_text(encoding="utf-8"))
     assert info["tool_calls"] == ["unknown"]
     assert not (read_dir_of(work, "a-sol") / "read.json").exists()
+
+
+def test_a_cover_manifest_chooses_the_front_cover_prompt(tmp_path):
+    from home_library.tiles import cut_cover
+
+    photo = tmp_path / "cover.jpg"
+    Image.new("RGB", (640, 480), "white").save(photo)
+    work = tmp_path / "work"
+    manifest = cut_cover(photo, work)
+    run = FakeRun(stdout=codex_stream())
+
+    run_read(work, "a-sol", "codex-exec", run=run)
+
+    (args, kwargs), = run.calls
+    prompt = kwargs["input"]
+    assert prompt == render_prompt(manifest)
+    assert "one book" in prompt and "front" in prompt
+    assert '"author"' in prompt and "as printed" in prompt and "original script" in prompt
+    assert "cover-r0.jpg" in prompt and "cover.jpg" in prompt
+    assert "<<" not in prompt and "overlapping tiles" not in prompt
+    for rule in ("Use no tools, no OCR and no look-ups", "Do not stop to ask a question",
+                 "Do not complete a title from memory and do not guess"):
+        assert rule in prompt
+    for field in ("n", "where", "visible", "title", "other_text", "language", "readable", "confidence", "inferred"):
+        assert f'"{field}"' in prompt
+    assert args[args.index("-i") + 1] == "cover-r0.jpg"

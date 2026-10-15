@@ -1,10 +1,12 @@
 """The hl command (see docs/pipeline.md). Every stage can be run by itself, or all of them with `hl run`."""
 import argparse
 import json
+import subprocess
 import sys
 from pathlib import Path
 
-from home_library import pipeline
+from home_library import catalog_cli, pipeline
+from home_library.lookup.nkcr import run_yaz_client
 from home_library.pick import run_pick
 from home_library.reader import BACKENDS, run_read
 from home_library.workspace import DEFAULT_WORK_ROOT, photo_dir
@@ -24,12 +26,21 @@ def _parser():
         sub.add_argument("--work-root", type=Path, default=argparse.SUPPRESS, help=argparse.SUPPRESS)
         return sub
 
-    run = command("run", "Run every stage for each photo, one photo at a time.")
-    run.add_argument("photos", nargs="+", type=Path)
-    run.add_argument("--location", default="", help="the shelf or box the photo shows, for example 'Box 3'")
-    run.add_argument("--second-reader", choices=sorted(SECOND_READ_ID), default="pi",
-                     help="backend of the second, checking read (default: %(default)s)")
-    run.add_argument("--force", action="store_true", help="start from nothing even if reads are stored")
+    for name, text in (("run", "Run every stage for each photo, one photo at a time."),
+                       ("cover", "Read one front cover and write review records.")):
+        run = command(name, text)
+        if name == "run":
+            run.add_argument("photos", nargs="+", type=Path)
+        else:
+            run.add_argument("photo", type=Path)
+        run.add_argument("--location", default="", help="the shelf or box the photo shows, for example 'Box 3'")
+        run.add_argument("--second-reader", choices=sorted(SECOND_READ_ID), default="pi",
+                         help="backend of the second, checking read (default: %(default)s)")
+        run.add_argument("--force", action="store_true", help="start from nothing even if reads are stored")
+
+    barcode = command("barcode", "Decode an ISBN barcode and write one review record.")
+    barcode.add_argument("photo", type=Path)
+    barcode.add_argument("--location", default="")
 
     command("tiles", "Cut a photo into tiles.").add_argument("photo", type=Path)
     read = command("read", "Run one read of a photo's tiles.")
@@ -47,6 +58,11 @@ def _parser():
     export.add_argument("--location", default="")
     command("gather", "Print one read's answers for all photos, in the shape the scoring tools take."
             ).add_argument("read_id")
+    catalog_cli.add_commands(parser, commands)
+    serve = command("serve", "Serve the private catalogue and JSON API.")
+    serve.add_argument("--data-root", type=Path, default=argparse.SUPPRESS, help="private data directory (default: HL_DATA or ~/home-library)")
+    serve.add_argument("--port", type=int, default=8765)
+    serve.add_argument("--host", help="bind address (default: 127.0.0.1; other addresses must be explicit)")
     return parser
 
 
@@ -56,14 +72,17 @@ def _report(result):
         return
     seconds = ", ".join(f"{read_id} {value:.0f} s" for read_id, value in result["seconds"].items())
     lost = f", {result['warnings']} lost by a read (see the last rows)" if result["warnings"] else ""
+    timing = f" ({seconds})" if seconds else ""
     print(f"{result['photo']}: {result['accepted']} accepted, {result['review']} to review, "
-          f"{result['unreadable']} unreadable{lost} ({seconds}) -> {result['directory']}/records.csv", flush=True)
+          f"{result['unreadable']} unreadable{lost}{timing} -> {result['directory']}/records.csv", flush=True)
 
 
-def _run(args):
+def _run(args, *, run, fetch, run_yaz):
     readers = (pipeline.READERS[0], (SECOND_READ_ID[args.second_reader], args.second_reader))
-    results = pipeline.run_photos(args.photos, args.work_root, readers=readers, location=args.location,
-                                  force=args.force, report=_report)
+    photos = args.photos if args.command == "run" else [args.photo]
+    results = pipeline.run_photos(photos, args.work_root, readers=readers, location=args.location,
+                                  force=args.force, report=_report, kind="cover" if args.command == "cover" else "shelf",
+                                  run=run, fetch=fetch, run_yaz=run_yaz)
     return 1 if any("error" in result for result in results) else 0
 
 
@@ -97,15 +116,25 @@ def _stage(args):
     return 0
 
 
-def main(argv=None):
-    args = _parser().parse_args(argv)
-    if args.command == "run":
-        return _run(args)
+def main(argv=None, *, run=subprocess.run, fetch=None, run_yaz=run_yaz_client, popen=subprocess.Popen):
+    parser = _parser()
+    args = parser.parse_args(argv)
+    if args.command in ("catalog", "token", "backup", "worker"):
+        return catalog_cli.execute(args, run=run, popen=popen)
+    if args.command == "serve":
+        from home_library.web.serve import serve
+        return serve(args, parser)
+    if args.command in ("run", "cover"):
+        return _run(args, run=run, fetch=fetch, run_yaz=run_yaz)
     if args.command == "gather":
         json.dump(pipeline.gather_read(args.work_root, args.read_id), sys.stdout, ensure_ascii=False, indent=2)
         print()
         return 0
     try:
+        if args.command == "barcode":
+            _report(pipeline.barcode_photo(args.photo, args.work_root, location=args.location,
+                                           fetch=fetch, run_yaz=run_yaz))
+            return 0
         return _stage(args)
     except Exception as failure:
         print(f"{args.photo}: {type(failure).__name__}: {failure}", file=sys.stderr)

@@ -1,0 +1,40 @@
+{% extends "base.html" %}
+{% block title %}Books · Home library{% endblock %}
+{% block body_class %}wide{% endblock %}
+{% block main %}
+<h1>Books</h1>
+<div class="actions" style="margin-top:0">
+  <a href="/books/new" class="button primary">Add a book by hand</a>
+  <a class="button" href="/export.csv">Download CSV</a>
+</div>
+
+<form id="filters" class="card inline" role="search" hx-get="/books/results" hx-target="#results"
+      hx-trigger="input changed delay:300ms, search, change">
+  <div style="flex-basis:18rem; flex-grow:3">
+    <label for="q">Search</label>
+    <input type="search" id="q" name="q" value="{{ values.q }}" autocomplete="off" placeholder="Title, author, series, ISBN">
+  </div>
+  <div>
+    <label for="filter-state">State</label>
+    <select id="filter-state" name="state">
+      <option value="">Any state</option>
+      {% for state in states %}<option value="{{ state }}"{% if values.state == state %} selected{% endif %}>{{ state }}</option>{% endfor %}
+    </select>
+  </div>
+  <div>
+    <label for="filter-location">Location</label>
+    <select id="filter-location" name="location_id">
+      <option value="">Anywhere</option>
+      {% for location in locations %}<option value="{{ location.id }}"{% if values.location_id == location.id|string %} selected{% endif %}>{{ location.name }}</option>{% endfor %}
+    </select>
+  </div>
+  <div>
+    <label for="tag">Tag</label>
+    <input type="text" id="tag" name="tag" value="{{ values.tag }}" autocomplete="off">
+  </div>
+</form>
+
+<div id="results" aria-live="polite">
+  {% include "books_results.html" %}
+</div>
+{% endblock %}

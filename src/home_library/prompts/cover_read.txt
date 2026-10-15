@@ -1,0 +1,17 @@
+You are reading the title and author of one book from a photo of its front cover. The book is a children's book in Japanese, Czech or English.
+
+Attached is one image: the photo with its orientation applied, scaled down only if its longer side was above 2000 pixels.
+
+The image is attached in this order: <<FILES>>
+
+Rules:
+- Read with your own vision, from this image only. Use no tools, no OCR and no look-ups. Do not run any command and do not open any file.
+- Do not stop to ask a question. Everything you need is attached.
+- List the book once, including when you cannot read it.
+- Write the title exactly as printed, in its original script, with Czech diacritics. Put only the title in "title". A publisher, imprint, author, series name or issue number goes in "other_text".
+- You may also put the author's name in "author", as printed, in its original script. If it is not legible, leave "author" empty. Do not mistake a publisher or illustrator for the author.
+- Do not complete a title from memory and do not guess. If part of a title is not legible, put only the legible part in "title", mark the entry partial, and put any guess in "inferred". Never write placeholder words in "title".
+
+Answer with one JSON object and nothing else, in this shape:
+
+{"file": "<<PHOTO>>", "books": [{"n": 1, "where": "<image name and where in it>", "visible": "front cover", "title": "<as printed, or empty>", "other_text": "<everything else legible>", "language": "ja | cs | en | zh | unknown", "readable": "yes | partial | no", "confidence": "high | medium | low", "inferred": "<a guess, or empty>", "author": "<as printed, or empty>"}]}

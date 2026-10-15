@@ -280,3 +280,34 @@ def test_every_manifest_entry_has_its_file_row_column_rotation_and_box(tmp_path)
     ]
     assert [(t["file"], t["row"], t["column"], t["rotation"], t["box"])
             for t in manifest["tiles"]] == expected
+
+
+@pytest.mark.parametrize("size, expected", [((3000, 1500), (1000, 2000)), ((640, 480), (480, 640))])
+def test_a_cover_is_one_upright_image_at_most_2000_pixels_without_enlarging(tmp_path, size, expected):
+    from home_library.tiles import cut_cover
+
+    photo = tmp_path / "cover.jpg"
+    image = Image.new("RGB", size, "white")
+    image.paste("red", (0, 0, size[0] // 2, size[1]))
+    exif = Image.Exif()
+    exif[274] = 6  # turn clockwise: the red left half becomes the top half
+    image.save(photo, exif=exif)
+
+    manifest = cut_cover(photo, tmp_path / "work")
+
+    assert manifest["kind"] == "cover"
+    assert (manifest["width"], manifest["height"]) == (size[1], size[0])
+    assert manifest["layout"] == {"tile_width": expected[0], "tile_height": expected[1],
+                                  "rows": [0], "columns": [0]}
+    assert [t["file"] for t in manifest["tiles"]] == ["cover-r0.jpg"]
+    tile = manifest["tiles"][0]
+    assert (tile["row"], tile["column"], tile["rotation"], tile["box"]) == (1, 1, 0, [0, 0, size[1], size[0]])
+    written = tmp_path / "work" / "tiles" / "cover-r0.jpg"
+    assert tile["sha256"] == hashlib.sha256(written.read_bytes()).hexdigest()
+    assert manifest["total_bytes"] == tile["bytes"] == written.stat().st_size
+    assert json.loads((tmp_path / "work" / "tiles.json").read_text()) == manifest
+    with Image.open(written) as shown:
+        assert shown.size == expected
+        assert shown.getpixel((expected[0] // 2, expected[1] // 4))[0] > 240
+        assert shown.getpixel((expected[0] // 2, 3 * expected[1] // 4))[1] > 240
+        assert not shown.getexif()

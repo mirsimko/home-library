@@ -1,0 +1,11 @@
+# One consistent copy of the data root. Battlebook pulls it from here (docs/operations.md, "Backups").
+[Unit]
+Description=Home library backup
+
+[Service]
+Type=oneshot
+EnvironmentFile=%h/.config/home-library/env
+# codex, pi and uv live here; a user service does not get the login shell's PATH.
+Environment=PATH=%h/.local/bin:/usr/local/bin:/usr/bin:/bin
+WorkingDirectory=%h/dev/home-library
+ExecStart=%h/.local/bin/uv run --frozen hl backup %h/home-library-backup

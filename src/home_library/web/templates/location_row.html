@@ -1,0 +1,6 @@
+<tr id="location-{{ location.id }}" data-books="{{ location.books }}">
+  <td class="title">{{ location.name }}</td>
+  <td>{{ location.kind }}</td>
+  <td class="num"><a href="/books?location_id={{ location.id }}">{{ location.books }}</a></td>
+  <td><button type="button" class="quiet" hx-get="/locations/{{ location.id }}/edit" hx-target="#location-{{ location.id }}" hx-swap="outerHTML">Rename</button></td>
+</tr>

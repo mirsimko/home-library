@@ -1,0 +1,196 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<meta name="robots" content="noindex">
+<title>Home library app plan, short version</title>
+<style>
+  :root {
+    --bg: #0f1419;
+    --surface: #171e26;
+    --surface-2: #1e2731;
+    --border: #2c3945;
+    --text: #d8e1e8;
+    --text-dim: #8b9aa7;
+    --accent: #4fc1ff;
+    --ok: #4ade80;
+    --warn: #fbbf24;
+    --risk: #f87171;
+    --code-bg: #10161c;
+  }
+  * { box-sizing: border-box; }
+  body {
+    margin: 0;
+    background: var(--bg);
+    color: var(--text);
+    font: 17px/1.65 system-ui, -apple-system, "Segoe UI", sans-serif;
+    -webkit-text-size-adjust: 100%;
+  }
+  main { max-width: 46rem; margin: 0 auto; padding: 1.5rem 1.25rem 4rem; }
+  h1 { font-size: 1.7rem; line-height: 1.25; margin: 0.5rem 0 0.25rem; }
+  h2 { font-size: 1.25rem; margin: 2.1rem 0 0.6rem; color: var(--accent); }
+  h3 { font-size: 1.05rem; margin: 1.4rem 0 0.4rem; }
+  p, li { max-width: 74ch; }
+  a { color: var(--accent); }
+  .meta { color: var(--text-dim); font-size: 0.85rem; margin-bottom: 1.5rem; }
+  .summary {
+    background: var(--surface); border: 1px solid var(--border);
+    border-left: 4px solid var(--accent); border-radius: 8px;
+    padding: 0.9rem 1.1rem; margin: 1.2rem 0;
+  }
+  nav.toc {
+    background: var(--surface); border: 1px solid var(--border);
+    border-radius: 8px; padding: 0.7rem 1.1rem; font-size: 0.9rem;
+  }
+  nav.toc a { display: inline-block; margin-right: 1rem; text-decoration: none; }
+  section { margin-top: 1.8rem; }
+  details {
+    background: var(--surface); border: 1px solid var(--border);
+    border-radius: 8px; margin: 0.7rem 0; padding: 0;
+  }
+  details > summary {
+    cursor: pointer; padding: 0.8rem 1.1rem; font-weight: 600;
+    list-style-position: inside;
+  }
+  details[open] > summary { border-bottom: 1px solid var(--border); }
+  details > div { padding: 0.4rem 1.1rem 0.9rem; }
+  ul, ol { padding-left: 1.4rem; }
+  li + li { margin-top: 0.35rem; }
+  code {
+    font: 0.85em/1.5 ui-monospace, "Cascadia Code", Consolas, monospace;
+    background: var(--code-bg); border: 1px solid var(--border);
+    border-radius: 4px; padding: 0.1em 0.35em;
+  }
+  pre {
+    background: var(--code-bg); border: 1px solid var(--border);
+    border-radius: 8px; padding: 0.9rem 1.1rem; overflow-x: auto;
+  }
+  pre code { background: none; border: none; padding: 0; }
+  table { border-collapse: collapse; width: 100%; margin: 0.8rem 0; display: block; overflow-x: auto; }
+  th, td { border: 1px solid var(--border); padding: 0.45rem 0.7rem; text-align: left; vertical-align: top; }
+  th { background: var(--surface-2); }
+  .badge {
+    display: inline-block; font-size: 0.72rem; font-weight: 700;
+    border-radius: 99px; padding: 0.1rem 0.6rem; vertical-align: middle;
+    text-transform: uppercase; letter-spacing: 0.04em;
+  }
+  .badge.ok { background: #143c26; color: var(--ok); }
+  .badge.warn { background: #3d2f0a; color: var(--warn); }
+  .badge.risk { background: #401b1b; color: var(--risk); }
+  hr { border: none; border-top: 1px solid var(--border); margin: 2rem 0; }
+  ol.questions > li { margin: 0.9rem 0; }
+  ol.questions .answer { margin: 0.3rem 0 0; color: var(--text-dim); }
+  ol.questions .answer .badge { margin-right: 0.45rem; }
+  .src { color: var(--text-dim); font-size: 0.85rem; }
+</style>
+</head>
+<body>
+<main>
+  <h1>Home library app: the plan in short</h1>
+  <p class="meta">2026-10-13 · short version for Miro · <a href="home-library-app-plan-20261013">full plan</a> (separate password)</p>
+
+  <nav class="toc">
+    <a href="#summary">Summary</a>
+    <a href="#decisions">Key decisions</a>
+    <a href="#phases">Phases</a>
+    <a href="#risks">Risks</a>
+    <a href="#questions">Open questions</a>
+  </nav>
+
+  <section id="summary">
+    <h2>Summary</h2>
+    <div class="summary">
+      <p>We build one small <strong>Python web app</strong>, not a native app. It sits next to the existing <code>hl</code> pipeline and runs on battlebox. Every device reaches it privately through Tailscale.</p>
+      <ul>
+        <li>The <strong>phones</strong> install it to the home screen and send photos.</li>
+        <li>The <strong>iPad and laptop</strong> use it in the browser to review the results.</li>
+      </ul>
+      <p>There is no Mac, no Apple account and no MacinCloud anywhere in the plan. All four council seats (Opus, Fable, Sol, Astra) agreed on this shape.</p>
+    </div>
+  </section>
+
+  <section id="decisions">
+    <h2>Key decisions</h2>
+    <ul>
+      <li><strong>Stack:</strong> FastAPI with Jinja templates and HTMX, SQLite, and one worker process that runs <code>hl</code> on each new photo.</li>
+      <li><strong>Host:</strong> battlebox in WSL2, with HTTPS and login provided by Tailscale. Exactly two family logins are allowed.</li>
+      <li><strong>Data:</strong> an uploaded <em>photo</em> produces <em>observations</em>, which are evidence only. A <em>book</em> exists once a person approves it, with a state and a location.</li>
+      <li><strong>Ways in:</strong> shelf, cover and barcode photos. Barcodes are decoded on the server. Covers and barcodes are both in the first version.</li>
+      <li><strong>Upload:</strong> from the open page, with retries. The originals stay in the camera roll as a backup.</li>
+      <li><strong>Fallback:</strong> an Expo Android app, only if taking photos in the browser fails.</li>
+    </ul>
+  </section>
+
+  <section id="phases">
+    <h2>Phases</h2>
+    <details open>
+      <summary>0 · Tests before building <span class="badge ok">2–3 evenings</span></summary>
+      <div><ul>
+        <li>Does battlebox run things unattended?</li>
+        <li>Do the phones upload full-size photos from the browser?</li>
+        <li>Do cover and barcode photos work?</li>
+        <li>Is Grist good enough for review, in a one-evening test?</li>
+      </ul></div>
+    </details>
+    <details open>
+      <summary>1 · Back end <span class="badge warn">L</span></summary>
+      <div><ul>
+        <li>The upload endpoint, the job queue and the worker.</li>
+        <li>The catalog database.</li>
+        <li>New <code>hl cover</code> and <code>hl barcode</code> commands.</li>
+        <li>A JSON API and <code>hl catalog</code> commands for agents.</li>
+      </ul></div>
+    </details>
+    <details open>
+      <summary>2 · Web pages <span class="badge warn">L</span></summary>
+      <div><ul>
+        <li>A capture page for the phones.</li>
+        <li>A review page for the iPad, built for the keyboard: photo and tile beside the fields, with the catalogue candidates.</li>
+        <li>Search, and a locations page.</li>
+      </ul></div>
+    </details>
+    <details open>
+      <summary>3 · Running it <span class="badge ok">M</span></summary>
+      <div><ul>
+        <li>The app starts by itself at boot.</li>
+        <li>Nightly backups to Battlebook, with one restore tested.</li>
+        <li>A CSV and JSON export.</li>
+      </ul></div>
+    </details>
+    <details open>
+      <summary>4 · Only if needed: Expo Android app</summary>
+      <div><ul>
+        <li>Installed from a link, with no Play Store account.</li>
+        <li>It uses the same upload endpoint.</li>
+      </ul></div>
+    </details>
+  </section>
+
+  <section id="risks">
+    <h2>Risks</h2>
+    <ul>
+      <li><span class="badge risk">high</span> The browser may shrink photos, and the tiles need full size. Phase 0 tests this first.</li>
+      <li><span class="badge risk">high</span> WSL on battlebox may not stay up. Phase 0 checks it, and the app is a single folder that can move.</li>
+      <li><span class="badge warn">med</span> The Codex or Pi login may expire. Failures show on a status page; nothing fails silently.</li>
+    </ul>
+  </section>
+
+  <section id="questions">
+    <h2>Open questions</h2>
+    <p>The same numbers as in the full plan. Answer with a number and "default" or "alt".</p>
+    <ol class="questions">
+      <li>Always-on host? <p class="answer"><span class="badge ok">default</span> battlebox in WSL2. <span class="badge warn">alt</span> A small Linux box.</p></li>
+      <li>May photos leave the house for backup? <p class="answer"><span class="badge ok">default</span> No. <span class="badge warn">alt</span> An encrypted backup to Drive.</p></li>
+      <li>Tailscale on your wife's phone and the iPad? <p class="answer"><span class="badge ok">default</span> Yes. <span class="badge warn">alt</span> No: home Wi-Fi only.</p></li>
+      <li>Do the one-evening Grist test? <p class="answer"><span class="badge ok">default</span> Yes, time-boxed. <span class="badge warn">alt</span> Skip it.</p></li>
+      <li>A cover photo for every book? <p class="answer"><span class="badge ok">default</span> Only for books the shelf photo couldn't identify. <span class="badge warn">alt</span> For all books.</p></li>
+      <li>A book that leaves the house? <p class="answer"><span class="badge ok">default</span> Keep it as "Gone". <span class="badge warn">alt</span> Delete it.</p></li>
+      <li>Location names? <p class="answer"><span class="badge ok">default</span> "Shelf A1" and "Box 1" style. <span class="badge warn">alt</span> Free names.</p></li>
+      <li>Second read? <p class="answer"><span class="badge ok">default</span> Muse Spark, as built. <span class="badge warn">alt</span> A second Sol session.</p></li>
+      <li>Use the work Apple account? <p class="answer"><span class="badge ok">default</span> No, none is needed. <span class="badge warn">alt</span> A personal account if a native iPad app is ever wanted.</p></li>
+    </ol>
+  </section>
+</main>
+</body>
+</html>

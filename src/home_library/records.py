@@ -4,7 +4,9 @@ from __future__ import annotations
 import csv
 import json
 import re
+from io import StringIO
 
+from home_library.lookup.isbn import normalize_isbn
 from home_library.merge import match_key
 from home_library.workspace import refuse_inside_checkout
 
@@ -26,7 +28,7 @@ def _item_record(photo: str, item: dict, location: str) -> dict:
     record = _empty()
     record.update(title=item["title"], sort_key=item["title"], language=item["language"], photo=photo,
                   read_status=item["reason"], location=location, other_text=first["other_text"],
-                  where=first["where"],
+                  where=first["where"], author=first.get("author", ""),
                   read_ids="; ".join(r["read_id"] for r in item["readings"]))
     if len(item["readings"]) > 1 and item["readings"][1]["title"] != item["readings"][0]["title"]:
         record["other_reading"] = item["readings"][1]["title"]
@@ -39,7 +41,8 @@ def _unreadable_record(photo: str, entry: dict, location: str) -> dict:
         notes += f" Guess: {entry['inferred']}."
     record = _empty()
     record.update(photo=photo, location=location, language=entry["language"], read_status="unreadable",
-                  other_text=entry["other_text"], where=entry["where"], read_ids=entry["read_id"], notes=notes)
+                  other_text=entry["other_text"], where=entry["where"], read_ids=entry["read_id"], notes=notes,
+                  author=entry.get("author", ""))
     return record
 
 
@@ -174,9 +177,10 @@ def build_records(merged: dict, candidates: dict | None = None, picks: dict | No
     return records + _lost_records(merged["file"], merged, location)
 
 
-def _cell(value) -> str:
-    if value is True:
-        return "true"
+def csv_cell(value) -> str:
+    """Escape formula prefixes so a spreadsheet treats evidence as text."""
+    if isinstance(value, bool):
+        return "true" if value else "false"
     text = str(value)
     return "'" + text if text[:1] in ("=", "+", "-", "@", "\t", "\r") else text
 
@@ -189,4 +193,35 @@ def write_records(photo_dir, records: list) -> None:
         writer = csv.writer(f)
         writer.writerow(COLUMNS)
         for record in records:
-            writer.writerow([_cell(record[column]) for column in COLUMNS])
+            writer.writerow([csv_cell(record[column]) for column in COLUMNS])
+
+
+def build_barcode_record(photo: str, isbn: str | None, lookup: dict | None = None, *, location: str = "") -> dict:
+    """Keep the decoded ISBN as evidence and fill catalogue fields only from the first equal ISBN."""
+    record = _empty()
+    record.update(photo=photo, location=location, read_status="no_barcode",
+                  notes="No ISBN barcode could be decoded; type the number in.")
+    if isbn:
+        lookup = lookup or {"candidates": [], "queries": [], "language": "unknown"}
+        matched = next((c for c in lookup["candidates"] if normalize_isbn(c["isbn"]) == isbn), None)
+        record.update(read_status="barcode", language=lookup["language"], candidate_count=len(lookup["candidates"]),
+                      pick_verdict="match" if matched else "none", notes="")
+        if matched:
+            _fill_catalogue(record, matched)
+        else:
+            record["notes"] = "No catalogue match for the decoded ISBN."
+        failed = _lookup_note({"language": lookup["language"]}, lookup)
+        if failed:
+            record["notes"] = " ".join(filter(None, (record["notes"], failed)))
+        record["isbn"] = isbn
+    return record
+
+
+def csv_text(records, columns):
+    """Render spreadsheet-safe CSV with a UTF-8 byte-order mark and blank null cells."""
+    output = StringIO(newline="")
+    writer = csv.writer(output)
+    writer.writerow(columns)
+    for record in records:
+        writer.writerow([csv_cell(record[column] if record[column] is not None else "") for column in columns])
+    return "\ufeff" + output.getvalue()

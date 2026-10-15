@@ -1,0 +1,54 @@
+{% extends "base.html" %}
+{% block title %}Capture · Home library{% endblock %}
+{% block main %}
+<h1>Capture</h1>
+{% if not locations %}
+<div class="notice warn">
+  <strong>Add a location first.</strong> Every photo belongs to a shelf or a box. <a href="/locations">Go to Locations</a>.
+</div>
+{% else %}
+<section class="capture-setup" aria-label="Where these photos go">
+  <div>
+    <label for="location">Location</label>
+    <select id="location">
+      {% for location in locations %}
+      <option value="{{ location.id }}">{{ location.name }} ({{ location.kind }})</option>
+      {% endfor %}
+    </select>
+  </div>
+  <div>
+    <label for="state">State</label>
+    <select id="state">
+      {% for state in states %}
+      <option value="{{ state }}">{{ state }}</option>
+      {% endfor %}
+    </select>
+  </div>
+  <p class="full small muted">Chosen once and remembered on this phone. <a href="/locations">Add a location</a></p>
+</section>
+
+<div class="mode" role="group" aria-label="What are you photographing?">
+  <button type="button" data-mode="shelf" aria-pressed="true">Shelf</button>
+  <button type="button" data-mode="book" aria-pressed="false">One book</button>
+</div>
+
+<p class="prompt" id="prompt" aria-live="polite"></p>
+<div class="shoot">
+  <label class="button primary" for="camera">Take photo</label>
+  <label class="button" for="gallery">From gallery</label>
+</div>
+<p class="small muted" id="camera-hint">Photos taken here may not be saved to the phone's gallery, so keep this page open until each says <em>received</em>.</p>
+<div class="actions" id="book-step" hidden>
+  <button type="button" id="add-barcode">Add barcode photo</button>
+  <button type="button" id="next-book" class="primary">Next book</button>
+</div>
+<input type="file" id="camera" class="visually-hidden" accept="image/*" capture="environment">
+<input type="file" id="gallery" class="visually-hidden" accept="image/*" multiple>
+
+<ul id="photos" class="photos" aria-live="polite"></ul>
+<p class="small muted" id="stay-note" hidden>Keep this page open until every photo says received. Photos that could not be sent are retried a few times.</p>
+{% endif %}
+{% endblock %}
+{% block scripts %}
+{% if locations %}<script src="/static/capture.js" defer></script>{% endif %}
+{% endblock %}

@@ -40,23 +40,31 @@ def _empty_directory(directory):
             entry.unlink()
 
 
-def cut_tiles(photo, out_dir, *, quality=88, **layout_options):
+def cut_tiles(photo, out_dir, *, quality=88, kind="shelf", **layout_options):
     photo = Path(photo)
     out_dir = refuse_inside_checkout(out_dir)
     with Image.open(photo) as opened:
         image = ImageOps.exif_transpose(opened).convert("RGB")
     width, height = image.size
-    layout = plan_layout(width, height, **layout_options)
+    if kind == "cover":
+        image.thumbnail((2000, 2000), Image.Resampling.LANCZOS)
+        layout = {"tile_width": image.width, "tile_height": image.height, "columns": [0], "rows": [0]}
+    else:
+        layout = plan_layout(width, height, **layout_options)
     tiles_dir = out_dir / "tiles"
     _empty_directory(tiles_dir)
     tiles = []
     for row, top in enumerate(layout["rows"], start=1):
         for column, left in enumerate(layout["columns"], start=1):
             box = [left, top, left + layout["tile_width"], top + layout["tile_height"]]
-            tile = image.crop(box)
+            if kind == "cover":
+                box = [0, 0, width, height]
+                tile = image
+            else:
+                tile = image.crop(box)
             tile.info.clear()
-            for rotation in (0, 180):
-                name = f"r{row}c{column}-r{rotation}.jpg"
+            for rotation in ((0,) if kind == "cover" else (0, 180)):
+                name = "cover-r0.jpg" if kind == "cover" else f"r{row}c{column}-r{rotation}.jpg"
                 shown = tile if rotation == 0 else tile.rotate(180)
                 shown.save(tiles_dir / name, "JPEG", quality=quality)
                 written = (tiles_dir / name).read_bytes()
@@ -72,6 +80,13 @@ def cut_tiles(photo, out_dir, *, quality=88, **layout_options):
         "tiles": tiles,
         "total_bytes": sum(t["bytes"] for t in tiles),
     }
+    if kind == "cover":
+        manifest["kind"] = "cover"
     (out_dir / "tiles.json").write_text(
         json.dumps(manifest, indent=2, ensure_ascii=False) + "\n", encoding="utf-8")
     return manifest
+
+
+def cut_cover(photo, out_dir, *, quality=88):
+    """Save one upright cover image, small enough that the reader need not shrink it."""
+    return cut_tiles(photo, out_dir, quality=quality, kind="cover")

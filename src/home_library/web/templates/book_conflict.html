@@ -1,0 +1,31 @@
+{% extends "base.html" %}
+{% block title %}Conflict · Home library{% endblock %}
+{% block main %}
+<p class="small"><a href="/books/{{ book.id }}">‹ Back to the book as it is stored</a></p>
+<h1>This book changed while you were editing</h1>
+<div class="notice warn" role="alert">
+  <span{{ lang(book.language) }}>{{ book.title }}</span> was saved by someone else, so nothing of yours was saved.
+  Below are the fields you changed, next to what is stored now.
+</div>
+<div class="table-wrap">
+  <table class="compare">
+    <thead><tr><th>Field</th><th>Stored now</th><th>Your change</th></tr></thead>
+    <tbody>
+      {% for row in rows %}
+      <tr{% if row.stored != row.mine %} class="differs"{% endif %}>
+        <td>{{ row.label }}</td>
+        <td class="title"><span{{ lang(book.language) }}>{{ row.stored or "(empty)" }}</span></td>
+        <td class="title"><span{{ lang(book.language) }}>{{ row.mine or "(empty)" }}</span></td>
+      </tr>
+      {% endfor %}
+    </tbody>
+  </table>
+</div>
+<form id="reapply-form" method="post" action="/books/{{ book.id }}/reapply" class="actions">
+  <input type="hidden" name="version" value="{{ book.version }}">
+  {% for row in rows %}<input type="hidden" name="{{ row.key }}" value="{{ row.mine }}">{% endfor %}
+  <button type="submit" class="primary">Apply my changes to the stored book</button>
+  <a class="button" href="/books/{{ book.id }}">Keep what is stored</a>
+</form>
+<p class="muted small">Only the fields above are applied. Everything else stays as it is stored now.</p>
+{% endblock %}
